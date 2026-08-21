@@ -1,16 +1,15 @@
-﻿<?xml version="1.0" encoding="utf-16BE"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows7.0</TargetFramework>
+		<AssemblyName>DesktopFramesPossible</AssemblyName>
 		<RootNamespace>Desktop_Frames</RootNamespace>
 		<Nullable>enable</Nullable>
 		<UseWPF>true</UseWPF>
 		<UseWindowsForms>True</UseWindowsForms>
-		<AssemblyVersion>2.7.7.294</AssemblyVersion>
-		<FileVersion>2.7.7.294</FileVersion>
-		<Version>2.7.7.294</Version>
+		<!-- Version is injected by package.ps1 / CI via -p:Version; this is the local-dev fallback. -->
+		<Version Condition="'$(Version)' == ''">0.0.1-dev</Version>
 		<ApplicationIcon>Resources\logo2.ico</ApplicationIcon>
 		<!-- Memory: workstation GC and return unused memory to the OS to keep the footprint low. -->
 		<ServerGarbageCollection>false</ServerGarbageCollection>
@@ -51,15 +50,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<COMReference Include="IWshRuntimeLibrary">
-			<WrapperTool>tlbimp</WrapperTool>
-			<VersionMinor>0</VersionMinor>
-			<VersionMajor>1</VersionMajor>
-			<Guid>FBE64DF3-855A-4143-8279-7712313F7D5F</Guid>
-			<Lcid>0</Lcid>
-			<Isolated>false</Isolated>
-			<EmbedInteropTypes>true</EmbedInteropTypes>
-		</COMReference>
 		<COMReference Include="IWshRuntimeLibrary">
 			<WrapperTool>tlbimp</WrapperTool>
 			<VersionMinor>0</VersionMinor>
@@ -163,5 +153,3 @@
 	</ItemGroup>
 
 </Project>
-
-<!---->
