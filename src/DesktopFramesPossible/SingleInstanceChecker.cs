@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -32,7 +32,7 @@ namespace Desktop_Frames
             {
                 Process currentProcess = Process.GetCurrentProcess();
                 _currentProcessName = Path.GetFileNameWithoutExtension(currentProcess.ProcessName);
-                _currentExecutablePath = Assembly.GetEntryAssembly()?.Location ?? currentProcess.MainModule?.FileName;
+                _currentExecutablePath = System.Environment.ProcessPath ?? currentProcess.MainModule?.FileName;
 
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
                     $"SingleInstanceChecker: Initialized - Process: {_currentProcessName}, Path: {_currentExecutablePath}");

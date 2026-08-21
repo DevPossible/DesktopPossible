@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -4018,7 +4018,7 @@ namespace Desktop_Frames
             bool disableSingleInstance = SettingsManager.DisableSingleInstance;
             try
             {
-                string baseDir = System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string baseDir = System.AppContext.BaseDirectory;
                 string optionsPath = System.IO.Path.Combine(baseDir, "options.json"); // Legacy fallback
                 string masterOptionsPath = System.IO.Path.Combine(baseDir, "MasterOptions.json");
 
@@ -4122,7 +4122,7 @@ namespace Desktop_Frames
             {
                 try
                 {
-                    string logPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), "Desktop_Frames.log");
+                    string logPath = System.IO.Path.Combine(System.AppContext.BaseDirectory, "Desktop_Frames.log");
                     if (System.IO.File.Exists(logPath))
                     {
                         System.IO.File.Delete(logPath);

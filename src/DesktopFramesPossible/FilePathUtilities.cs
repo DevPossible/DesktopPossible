@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
@@ -426,7 +426,7 @@ namespace Desktop_Frames
             try
             {
                 // Delete main shortcut file (same logic as manual Remove)
-                string exeDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
                 string shortcutPath = System.IO.Path.Combine(exeDir, "Shortcuts", System.IO.Path.GetFileName(filename));
 
                 if (System.IO.File.Exists(shortcutPath))

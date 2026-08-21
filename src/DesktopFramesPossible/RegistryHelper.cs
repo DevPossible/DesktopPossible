@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -330,7 +330,7 @@ namespace Desktop_Frames
                     if (key != null)
                     {
                         // Get current executable path
-                        string currentProgramPath = Assembly.GetEntryAssembly()?.Location ?? "";
+                        string currentProgramPath = System.Environment.ProcessPath ?? "";
 
                         // ProgramPath: Updates on each run
                         key.SetValue("ProgramPath", currentProgramPath, RegistryValueKind.String);
@@ -424,7 +424,7 @@ namespace Desktop_Frames
             try
             {
                 var values = GetProgramManagementValues();
-                string programPath = Assembly.GetEntryAssembly()?.Location ?? "";
+                string programPath = System.Environment.ProcessPath ?? "";
                 string programDir = System.IO.Path.GetDirectoryName(programPath) ?? "";
                 string exportFilePath = System.IO.Path.Combine(programDir, "DesktopFramesPossible Registry Values.txt");
 

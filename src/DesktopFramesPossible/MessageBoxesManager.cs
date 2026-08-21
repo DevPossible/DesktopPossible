@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Media;
 using System.Reflection;
@@ -698,7 +698,7 @@ namespace Desktop_Frames
                     }
                     else
                     {
-                        string exePath = System.Reflection.Assembly.GetEntryAssembly().Location;
+                        string exePath = System.Environment.ProcessPath!;
                         logoImage.Source = Utility.ToImageSource(System.Drawing.Icon.ExtractAssociatedIcon(exePath));
                     }
                 }
@@ -706,7 +706,7 @@ namespace Desktop_Frames
                 {
                     try
                     {
-                        string exePath = System.Reflection.Assembly.GetEntryAssembly().Location;
+                        string exePath = System.Environment.ProcessPath!;
                         logoImage.Source = Utility.ToImageSource(System.Drawing.Icon.ExtractAssociatedIcon(exePath));
                     }
                     catch

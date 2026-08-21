@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -138,7 +138,7 @@ namespace Desktop_Frames
                     $"Copying item: {displayName} from {filePath}");
 
                 // Set up copy folder path - similar to BackupManager._lastDeletedFolderPath pattern
-                string exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
                 _copiedItemFolderPath = Path.Combine(exeDir, "CopiedItem");
 
                 // Ensure the copy folder exists - BackupManager pattern
@@ -243,7 +243,7 @@ namespace Desktop_Frames
                     Path.GetFileNameWithoutExtension(originalFileName);
 
                 // Generate unique filename for the new shortcut
-                string exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
                 string shortcutsDir = Path.Combine(exeDir, "Shortcuts");
 
                 if (!Directory.Exists(shortcutsDir))
@@ -370,7 +370,7 @@ namespace Desktop_Frames
         {
             try
             {
-                string exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
                 _copiedItemFolderPath = Path.Combine(exeDir, "CopiedItem");
 
                 if (Directory.Exists(_copiedItemFolderPath))
@@ -421,7 +421,7 @@ namespace Desktop_Frames
                 }
 
                 // Verify files still exist - BackupManager validation pattern
-                string exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
                 string copiedItemPath = Path.Combine(exeDir, "CopiedItem");
                 string jsonPath = Path.Combine(copiedItemPath, "CopiedItem.json");
 

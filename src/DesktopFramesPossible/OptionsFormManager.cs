@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -1240,7 +1240,7 @@ namespace Desktop_Frames
         {
             try
             {
-                string p = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), "Desktop_Frames.log");
+                string p = System.IO.Path.Combine(System.AppContext.BaseDirectory, "Desktop_Frames.log");
                 if (System.IO.File.Exists(p)) Process.Start(new ProcessStartInfo { FileName = p, UseShellExecute = true });
                 else MessageBoxesManager.ShowOKOnlyMessageBoxForm("Log file not found.", "Information");
             }

@@ -56,7 +56,7 @@ namespace Desktop_Frames
         {
             try
             {
-                string exe = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+                string exe = System.Environment.ProcessPath;
                 if (string.IsNullOrEmpty(exe)) return;
 
                 // Warm a file (covers "*" and per-extension handlers) and a folder (Directory/

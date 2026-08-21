@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -29,7 +29,7 @@ namespace Desktop_Frames
 
         static LogManager()
         {
-            string dir = System.IO.Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+            string dir = System.AppContext.BaseDirectory;
             _logFilePath = System.IO.Path.Combine(dir, "Desktop_Frames.log");
             _diagFilePath = System.IO.Path.Combine(dir, "portal_diag.log");
         }

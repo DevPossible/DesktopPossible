@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -66,7 +66,7 @@ namespace Desktop_Frames
 
         static ProfileManager()
         {
-            _appBaseDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+            _appBaseDir = System.AppContext.BaseDirectory;
             _profilesRootDir = Path.Combine(_appBaseDir, "Profiles");
         }
 

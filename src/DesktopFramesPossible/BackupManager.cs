@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -160,7 +160,7 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, $"Starting export of frame: {frame.Title}");
 
-                string exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
                 string frameTitle = frame.Title.ToString();
 
                 // Sanitize folder name
@@ -279,7 +279,7 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, "Starting frame import process");
 
-                string exeDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+                string exeDir = System.AppContext.BaseDirectory;
 				string exportsDir = Path.Combine(exeDir, "Exports");
 
                 var openDialog = new Microsoft.Win32.OpenFileDialog

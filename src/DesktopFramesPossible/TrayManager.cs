@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -408,7 +408,7 @@ namespace Desktop_Frames
                 }
                 else
                 {
-                    string exePath = Assembly.GetEntryAssembly().Location;
+                    string exePath = System.Environment.ProcessPath!;
                     using (var icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath))
                     {
                         if (icon != null)
@@ -421,7 +421,7 @@ namespace Desktop_Frames
                 // Fallback
                 try
                 {
-                    string exePath = Assembly.GetEntryAssembly().Location;
+                    string exePath = System.Environment.ProcessPath!;
                     using (var icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath))
                     {
                         if (icon != null) logoImage.Source = icon.ToImageSource();
