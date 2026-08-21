@@ -2,11 +2,19 @@
 # DesktopFramesPossible - GitLab CI/CD
 #
 # Flow (stages): validate -> test -> version -> package -> mirror -> release
-#   - Merge requests and pushes to develop/main: build + smoke tests (Windows).
+#   - Merge requests and pushes to develop/main: compile verification (Linux).
 #   - Pushes to main additionally: validate GitHub access, compute the release
 #     version + changelog, package the win-x64 zip, tag and mirror to GitHub
 #     (main branch + release tags ONLY - never any other branch), then create
 #     the GitHub release with the zip attached.
+#
+# All jobs run on ordinary Linux shared runners. COM interop is late-bound
+# (no COMReference items), so the net8.0-windows app compiles and cross-
+# publishes with the plain .NET SDK (EnableWindowsTargeting in
+# Directory.Build.props). Tests target net8.0-windows and can only EXECUTE on
+# Windows: they run locally via create-release.ps1 before every release
+# promotion, and an optional manual `test-windows` job exists for a Windows
+# runner (tag `windows`) if one is ever registered.
 #
 # Required CI/CD variables (Settings > CI/CD > Variables, masked + protected):
 #   GITHUB_PAT         GitHub personal access token with `repo` scope on the
@@ -16,18 +24,6 @@
 #                      used to push the release tag back to origin.
 #   GITHUB_REPO        Optional override of the mirror repository; defaults to
 #                      "DevPossible/DesktopFramesPossible" (set below).
-#
-# Windows runner prerequisites (runner tag: `windows`, shell executor running
-# PowerShell 7 / pwsh - each script line below executes in pwsh):
-#   - Visual Studio 2022 Build Tools with the ".NET desktop development"
-#     workload. Full MSBuild is REQUIRED: the app has COMReference items, so
-#     `dotnet build` cannot build it (build.ps1 locates MSBuild via vswhere).
-#   - .NET 8 SDK (dotnet test, packaging)
-#   - PowerShell 7+ (pwsh)
-#   - git
-#
-# Linux jobs (validate_github / version / mirror / github_release) run on
-# ordinary shared runners using alpine images with git/curl/jq.
 # =============================================================================
 
 workflow:
@@ -88,18 +84,31 @@ validate_github:
       echo "GitHub access validation passed."
 
 # -----------------------------------------------------------------------------
-# test: build with full MSBuild and run the unit test suite (Windows runner).
-# Runs for merge requests and pushes to develop/main.
-#
-# Test reporting: test-smoke.ps1 runs `dotnet test --no-build` and we rely on
-# its exit code. GitLab's `reports:junit` would need the JunitXml.TestLogger
-# NuGet package (a new dependency), and a trx artifact would mean running the
-# suite a second time outside the repo's canonical script - so neither is used.
+# build: compile verification with the plain .NET SDK (Linux).
+# Runs for merge requests and pushes to develop/main. Test EXECUTION requires
+# Windows (net8.0-windows) and happens locally via create-release.ps1 before
+# every release promotion; see also the manual test-windows job below.
 # -----------------------------------------------------------------------------
-test:
+build:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  script:
+    - pwsh ./build.ps1
+
+# Optional: full test run on a Windows runner (tag `windows`), if registered.
+# Manual + allow_failure so pipelines never block when no such runner exists.
+test-windows:
   stage: test
   tags:
     - windows
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: true
   script:
     - ./build.ps1
     - ./test-smoke.ps1
@@ -115,7 +124,7 @@ version:
   extends: .main_only
   image: alpine:latest
   needs:
-    - test
+    - build
   before_script:
     - apk add --no-cache git
   script:
@@ -199,22 +208,27 @@ version:
     expire_in: 30 days
 
 # -----------------------------------------------------------------------------
-# package: produce the distributable zip (Windows runner, main only).
-# package.ps1 builds (full MSBuild) and zips; tests already ran in the test
-# stage, hence -SkipTests. VERSION arrives via the version job's dotenv report.
+# package: cross-publish the win-x64 zip with the plain .NET SDK (Linux, main
+# only). Tests cannot execute on Linux, hence -SkipTests (they ran locally via
+# create-release.ps1 before the promotion to main). VERSION arrives via the
+# version job's dotenv report.
 # -----------------------------------------------------------------------------
 package:
   stage: package
   extends: .main_only
-  tags:
-    - windows
+  image: mcr.microsoft.com/dotnet/sdk:8.0
   needs:
     - job: version
       artifacts: true
-    - test
+    - build
   script:
-    - if ($env:SHOULD_RELEASE -ne "true") { Write-Host "No release needed for v$($env:VERSION). Skipping package."; exit 0 }
-    - ./package.ps1 -Version $env:VERSION -NonInteractive -SkipTests
+    - |
+      set -eu
+      if [ "$SHOULD_RELEASE" != "true" ]; then
+        echo "No release needed for v${VERSION}. Skipping package."
+        exit 0
+      fi
+      pwsh ./package.ps1 -Version "$VERSION" -NonInteractive -SkipTests
   artifacts:
     paths:
       - .dist/*.zip
@@ -233,7 +247,7 @@ mirror:
   needs:
     - job: version
       artifacts: true
-    - test
+    - build
     - validate_github
   before_script:
     - apk add --no-cache git

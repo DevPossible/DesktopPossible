@@ -4,9 +4,10 @@
     Builds the DesktopFramesPossible solution.
 
 .DESCRIPTION
-    Builds src/DesktopFramesPossible.sln using full MSBuild (located via vswhere).
-    NOTE: The app project contains COMReference items, so `dotnet build` does NOT
-    work - full MSBuild.exe from Visual Studio / Build Tools is required.
+    Builds src/DesktopFramesPossible.sln with the dotnet CLI. The project targets
+    net8.0-windows (WPF + WinForms) but COM interop is late-bound, so it compiles
+    on any OS with the .NET 8+ SDK (EnableWindowsTargeting is set in
+    Directory.Build.props). The app itself runs on Windows only.
 
 .PARAMETER Configuration
     Build configuration: Debug or Release (default: Release).
@@ -29,37 +30,15 @@ $ErrorActionPreference = 'Stop'
 $BuildDir = Join-Path $PSScriptRoot '.build'
 $ProjectName = 'DesktopFramesPossible'
 
-function Find-MSBuild {
-    <#
-    .SYNOPSIS
-        Locates MSBuild.exe via vswhere. Required because the app uses COMReference
-        items which the dotnet CLI cannot build.
-    #>
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio' 'Installer' 'vswhere.exe'
-    if (-not (Test-Path $vswhere)) {
-        throw "vswhere.exe not found at: $vswhere`n" +
-              "This project uses COM references and requires full MSBuild.`n" +
-              "Install Visual Studio 2022+ (or Build Tools for Visual Studio 2022) with the '.NET desktop development' workload."
-    }
-
-    $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' |
-        Select-Object -First 1
-
-    if (-not $msbuild -or -not (Test-Path $msbuild)) {
-        throw "MSBuild.exe not found via vswhere.`n" +
-              "This project uses COM references and requires full MSBuild.`n" +
-              "Install Visual Studio 2022+ (or Build Tools for Visual Studio 2022) with the '.NET desktop development' workload."
-    }
-
-    return $msbuild
-}
-
 Push-Location $PSScriptRoot
 try {
     Write-Host "=== DesktopFramesPossible Build ($Configuration) ===" -ForegroundColor Cyan
 
-    $msbuild = Find-MSBuild
-    Write-Host "  [OK] MSBuild: $msbuild" -ForegroundColor Green
+    $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not $dotnet) {
+        throw ".NET SDK not found. Install the .NET 8+ SDK: https://dotnet.microsoft.com/download"
+    }
+    Write-Host "  [OK] dotnet SDK: $(dotnet --version)" -ForegroundColor Green
 
     # Clean previous build (handle locked files gracefully)
     if ($Clean -and (Test-Path $BuildDir)) {
@@ -88,8 +67,7 @@ try {
         }
     }
 
-    # Restore and build (dash-style switches; -restore performs NuGet restore first)
-    & $msbuild src/DesktopFramesPossible.sln -restore -t:Build -p:Configuration=$Configuration -v:minimal -nologo
+    dotnet build src/DesktopFramesPossible.sln --configuration $Configuration
     if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
     $exePath = Join-Path $BuildDir $ProjectName 'bin' $Configuration 'net8.0-windows7.0' "$ProjectName.exe"
@@ -98,7 +76,7 @@ try {
     Write-Host "  Build outputs: $BuildDir" -ForegroundColor Gray
     if (Test-Path $exePath) {
         Write-Host "  [OK] Executable: $exePath" -ForegroundColor Green
-    } else {
+    } elseif ($IsWindows) {
         Write-Host "  [WARN] Expected executable not found: $exePath" -ForegroundColor Yellow
     }
 }

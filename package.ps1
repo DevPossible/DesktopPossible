@@ -6,8 +6,8 @@
 .DESCRIPTION
     Resolves the version (conventional commits via scripts/get-version.ps1),
     builds the solution, runs smoke tests, publishes a self-contained win-x64
-    build via full MSBuild (COM references prevent use of the dotnet CLI), and
-    produces a zip plus version.json in .dist/.
+    build via dotnet publish (COM interop is late-bound, so this works on any OS
+    with the .NET SDK), and produces a zip plus version.json in .dist/.
 
 .PARAMETER Version
     Explicit version to package (x.y.z). When omitted, the version is resolved
@@ -40,25 +40,6 @@ $ProjectName = 'DesktopFramesPossible'
 $Runtime = 'win-x64'
 $DistDir = Join-Path $PSScriptRoot '.dist'
 $BuildDir = Join-Path $PSScriptRoot '.build'
-
-function Find-MSBuild {
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio' 'Installer' 'vswhere.exe'
-    if (-not (Test-Path $vswhere)) {
-        throw "vswhere.exe not found at: $vswhere`n" +
-              "This project uses COM references and requires full MSBuild.`n" +
-              "Install Visual Studio 2022+ (or Build Tools for Visual Studio 2022) with the '.NET desktop development' workload."
-    }
-
-    $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' |
-        Select-Object -First 1
-
-    if (-not $msbuild -or -not (Test-Path $msbuild)) {
-        throw "MSBuild.exe not found via vswhere.`n" +
-              "Install Visual Studio 2022+ (or Build Tools for Visual Studio 2022) with the '.NET desktop development' workload."
-    }
-
-    return $msbuild
-}
 
 function Get-NextVersion {
     # Use conventional commits to calculate version
@@ -114,9 +95,6 @@ try {
     }
     Write-Host "Packaging version: $Version" -ForegroundColor Green
 
-    # Locate MSBuild up-front (COM references prevent dotnet publish)
-    $msbuild = Find-MSBuild
-
     # Clean dist folder
     if (Test-Path $DistDir) {
         Remove-Item $DistDir -Recurse -Force
@@ -137,27 +115,24 @@ try {
         Write-Host "  [SKIP] Tests (-SkipTests)" -ForegroundColor DarkGray
     }
 
-    # Publish (full MSBuild - dotnet publish does not work due to COMReference items)
+    # Publish (dotnet CLI; COM interop is late-bound so no full MSBuild is needed)
     Write-Host "`n=== Publishing ($Runtime) ===" -ForegroundColor Cyan
     $publishDir = Join-Path $BuildDir 'publish' $Runtime
     if (Test-Path $publishDir) {
         Remove-Item $publishDir -Recurse -Force
     }
 
-    $msbuildArgs = @(
+    $publishArgs = @(
+        'publish'
         "src/$ProjectName/$ProjectName.csproj"
-        '-restore'
-        '-t:Publish'
-        '-p:Configuration=Release'
-        "-p:RuntimeIdentifier=$Runtime"
-        '-p:SelfContained=true'
+        '--configuration', 'Release'
+        '--runtime', $Runtime
+        '--self-contained', 'true'
         "-p:Version=$Version"
-        "-p:PublishDir=$publishDir\"
-        '-v:minimal'
-        '-nologo'
+        "-p:PublishDir=$publishDir$([System.IO.Path]::DirectorySeparatorChar)"
     )
     if (-not $NoSingleFile) {
-        $msbuildArgs += @(
+        $publishArgs += @(
             '-p:PublishSingleFile=true'
             '-p:IncludeNativeLibrariesForSelfExtract=true'
         )
@@ -165,14 +140,14 @@ try {
         Write-Host "  [SKIP] Single-file packaging (-NoSingleFile)" -ForegroundColor DarkGray
     }
 
-    & $msbuild @msbuildArgs
+    & dotnet @publishArgs
     if ($LASTEXITCODE -ne 0) { throw "Publish failed with exit code $LASTEXITCODE" }
     Write-Host "  [OK] Published to $publishDir" -ForegroundColor Green
 
     # Create archive
     Write-Host "`n=== Archiving ===" -ForegroundColor Cyan
     $archivePath = Join-Path $DistDir "$ProjectName-$Version-$Runtime.zip"
-    Compress-Archive -Path "$publishDir\*" -DestinationPath $archivePath -Force
+    Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $archivePath -Force
     Write-Host "  [OK] Created: $archivePath" -ForegroundColor Green
 
     # Create version file

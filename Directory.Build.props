@@ -10,6 +10,8 @@
     <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)\</IntermediateOutputPath>
     <!-- Legacy in-project bin/obj (e.g. IDE-created before this file is honored) must never be compiled -->
     <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
+    <!-- Allow compiling the net8.0-windows TFM on non-Windows build hosts (Linux CI). COM interop is late-bound. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <!-- Common package/assembly metadata -->

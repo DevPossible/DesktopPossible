@@ -88,18 +88,16 @@ Coming from the upstream Desktop Frames + app? Your profiles carry over: copy yo
 
 ## Building from source
 
-The project targets **.NET 8** (`net8.0-windows7.0`) and builds on Windows only. Because it uses **COM references** (Windows Script Host and Shell32), it must be compiled with the **full MSBuild** from Visual Studio — `dotnet build` cannot resolve COM references and will fail.
+The project targets **.NET 8** (`net8.0-windows7.0`) and builds with the plain **.NET SDK** on any OS (COM interop is late-bound; `EnableWindowsTargeting` is preconfigured). The app itself — and its test suite — runs on **Windows only**.
 
-1. Install **Visual Studio 2022** or the **VS 2022 Build Tools** with the **.NET desktop development** workload.
+1. Install the [**.NET 8+ SDK**](https://dotnet.microsoft.com/download).
 2. Clone the repository and run:
 
 ```powershell
-./build.ps1        # Locates MSBuild and builds the solution
-./test-smoke.ps1   # Runs the unit test suite
+./build.ps1        # Builds the solution (dotnet SDK)
+./test-smoke.ps1   # Runs the unit test suite (Windows)
 ./start-app.ps1    # Builds (if needed) and launches the app
 ```
-
-The build scripts locate MSBuild automatically via `vswhere`.
 
 ## Documentation
 

@@ -23,24 +23,28 @@ internal C# namespace is `Desktop_Frames` (inherited from upstream). This is
 **deliberate** — do NOT rename the namespace; it keeps the diff against the
 fork point minimal and avoids churn across ~58 files.
 
-## 2. CRITICAL Build Constraint
+## 2. Build & COM Interop Model
 
-The project (`src/DesktopFramesPossible/DesktopFramesPossible.csproj`) contains
-**COM references** (`IWshRuntimeLibrary` / Windows Script Host, Shell32).
-`dotnet build` **cannot** resolve COM references and **fails** — this is not
-fixable by configuration.
+The project builds with the **plain `dotnet` SDK on any OS** — including Linux
+CI — because `EnableWindowsTargeting=true` is set in `Directory.Build.props`
+and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
+`Shell.Application` for shell automation) is **late-bound** via
+`Type.GetTypeFromProgID(...)` + `dynamic`. There are NO `<COMReference>` items.
 
-- Always build via `./build.ps1`, which locates full MSBuild from
-  **Visual Studio 2022+ / Build Tools** (with the .NET desktop workload).
-- Builds are **Windows-only** (target `net8.0-windows7.0`, WPF + WinForms).
-- Never "fix" a build failure by removing the COM references or switching the
-  project style.
+- Build via `./build.ps1` (or `dotnet build src/DesktopFramesPossible.sln`).
+- The app **runs on Windows only** (`net8.0-windows7.0`, WPF + WinForms), and
+  tests also **execute** on Windows only — Linux can compile and cross-publish
+  but not run them.
+- Never reintroduce `<COMReference>` items or compile-time interop assemblies —
+  that reinstates a build-time Windows/VS dependency. New COM calls follow the
+  same late-binding pattern (COM member names in `dynamic` dispatch are
+  case-sensitive at runtime; no compiler safety — test on Windows).
 
 ## 3. Commands
 
 | Command | Purpose |
 |---------|---------|
-| `./build.ps1` | Build the solution with full MSBuild (auto-locates via vswhere) |
+| `./build.ps1` | Build the solution with the dotnet SDK |
 | `./test-smoke.ps1` | Run unit tests (fast, headless-safe) |
 | `./test-full.ps1` | Run the full test suite |
 | `./start-app.ps1` | Build (unless `-NoBuild`) and launch the app |
@@ -233,8 +237,7 @@ they must NOT:
 Test pure logic (parsing, sorting, version calc, path/utility helpers), not
 window plumbing.
 
-Run a subset (build first — the test project references the app project, so a
-plain `dotnet test` would try to build the COM references and fail):
+Run a subset (Windows only — the tests target `net8.0-windows`):
 
 ```powershell
 ./build.ps1; dotnet test tests/DesktopFramesPossible.Tests --no-build --filter "FullyQualifiedName~PortalSort"
