@@ -16,7 +16,7 @@ namespace Desktop_Frames
         #region Messaging State Management (Remote Info System)
 
         // --- MIGRATED PATHS ---
-        private static readonly string MSG_REGISTRY_KEY_PATH = @"SOFTWARE\Desktop_Frames_Plus\Messaging";
+        private static readonly string MSG_REGISTRY_KEY_PATH = @"SOFTWARE\DevPossible\DesktopFramesPossible\Messaging";
 
         public static bool IsMessageDismissed(string msgId)
         {
@@ -89,11 +89,11 @@ namespace Desktop_Frames
         #region Constants
 
         // Registry path for our trigger system
-        private static readonly string REGISTRY_KEY_PATH = @"SOFTWARE\Desktop_Frames_Plus\InstanceTrigger";
+        private static readonly string REGISTRY_KEY_PATH = @"SOFTWARE\DevPossible\DesktopFramesPossible\InstanceTrigger";
         private static readonly string TRIGGER_VALUE_NAME = "TriggerEffect";
 
         // Registry path for program management values
-        private static readonly string PROGRAM_REGISTRY_KEY_PATH = @"SOFTWARE\Desktop_Frames_Plus\ProgramManagement";
+        private static readonly string PROGRAM_REGISTRY_KEY_PATH = @"SOFTWARE\DevPossible\DesktopFramesPossible\ProgramManagement";
 
         // Context Menu Constants
         private const string MENU_PATH = @"Software\Classes\DesktopBackground\Shell\DesktopFrames";
@@ -104,7 +104,7 @@ namespace Desktop_Frames
         #region Migration Methods
 
         // Registry path for internal app settings/flags
-        private static readonly string SETTINGS_REGISTRY_KEY_PATH = @"SOFTWARE\Desktop_Frames_Plus\Settings";
+        private static readonly string SETTINGS_REGISTRY_KEY_PATH = @"SOFTWARE\DevPossible\DesktopFramesPossible\Settings";
 
         public static bool IsStartupMigrated()
         {
@@ -250,6 +250,7 @@ namespace Desktop_Frames
                 // Serves as a secondary sweeper to kill orphaned locks from old crashes.
                 // ====================================================================
                 Registry.CurrentUser.DeleteSubKeyTree(@"SOFTWARE\Desktop_Fences_Plus\InstanceTrigger", throwOnMissingSubKey: false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"SOFTWARE\Desktop_Frames_Plus\InstanceTrigger", throwOnMissingSubKey: false);
 
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
                     "RegistryHelper: Cleaned up registry key");
@@ -425,11 +426,11 @@ namespace Desktop_Frames
                 var values = GetProgramManagementValues();
                 string programPath = Assembly.GetEntryAssembly()?.Location ?? "";
                 string programDir = System.IO.Path.GetDirectoryName(programPath) ?? "";
-                string exportFilePath = System.IO.Path.Combine(programDir, "Desktop Frames + Registry Values.txt");
+                string exportFilePath = System.IO.Path.Combine(programDir, "DesktopFramesPossible Registry Values.txt");
 
                 using (var writer = new System.IO.StreamWriter(exportFilePath))
                 {
-                    writer.WriteLine("Desktop Frames Plus - Registry Values Export");
+                    writer.WriteLine("DesktopFrames+Possible - Registry Values Export");
                     writer.WriteLine($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
                     writer.WriteLine(new string('-', 50));
                     writer.WriteLine();
@@ -554,18 +555,22 @@ namespace Desktop_Frames
                 // ====================================================================
 
                 // 1. Recursive Data Migration (Stats, Info, Settings)
-                string oldBaseKeyName = @"SOFTWARE\Desktop_Fences_Plus";
-                string newBaseKeyName = @"SOFTWARE\Desktop_Frames_Plus";
+                // Chain: Desktop_Fences_Plus -> Desktop_Frames_Plus -> DevPossible\DesktopFramesPossible
+                string newBaseKeyName = @"SOFTWARE\DevPossible\DesktopFramesPossible";
+                string[] oldBaseKeyNames = { @"SOFTWARE\Desktop_Fences_Plus", @"SOFTWARE\Desktop_Frames_Plus" };
 
-                using (var oldBaseKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(oldBaseKeyName))
+                foreach (string oldBaseKeyName in oldBaseKeyNames)
                 {
-                    if (oldBaseKey != null)
+                    using (var oldBaseKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(oldBaseKeyName))
                     {
-                        using (var newBaseKey = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(newBaseKeyName))
+                        if (oldBaseKey != null)
                         {
-                            if (newBaseKey != null) CopyRegistryKeyTree(oldBaseKey, newBaseKey);
+                            using (var newBaseKey = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(newBaseKeyName))
+                            {
+                                if (newBaseKey != null) CopyRegistryKeyTree(oldBaseKey, newBaseKey);
+                            }
+                            try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(oldBaseKeyName, false); } catch { }
                         }
-                        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(oldBaseKeyName, false); } catch { }
                     }
                 }
 
@@ -575,7 +580,7 @@ namespace Desktop_Frames
                     if (runKey != null)
                     {
                         bool hadOldStartup = false;
-                        string[] oldStartupNames = { "Desktop Fences +", "DesktopFences", "Desktop Fences" };
+                        string[] oldStartupNames = { "Desktop Fences +", "DesktopFences", "Desktop Fences", "Desktop Frames +", "DesktopFrames", "Desktop Frames" };
 
                         foreach (string oldName in oldStartupNames)
                         {
@@ -586,7 +591,7 @@ namespace Desktop_Frames
                             }
                         }
 
-                        if (hadOldStartup) runKey.SetValue("Desktop Frames +", $"\"{currentExePath}\"");
+                        if (hadOldStartup) runKey.SetValue("DesktopFramesPossible", $"\"{currentExePath}\"");
                     }
                 }
 

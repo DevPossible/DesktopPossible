@@ -26,7 +26,7 @@ namespace Desktop_Frames
             {
                 var aboutWindow = new Window
                 {
-                    Title = "About Desktop Frames +",
+                    Title = "About DesktopFrames+Possible",
                     Width = 480,
                     Height = 670,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen,
@@ -75,7 +75,7 @@ namespace Desktop_Frames
                 // CONTENT: Scrollable content area
                 CreateContent(rootGrid);
 
-                // FOOTER: Hand Water Pump section
+                // FOOTER: DevPossible section
                 CreateFooter(rootGrid);
 
                 mainBorder.Child = rootGrid;
@@ -179,7 +179,7 @@ namespace Desktop_Frames
 
             TextBlock titleText = new TextBlock
             {
-                Text = "Desktop Frames +",
+                Text = "DesktopFrames+Possible",
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 22, // Your improved font size
                 FontWeight = FontWeights.Bold,
@@ -242,11 +242,11 @@ namespace Desktop_Frames
 
             // About Section
             CreateSection(contentStack, "About", "Organize your desktop like magic!",
-                "Desktop Frames + creates virtual frames on your desktop, allowing you to group and organize icons in a clean and convenient way.", 20);
+                "DesktopFrames+Possible creates virtual frames on your desktop, allowing you to group and organize icons in a clean and convenient way.", 20);
 
             // Credits Section
             CreateSection(contentStack, "Credits", null,
-                "Desktop Frames + is an open-source utility for Windows, originally created by HakanKokcu under the name BirdyFences.\n\nDesktop Frames + is maintained by Nikos Georgousis, has been enhanced and optimized for stability and better user experience.", 20);
+                "DesktopFrames+Possible is a hard fork of Desktop Frames + by Nikos Georgousis (limbo666), which was originally created by HakanKokcu under the name BirdyFences.\n\nDesktopFrames+Possible is maintained by DevPossible.", 20);
 
             // Support Development Section
             CreateSupportSection(contentStack);
@@ -334,40 +334,6 @@ namespace Desktop_Frames
                 Margin = new Thickness(0, 8, 0, 0)
             };
 
-            // Donate Button
-            Button donateButton = new Button
-            {
-                Content = "♥ Donate via PayPal",
-                Height = 36,
-                Padding = new Thickness(16, 0, 16, 0),
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 14, // Your improved font size
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                Background = new SolidColorBrush(Color.FromRgb(255, 102, 51)), // Orange
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 12, 0)
-            };
-
-            donateButton.MouseEnter += (s, e) => donateButton.Background = new SolidColorBrush(Color.FromRgb(230, 90, 40));
-            donateButton.MouseLeave += (s, e) => donateButton.Background = new SolidColorBrush(Color.FromRgb(255, 102, 51));
-            donateButton.Click += (s, e) =>
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = "https://www.paypal.com/donate/?hosted_button_id=PPLWC66UC8Q42",
-                        UseShellExecute = true
-                    });
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening PayPal link: {ex.Message}");
-                }
-            };
-
             // GitHub Button
             Button githubButton = new Button
             {
@@ -380,12 +346,77 @@ namespace Desktop_Frames
                 Foreground = Brushes.White,
                 Background = new SolidColorBrush(Color.FromRgb(138, 43, 226)), // Purple
                 BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 12, 0)
             };
 
             githubButton.MouseEnter += (s, e) => githubButton.Background = new SolidColorBrush(Color.FromRgb(108, 30, 180));
             githubButton.MouseLeave += (s, e) => githubButton.Background = new SolidColorBrush(Color.FromRgb(138, 43, 226));
             githubButton.Click += (s, e) =>
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "https://github.com/DevPossible/DesktopFramesPossible",
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening GitHub link: {ex.Message}");
+                }
+            };
+
+            // DevPossible website Button
+            Button devPossibleButton = new Button
+            {
+                Content = "🌐 devpossible.com",
+                Height = 36,
+                Padding = new Thickness(16, 0, 16, 0),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 14, // Your improved font size
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromRgb(66, 133, 244)), // Blue
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand
+            };
+
+            devPossibleButton.MouseEnter += (s, e) => devPossibleButton.Background = new SolidColorBrush(Color.FromRgb(50, 105, 200));
+            devPossibleButton.MouseLeave += (s, e) => devPossibleButton.Background = new SolidColorBrush(Color.FromRgb(66, 133, 244));
+            devPossibleButton.Click += (s, e) =>
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "https://devpossible.com",
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening DevPossible link: {ex.Message}");
+                }
+            };
+
+            buttonsPanel.Children.Add(githubButton);
+            buttonsPanel.Children.Add(devPossibleButton);
+            section.Children.Add(buttonsPanel);
+
+            // Plain link crediting the upstream project
+            TextBlock upstreamLink = new TextBlock
+            {
+                Text = "Support the upstream project: Desktop Frames + by limbo666",
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(26, 115, 232)),
+                TextDecorations = TextDecorations.Underline,
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+            upstreamLink.MouseLeftButtonDown += (s, e) =>
             {
                 try
                 {
@@ -397,13 +428,11 @@ namespace Desktop_Frames
                 }
                 catch (Exception ex)
                 {
-                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening GitHub link: {ex.Message}");
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening upstream link: {ex.Message}");
                 }
             };
+            section.Children.Add(upstreamLink);
 
-            buttonsPanel.Children.Add(donateButton);
-            buttonsPanel.Children.Add(githubButton);
-            section.Children.Add(buttonsPanel);
             parent.Children.Add(section);
         }
 
@@ -475,84 +504,42 @@ namespace Desktop_Frames
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            // Calculate maximum logo size (footer height minus vertical padding)
-            int maxLogoSize = 40; // 60px footer - 10px top padding - 10px bottom padding
-
-            // HWP Logo placeholder
-            Border logoPlaceholder = new Border
+            // DevPossible text
+            TextBlock devPossibleText = new TextBlock
             {
-                Width = maxLogoSize,
-                Height = maxLogoSize,
-                Background = new SolidColorBrush(Color.FromRgb(66, 133, 244)),
-                CornerRadius = new CornerRadius(4),
-                Margin = new Thickness(0, 0, 12, 0),
-                Cursor = Cursors.Hand
-            };
-
-            // Load HWP logo if available
-            try
-            {
-                var assembly = Assembly.GetExecutingAssembly();
-                var resourceStream = assembly.GetManifestResourceStream("Desktop_Frames.Resources.HWP_Logo.png");
-                if (resourceStream != null)
-                {
-                    BitmapImage bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.StreamSource = resourceStream;
-                    bitmap.EndInit();
-
-                    Image logoImage = new Image
-                    {
-                        Source = bitmap,
-                        Width = maxLogoSize,
-                        Height = maxLogoSize,
-                        Stretch = Stretch.Uniform
-                    };
-                    logoPlaceholder.Child = logoImage;
-                    logoPlaceholder.Background = Brushes.Transparent;
-                }
-            }
-            catch { } // Use placeholder if logo fails to load
-
-            logoPlaceholder.MouseLeftButtonDown += (s, e) => OpenHWPLink();
-
-            // Hand Water Pump text
-            TextBlock hwpText = new TextBlock
-            {
-                Text = "Hand Water Pump",
+                Text = "DevPossible",
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 18,
                 FontWeight = FontWeights.Bold,
-                Foreground = Brushes.OrangeRed,
+                Foreground = new SolidColorBrush(Color.FromRgb(66, 133, 244)),
                 VerticalAlignment = VerticalAlignment.Center,
                 Cursor = Cursors.Hand
             };
 
-            hwpText.MouseLeftButtonDown += (s, e) => OpenHWPLink();
+            devPossibleText.MouseLeftButtonDown += (s, e) => OpenDevPossibleLink();
 
-            centerPanel.Children.Add(logoPlaceholder);
-            centerPanel.Children.Add(hwpText);
+            centerPanel.Children.Add(devPossibleText);
             footerBorder.Child = centerPanel;
 
             Grid.SetRow(footerBorder, 2);
             rootGrid.Children.Add(footerBorder);
         }
 
-  
 
-        private static void OpenHWPLink()
+
+        private static void OpenDevPossibleLink()
         {
             try
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "http://www.georgousis.info",
+                    FileName = "https://devpossible.com",
                     UseShellExecute = true
                 });
             }
             catch (Exception ex)
             {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening HWP link: {ex.Message}");
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening DevPossible link: {ex.Message}");
             }
         }
 
@@ -704,13 +691,13 @@ namespace Desktop_Frames
                     Padding = new Thickness(20, 15, 20, 15)
                 };
 
-                Button donateButton = new Button
+                Button okButton = new Button
                 {
-                    Content = "Donate 999,00 €",
-                    Height = 40, 
+                    Content = "OK",
+                    Height = 40,
                     MinWidth = 160,
                     FontFamily = new FontFamily("Segoe UI"),
-                    FontSize = 14, 
+                    FontSize = 14,
                     FontWeight = FontWeights.Bold,
                     Foreground = Brushes.White,
                     Background = new LinearGradientBrush(
@@ -726,24 +713,9 @@ namespace Desktop_Frames
                     Padding = new Thickness(16, 8, 16, 8) // Proper padding
                 };
 
-                donateButton.Click += (s, e) =>
-                {
-                    try
-                    {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = "https://www.paypal.com/donate/?hosted_button_id=PPLWC66UC8Q42",
-                            UseShellExecute = true
-                        });
-                        easterWindow.Close();
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error opening PayPal link: {ex.Message}");
-                    }
-                };
+                okButton.Click += (s, e) => easterWindow.Close();
 
-                footerBorder.Child = donateButton;
+                footerBorder.Child = okButton;
 
                 
                 closeButton.Click += async (s, e) =>
@@ -763,9 +735,9 @@ namespace Desktop_Frames
                      
                         messageText.Text = "Are you sure? Think again!";
 
-                    
-                        donateButton.Content = "Please donate";
-                        donateButton.Background = new SolidColorBrush(Color.FromRgb(220, 20, 60)); // Crimson
+
+                        okButton.Content = "Don't go!";
+                        okButton.Background = new SolidColorBrush(Color.FromRgb(220, 20, 60)); // Crimson
 
                    
                         try
@@ -813,12 +785,12 @@ namespace Desktop_Frames
                         easterWindow.Left = originalLeft;
                         easterWindow.Top = originalTop;
 
-                        var originalButtonBrush = donateButton.Background;
+                        var originalButtonBrush = okButton.Background;
                         for (int i = 0; i < 4; i++)
                         {
-                            donateButton.Background = new SolidColorBrush(Color.FromRgb(255, 255, 100)); // Bright yellow flash
+                            okButton.Background = new SolidColorBrush(Color.FromRgb(255, 255, 100)); // Bright yellow flash
                             await System.Threading.Tasks.Task.Delay(150);
-                            donateButton.Background = originalButtonBrush;
+                            okButton.Background = originalButtonBrush;
                             await System.Threading.Tasks.Task.Delay(150);
                         }
 

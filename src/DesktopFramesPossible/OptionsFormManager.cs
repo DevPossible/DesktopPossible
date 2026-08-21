@@ -35,7 +35,7 @@ namespace Desktop_Frames
 
                 _optionsWindow = new Window
                 {
-                    Title = "Desktop Frames + Options",
+                    Title = "DesktopFrames+Possible Options",
                     Width = 800,
                     Height = 850,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen,
@@ -65,7 +65,6 @@ namespace Desktop_Frames
                 mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(40) }); // Header
                 mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Content
                 mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) }); // Footer
-                mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(80) }); // Donation
 
                 // Header
                 Border headerBorder = new Border { Background = new SolidColorBrush(_userAccentColor), Height = 40 };
@@ -105,7 +104,6 @@ namespace Desktop_Frames
 
                 CreateTabContent(mainGrid);
                 CreateFooter(mainGrid);
-                CreateDonationSection(mainGrid);
 
                 mainGrid.Children.Add(headerBorder);
                 mainBorder.Child = mainGrid;
@@ -1094,7 +1092,7 @@ namespace Desktop_Frames
                     // Propagate the new hotkeys across all existing profiles
                     SettingsManager.BroadcastHotkeysToAllProfiles();
 
-                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Global Hotkey changes have been saved and applied to all profiles.\n\nPlease restart Desktop Frames to activate the new shortcuts.", "Restart Required");
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Global Hotkey changes have been saved and applied to all profiles.\n\nPlease restart DesktopFrames+Possible to activate the new shortcuts.", "Restart Required");
                 }
 
                 // 5. Smart Desktop (Auto-Organize)
@@ -1207,17 +1205,6 @@ namespace Desktop_Frames
             sv.Click += (s, e) => SaveOptions();
 
             sp.Children.Add(c); sp.Children.Add(sv); f.Child = sp; mainGrid.Children.Add(f);
-        }
-
-        private static void CreateDonationSection(Grid mainGrid)
-        {
-            Border d = new Border { Background = new SolidColorBrush(Color.FromRgb(255, 248, 225)), BorderBrush = new SolidColorBrush(Color.FromRgb(255, 193, 7)), BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(20) };
-            Grid.SetRow(d, 3);
-            StackPanel sp = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            sp.Children.Add(new TextBlock { Text = "Support the Maintenance and Enhancement of This Project by Donating", FontSize = 13, Foreground = new SolidColorBrush(Color.FromRgb(102, 77, 3)), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 15, 0) });
-            Button b = new Button { Content = "♥ Donate via PayPal", FontSize = 14, Background = new SolidColorBrush(Color.FromRgb(255, 193, 7)), Foreground = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(15, 6, 15, 6), Cursor = Cursors.Hand };
-            b.Click += (s, e) => { try { Process.Start(new ProcessStartInfo { FileName = "https://www.paypal.com/donate/?hosted_button_id=PPLWC66UC8Q42", UseShellExecute = true }); } catch { } };
-            sp.Children.Add(b); d.Child = sp; mainGrid.Children.Add(d);
         }
 
         private static void RestoreBackup()

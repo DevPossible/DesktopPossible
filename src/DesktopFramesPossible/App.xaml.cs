@@ -13,7 +13,7 @@ namespace Desktop_Frames
         private TrayManager _trayManager;
         private TargetChecker _targetChecker;
         private static Mutex _mutex;
-        private const string UNIQUE_APP_NAME = "Global\\DesktopFramesPlus_Mutex_UniqueId_v2";
+        private const string UNIQUE_APP_NAME = "Global\\DesktopFramesPossible_Mutex_v1";
 
 
 

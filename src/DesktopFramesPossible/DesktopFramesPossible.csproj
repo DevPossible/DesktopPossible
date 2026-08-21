@@ -27,13 +27,11 @@
 		<None Remove="portal.png" />
 		<None Remove="Resources\36505577-smooth-simple-notification-274738.wav" />
 		<None Remove="Resources\ding.wav" />
-		<None Remove="Resources\donate.png" />
 		<None Remove="Resources\dot.png" />
 		<None Remove="Resources\dragon-studio-new-notification-444814.wav" />
 		<None Remove="Resources\dragon.png" />
 		<None Remove="Resources\empty.png" />
 		<None Remove="Resources\Feed.png" />
-		<None Remove="Resources\HWP_Logo.png" />
 		<None Remove="Resources\koiroylers-slow-ding-354125.wav" />
 		<None Remove="Resources\link-White.png" />
 		<None Remove="Resources\logo_blue.ico" />
@@ -86,7 +84,6 @@
 		<EmbeddedResource Include="Resources\logo1.png" />
 	</ItemGroup>
 	<ItemGroup>
-		<EmbeddedResource Include="Resources\donate.png" />
 		<EmbeddedResource Include="Resources\notification_message-best-notification-1-286672.wav" />
 		<EmbeddedResource Include="Resources\notification_message-nada-1-326000.wav" />
 		<EmbeddedResource Include="Resources\soundshelfstudio-ui-notification-pop-513564.wav" />
@@ -98,9 +95,6 @@
 		<EmbeddedResource Include="Resources\universfield-soft-notice-146623.wav" />
 	</ItemGroup>
 	<ItemGroup>
-		<Resource Include="Resources\donate.png">
-			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</Resource>
 		<EmbeddedResource Include="Resources\Feed.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</EmbeddedResource>
@@ -119,9 +113,6 @@
 		<Resource Include="Resources\folderX.png" />
 		<EmbeddedResource Include="Resources\logo_blue.ico">
 			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</EmbeddedResource>
-		<EmbeddedResource Include="Resources\HWP_Logo.png">
-		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>
 		</EmbeddedResource>
 		<Resource Include="Resources\link-White.png">
 		  <CopyToOutputDirectory>Never</CopyToOutputDirectory>

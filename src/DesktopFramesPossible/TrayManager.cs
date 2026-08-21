@@ -29,7 +29,7 @@ namespace Desktop_Frames
         public static bool IsStartWithWindows { get; private set; }
 
         private const string RUN_KEY_PATH = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        private const string APP_NAME = "Desktop Frames +"; // --- FIX: Ensures new registry entries use the correct name ---
+        private const string APP_NAME = "DesktopFramesPossible"; // --- FIX: Ensures new registry entries use the correct name ---
 
         private static readonly List<HiddenFrame> HiddenFrames = new List<HiddenFrame>();
     
@@ -142,7 +142,7 @@ namespace Desktop_Frames
                     if (success)
                     {
                         // Show notification that export was successful
-                        _trayIcon.BalloonTipTitle = "Desktop Frames Plus";
+                        _trayIcon.BalloonTipTitle = "DesktopFrames+Possible";
                         _trayIcon.BalloonTipText = "Registry values exported successfully to program folder.";
                         _trayIcon.BalloonTipIcon = ToolTipIcon.Info;
                         _trayIcon.ShowBalloonTip(3000); // Show for 3 seconds
@@ -153,7 +153,7 @@ namespace Desktop_Frames
                     else
                     {
                         // Show error notification
-                        _trayIcon.BalloonTipTitle = "Desktop Frames Plus - Error";
+                        _trayIcon.BalloonTipTitle = "DesktopFrames+Possible - Error";
                         _trayIcon.BalloonTipText = "Failed to export registry values. Check log for details.";
                         _trayIcon.BalloonTipIcon = ToolTipIcon.Error;
                         _trayIcon.ShowBalloonTip(3000);
@@ -228,7 +228,7 @@ namespace Desktop_Frames
             {
                 Icon = Icon.ExtractAssociatedIcon(exePath),
                 Visible = true,
-                Text = $"Desktop Frames ({ProfileManager.CurrentProfileName})"
+                Text = $"DesktopFrames+Possible ({ProfileManager.CurrentProfileName})"
             };
 
             _trayIcon.DoubleClick += OnTrayIconDoubleClick;
@@ -338,7 +338,7 @@ namespace Desktop_Frames
         {
             var waitWindow = new System.Windows.Window
             {
-                Title = "Desktop Frames +",
+                Title = "DesktopFrames+Possible",
                 Width = 300,
                 Height = 150,
                 WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen,
@@ -372,7 +372,7 @@ namespace Desktop_Frames
 
             var titleText = new System.Windows.Controls.TextBlock
             {
-                Text = "Desktop Frames +",
+                Text = "DesktopFrames+Possible",
                 FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
                 FontSize = 16,
                 FontWeight = System.Windows.FontWeights.Medium,
@@ -604,7 +604,7 @@ namespace Desktop_Frames
                         ProfileManager.SwitchToProfile(profile.Name);
                         // Update the 'Home' profile so automation reverts to this manual choice later
                         ProfileManager.SetManualBaseProfile(profile.Name);
-                        _trayIcon.Text = $"Desktop Frames ({profile.Name})";
+                        _trayIcon.Text = $"DesktopFrames+Possible ({profile.Name})";
                         UpdateProfilesMenu();
                     };
                 }
@@ -667,18 +667,20 @@ namespace Desktop_Frames
                 // ====================================================================
                 // B. AGGRESSIVE CLEANUP: Clean any lingering shortcuts to enforce registry-only startup.
                 string startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                string legacyFencesShortcut = Path.Combine(startupPath, "Desktop Fences.lnk");
-                string legacyFramesShortcut = Path.Combine(startupPath, "Desktop Frames +.lnk");
+                string[] legacyShortcuts =
+                {
+                    Path.Combine(startupPath, "Desktop Fences.lnk"),
+                    Path.Combine(startupPath, "Desktop Frames +.lnk"),
+                    Path.Combine(startupPath, "DesktopFramesPossible.lnk")
+                };
 
-                if (File.Exists(legacyFencesShortcut))
+                foreach (string legacyShortcut in legacyShortcuts)
                 {
-                    File.Delete(legacyFencesShortcut);
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, "TrayManager: Legacy 'Frames' shortcut removed.");
-                }
-                if (File.Exists(legacyFramesShortcut))
-                {
-                    File.Delete(legacyFramesShortcut);
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, "TrayManager: Legacy 'Frames' shortcut removed.");
+                    if (File.Exists(legacyShortcut))
+                    {
+                        File.Delete(legacyShortcut);
+                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, "TrayManager: Legacy startup shortcut removed.");
+                    }
                 }
 
                 IsStartWithWindows = enable;
@@ -701,21 +703,28 @@ namespace Desktop_Frames
             // Retained to safely scrub older installations of trademarked terms.
             // ====================================================================
             string startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            string shortcutPath = Path.Combine(startupPath, "Desktop Fences.lnk");
-
-            // If the old shortcut exists, it means the user WANTED start-up enabled.
-            // We must transfer that intent to the Registry.
-            if (File.Exists(shortcutPath))
+            string[] legacyShortcutPaths =
             {
-                try
+                Path.Combine(startupPath, "Desktop Fences.lnk"),
+                Path.Combine(startupPath, "Desktop Frames +.lnk")
+            };
+
+            // If an old shortcut exists, it means the user WANTED start-up enabled.
+            // We must transfer that intent to the Registry.
+            foreach (string shortcutPath in legacyShortcutPaths)
+            {
+                if (File.Exists(shortcutPath))
                 {
-                    SetRegistryStartup(true); // Create Registry Key
-                    File.Delete(shortcutPath); // Delete Old Shortcut
-                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "TrayManager: Migrated startup from Shortcut to Registry.");
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"TrayManager: Migration Error: {ex.Message}");
+                    try
+                    {
+                        SetRegistryStartup(true); // Create Registry Key
+                        File.Delete(shortcutPath); // Delete Old Shortcut
+                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "TrayManager: Migrated startup from Shortcut to Registry.");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"TrayManager: Migration Error: {ex.Message}");
+                    }
                 }
             }
 
@@ -760,9 +769,10 @@ namespace Desktop_Frames
             // [LEGACY "FENCES" MIGRATION - DO NOT REMOVE]
             // Retained to safely scrub older installations of trademarked terms.
             // ====================================================================
-            // Fallback: Check if the old shortcut exists (in case migration hasn't run yet)
+            // Fallback: Check if an old shortcut exists (in case migration hasn't run yet)
             string startupPath = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            return File.Exists(Path.Combine(startupPath, "Desktop Fences.lnk"));
+            return File.Exists(Path.Combine(startupPath, "Desktop Fences.lnk"))
+                || File.Exists(Path.Combine(startupPath, "Desktop Frames +.lnk"));
         }
         // --- NEW METHODS END ---
 
@@ -867,7 +877,7 @@ namespace Desktop_Frames
             if (Showintray == true)
             {
                 // FIX: Update the tooltip text to match the current profile
-                _trayIcon.Text = $"Desktop Frames + ({ProfileManager.CurrentProfileName})";
+                _trayIcon.Text = $"DesktopFrames+Possible ({ProfileManager.CurrentProfileName})";
 
                 var newIcon = BuildTrayIcon(HiddenFrames.Count + _tempHiddenFrames.Count);
                 _trayIcon.Icon = newIcon;

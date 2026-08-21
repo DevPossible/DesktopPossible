@@ -343,7 +343,7 @@ namespace Desktop_Frames
             // 2. Branding Subtitle
             var brandBlock = new TextBlock
             {
-                Text = "Desktop Frames +",
+                Text = "DesktopFrames+Possible",
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#99FFFFFF")), // Dimmed White
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 9,
@@ -765,7 +765,7 @@ namespace Desktop_Frames
         /// <param name="title">The title of the wait window</param>
         /// <param name="message">The message to display</param>
         /// <returns>The wait window instance (caller should close it when done)</returns>
-        public static Window CreateWaitWindow(string title = "Desktop Frames +", string message = "Please wait...")
+        public static Window CreateWaitWindow(string title = "DesktopFrames+Possible", string message = "Please wait...")
         {
             try
             {

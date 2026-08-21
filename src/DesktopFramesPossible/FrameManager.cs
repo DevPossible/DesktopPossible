@@ -330,7 +330,7 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Reloading all frames...");
 
                 // 1. Life Support
-                Window lifeSupport = MessageBoxesManager.CreateWaitWindow("Desktop Frames +", "Refreshing configuration...");
+                Window lifeSupport = MessageBoxesManager.CreateWaitWindow("DesktopFrames+Possible", "Refreshing configuration...");
                 lifeSupport.Show();
                 System.Windows.Forms.Application.DoEvents();
 
@@ -788,7 +788,7 @@ namespace Desktop_Frames
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
                         $"Creating life support window - about to close {framesToClose} of {totalFrameCount} total frames");
 
-                    lifeSupportWindow = MessageBoxesManager.CreateWaitWindow("Desktop Frames +", "Refreshing frames, please wait...");
+                    lifeSupportWindow = MessageBoxesManager.CreateWaitWindow("DesktopFrames+Possible", "Refreshing frames, please wait...");
                     lifeSupportWindow.Show();
                 }
 
@@ -4416,7 +4416,7 @@ namespace Desktop_Frames
                 var noteFrame = new
                 {
                     Id = Guid.NewGuid().ToString(), // Unique ID
-                    Title = "Desktop Frames + Startup Tips", // Explicit Name
+                    Title = "DesktopFrames+Possible Startup Tips", // Explicit Name
                     X = 20.0,   // Positioned below the data frame
                     Y = 200.0,  // Data frame ends then this frame begins
                     Width = 555.0,
@@ -4429,8 +4429,8 @@ namespace Desktop_Frames
                     TextColor = "Teal",         // Teal text
 
                     // Note Settings
-                    NoteContent = "WELCOME TO DESKTOP FRAMES +\r\n" +
-                                  "---------------------------\r\n" +
+                    NoteContent = "WELCOME TO DESKTOPFRAMES+POSSIBLE\r\n" +
+                                  "---------------------------------\r\n" +
                                   "• Roll Up/Down: Double-click the frame title bar.\r\n" +
                                   "• Rename: Ctrl + Click the title bar (Enter to save).\r\n" +
                                   "• Search (SpotSearch): Press Ctrl + ` (Tilde) to find any icon instantly.\r\n" +

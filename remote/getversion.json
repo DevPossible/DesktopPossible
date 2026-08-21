@@ -1,14 +1,20 @@
 {
+  "Meta": {
+    "LatestVersion": "3.0.0.0",
+    "CriticalUpdate": false,
+    "DownloadUrl": "https://github.com/DevPossible/DesktopFramesPossible/releases",
+    "ForceKillSwitch": false
+  },
   "Announcements": [
     {
-      "Id": "MSG_20260628_1338",
+      "Id": "MSG_20260821_dfp1",
       "Type": "Info",
-      "Title": "Support Desktop Frames +",
-      "Body": "If this tool helps your workflow, please consider supporting the project to keep development alive!",
-      "Link": "https://www.paypal.com/donate/?hosted_button_id=PPLWC66UC8Q42",
+      "Title": "Welcome to DesktopFrames+Possible 3.0",
+      "Body": "Thanks for using DesktopFrames+Possible, the hard fork of Desktop Frames + maintained by DevPossible. Check the releases page for the latest version and release notes.",
+      "Link": "https://github.com/DevPossible/DesktopFramesPossible/releases",
       "TargetVersionMin": "0.0.0.0",
       "TargetVersionMax": "99.9.9.9",
-      "MaxDisplayCount": 3,
+      "MaxDisplayCount": 1,
       "AutoCloseSeconds": 0,
       "CanUserDismiss": true
     }
