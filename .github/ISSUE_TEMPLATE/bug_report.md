@@ -1,6 +1,6 @@
 ---
 name: 🐛 Bug Report
-about: Create a report to help us improve DesktopFences
+about: Create a report to help us improve DesktopFrames+Possible
 title: "[POSSIBLE BUG] "
 labels: report
 
@@ -8,14 +8,14 @@ labels: report
 ---
 
 **⚠️ IMPORTANT:**
-For general questions or feature requests, please DO NOT open an issue. Use [Discussions](https://github.com/limbo666/DesktopFramesPlus/discussions) instead.
+For general questions or feature requests, please DO NOT open an issue. Use [Discussions](https://github.com/DevPossible/DesktopFramesPossible/discussions) instead.
 
 ---
 
 **System Information (Required):**
- - **Desktop Frames + Version:** [e.g. 2.7.7.268]
+ - **DesktopFrames+Possible Version:** [e.g. 3.0.0]
  - **Windows Version:** [e.g. Windows 11 22H2]
- - **Installation Path:** [e.g. C:\Tools\DesktopFrames+]
+ - **Installation Path:** [e.g. C:\Tools\DesktopFramesPossible]
 
 **Describe the Bug:**
 
