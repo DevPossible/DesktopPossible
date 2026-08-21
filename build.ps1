@@ -70,7 +70,7 @@ try {
     dotnet build src/DesktopFramesPossible.sln --configuration $Configuration
     if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
-    $exePath = Join-Path $BuildDir $ProjectName 'bin' $Configuration 'net8.0-windows7.0' "$ProjectName.exe"
+    $exePath = Join-Path $BuildDir $ProjectName 'bin' $Configuration 'net8.0-windows10.0.19041.0' "$ProjectName.exe"
     Write-Host "`n=== Build Complete ===" -ForegroundColor Green
     Write-Host "  Configuration: $Configuration" -ForegroundColor Gray
     Write-Host "  Build outputs: $BuildDir" -ForegroundColor Gray

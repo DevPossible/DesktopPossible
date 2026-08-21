@@ -88,7 +88,7 @@ Coming from the upstream Desktop Frames + app? Your profiles carry over: copy yo
 
 ## Building from source
 
-The project targets **.NET 8** (`net8.0-windows7.0`) and builds with the plain **.NET SDK** on any OS (COM interop is late-bound; `EnableWindowsTargeting` is preconfigured). The app itself — and its test suite — runs on **Windows only**.
+The project targets **.NET 8** (`net8.0-windows10.0.19041.0`) and builds with the plain **.NET SDK** on any OS (COM interop is late-bound; `EnableWindowsTargeting` is preconfigured). The app itself — and its test suite — runs on **Windows only**.
 
 1. Install the [**.NET 8+ SDK**](https://dotnet.microsoft.com/download).
 2. Clone the repository and run:

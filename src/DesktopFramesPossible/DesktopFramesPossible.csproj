@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net8.0-windows7.0</TargetFramework>
+		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
 		<AssemblyName>DesktopFramesPossible</AssemblyName>
 		<RootNamespace>Desktop_Frames</RootNamespace>
 		<Nullable>enable</Nullable>
@@ -108,6 +108,7 @@
 	<ItemGroup>
 		<PackageReference Include="NAudio" Version="2.2.1" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+		<PackageReference Include="VirtualDesktop" Version="5.0.5" />
 	</ItemGroup>
 
 	<ItemGroup>

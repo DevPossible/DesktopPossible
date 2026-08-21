@@ -32,7 +32,7 @@ and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
 `Type.GetTypeFromProgID(...)` + `dynamic`. There are NO `<COMReference>` items.
 
 - Build via `./build.ps1` (or `dotnet build src/DesktopFramesPossible.sln`).
-- The app **runs on Windows only** (`net8.0-windows7.0`, WPF + WinForms), and
+- The app **runs on Windows only** (`net8.0-windows10.0.19041.0`, WPF + WinForms), and
   tests also **execute** on Windows only — Linux can compile and cross-publish
   but not run them.
 - Never reintroduce `<COMReference>` items or compile-time interop assemblies —
