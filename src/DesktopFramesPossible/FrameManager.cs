@@ -1,4 +1,3 @@
-using IWshRuntimeLibrary;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -3567,9 +3566,9 @@ namespace Desktop_Frames
                                 {
                                     try
                                     {
-                                        WshShell shell = new WshShell();
-                                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                                        arguments = shortcut.Arguments;
+                                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                        dynamic shortcut = shell.CreateShortcut(filePath);
+                                        arguments = (string)shortcut.Arguments;
                                     }
                                     catch { }
                                 }
@@ -6946,9 +6945,9 @@ namespace Desktop_Frames
                                 {
                                     try
                                     {
-                                        WshShell shell = new WshShell();
-                                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                                        arguments = shortcut.Arguments;
+                                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                        dynamic shortcut = shell.CreateShortcut(filePath);
+                                        arguments = (string)shortcut.Arguments;
                                     }
                                     catch { }
                                 }
@@ -7198,8 +7197,8 @@ namespace Desktop_Frames
 
                                     try
                                     {
-                                        WshShell shell = new WshShell();
-                                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutName);
+                                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                        dynamic shortcut = shell.CreateShortcut(shortcutName);
                                         shortcut.TargetPath = droppedFile;
                                         if (isFolder) shortcut.WorkingDirectory = droppedFile;
                                         shortcut.Save();
@@ -7732,15 +7731,15 @@ namespace Desktop_Frames
 
                     try
                     {
-                        WshShell shell = new WshShell();
-                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(System.IO.Path.GetFullPath(filePath));
-                        targetPath = shortcut.TargetPath;
+                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                        dynamic shortcut = shell.CreateShortcut(System.IO.Path.GetFullPath(filePath));
+                        targetPath = (string)shortcut.TargetPath;
 
                         // 1. Try Custom Icon (Properties -> Change Icon)
                         // Check if IconLocation is valid and NOT ",0" (which implies default)
-                        if (!string.IsNullOrEmpty(shortcut.IconLocation) && shortcut.IconLocation != ",0")
+                        if (!string.IsNullOrEmpty((string?)shortcut.IconLocation) && (string)shortcut.IconLocation != ",0")
                         {
-                            string[] iconParts = shortcut.IconLocation.Split(',');
+                            string[] iconParts = ((string)shortcut.IconLocation).Split(',');
                             string iconPath = iconParts[0];
                             int iconIndex = 0;
                             if (iconParts.Length == 2 && int.TryParse(iconParts[1], out int parsedIndex))
@@ -7806,9 +7805,9 @@ namespace Desktop_Frames
                         {
                             try
                             {
-                                WshShell shell = new WshShell();
-                                IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(System.IO.Path.GetFullPath(filePath));
-                                targetPath = shortcut.TargetPath;
+                                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                dynamic shortcut = shell.CreateShortcut(System.IO.Path.GetFullPath(filePath));
+                                targetPath = (string)shortcut.TargetPath;
                             }
                             catch { }
                         }
@@ -8594,9 +8593,9 @@ namespace Desktop_Frames
                     if (System.IO.File.Exists(backupPath))
                     {
                         // Verify the backup has a custom icon before restoring
-                        WshShell shell = new WshShell();
-                        IWshShortcut backupShortcut = (IWshShortcut)shell.CreateShortcut(backupPath);
-                        if (!string.IsNullOrEmpty(backupShortcut.IconLocation))
+                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                        dynamic backupShortcut = shell.CreateShortcut(backupPath);
+                        if (!string.IsNullOrEmpty((string?)backupShortcut.IconLocation))
                         {
                             System.IO.File.Copy(backupPath, filePath, true);
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, $"Restored shortcut {filePath} from {backupPath} with custom icon");
@@ -8869,11 +8868,11 @@ namespace Desktop_Frames
                     {
                         try
                         {
-                            WshShell shell = new WshShell();
-                            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                            if (!string.IsNullOrEmpty(shortcut.IconLocation) && shortcut.IconLocation != ",0")
+                            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                            dynamic shortcut = shell.CreateShortcut(filePath);
+                            if (!string.IsNullOrEmpty((string?)shortcut.IconLocation) && (string)shortcut.IconLocation != ",0")
                             {
-                                string[] iconParts = shortcut.IconLocation.Split(',');
+                                string[] iconParts = ((string)shortcut.IconLocation).Split(',');
                                 string iconPath = iconParts[0];
                                 int iconIndex = 0;
                                 if (iconParts.Length == 2 && int.TryParse(iconParts[1], out int parsedIndex))
@@ -8918,11 +8917,11 @@ namespace Desktop_Frames
                 {
                     try
                     {
-                        WshShell shell = new WshShell();
-                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                        if (!string.IsNullOrEmpty(shortcut.IconLocation) && shortcut.IconLocation != ",0")
+                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                        dynamic shortcut = shell.CreateShortcut(filePath);
+                        if (!string.IsNullOrEmpty((string?)shortcut.IconLocation) && (string)shortcut.IconLocation != ",0")
                         {
-                            string[] iconParts = shortcut.IconLocation.Split(',');
+                            string[] iconParts = ((string)shortcut.IconLocation).Split(',');
                             string iconPath = iconParts[0];
                             int iconIndex = 0;
                             if (iconParts.Length == 2 && int.TryParse(iconParts[1], out int parsedIndex)) iconIndex = parsedIndex;
@@ -9046,9 +9045,9 @@ namespace Desktop_Frames
                                 string arguments = null;
                                 if (System.IO.Path.GetExtension(path).ToLower() == ".lnk")
                                 {
-                                    WshShell shell = new WshShell();
-                                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-                                    arguments = shortcut.Arguments;
+                                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                    dynamic shortcut = shell.CreateShortcut(path);
+                                    arguments = (string)shortcut.Arguments;
                                 }
                                 ClickEventAdder(sp, path, isFolder, arguments);
                                 updatedItems++;
@@ -9979,13 +9978,13 @@ namespace Desktop_Frames
                         targetPath = resolved;
                         try
                         {
-                            WshShell shell = new WshShell();
-                            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(fullPath);
-                            string rawTarget = shortcut.TargetPath?.ToLower() ?? "";
+                            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                            dynamic shortcut = shell.CreateShortcut(fullPath);
+                            string rawTarget = ((string?)shortcut.TargetPath)?.ToLower() ?? "";
                             if (!rawTarget.EndsWith("explorer.exe"))
                             {
-                                if (string.IsNullOrEmpty(finalArguments)) finalArguments = shortcut.Arguments;
-                                workingDirectory = shortcut.WorkingDirectory;
+                                if (string.IsNullOrEmpty(finalArguments)) finalArguments = (string)shortcut.Arguments;
+                                workingDirectory = (string)shortcut.WorkingDirectory;
                             }
                         }
                         catch { }
@@ -10315,11 +10314,11 @@ namespace Desktop_Frames
                 {
                     try
                     {
-                        WshShell shell = new WshShell();
-                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
-                        freshTargetPath = shortcut.TargetPath ?? shortcutPath;
-                        freshArguments = shortcut.Arguments ?? "";
-                        workingDirectory = shortcut.WorkingDirectory ?? "";
+                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                        dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                        freshTargetPath = (string)(shortcut.TargetPath ?? shortcutPath);
+                        freshArguments = (string)(shortcut.Arguments ?? "");
+                        workingDirectory = (string)(shortcut.WorkingDirectory ?? "");
                         isFolder = System.IO.Directory.Exists(freshTargetPath);
                     }
                     catch { }
@@ -10388,11 +10387,11 @@ namespace Desktop_Frames
                     {
                         try
                         {
-                            WshShell shell = new WshShell();
-                            IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
-                            if (!string.IsNullOrEmpty(shortcut.IconLocation) && shortcut.IconLocation != ",0")
+                            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                            dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                            if (!string.IsNullOrEmpty((string?)shortcut.IconLocation) && (string)shortcut.IconLocation != ",0")
                             {
-                                string[] parts = shortcut.IconLocation.Split(',');
+                                string[] parts = ((string)shortcut.IconLocation).Split(',');
                                 if (System.IO.File.Exists(parts[0]))
                                 {
                                     int idx = 0;

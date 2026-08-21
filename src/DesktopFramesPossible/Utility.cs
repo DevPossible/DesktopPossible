@@ -9,7 +9,6 @@ using System.Windows.Forms.VisualStyles;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging; // Added for ImageSource
-using IWshRuntimeLibrary;
 
 namespace Desktop_Frames
 {
@@ -488,9 +487,9 @@ namespace Desktop_Frames
             {
                 try
                 {
-                    WshShell shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                    filePath = shortcut.TargetPath;
+                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                    dynamic shortcut = shell.CreateShortcut(filePath);
+                    filePath = (string)shortcut.TargetPath;
                 }
                 catch
                 {
@@ -507,9 +506,9 @@ namespace Desktop_Frames
             {
                 try
                 {
-                    WshShell shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                    return shortcut.TargetPath;
+                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                    dynamic shortcut = shell.CreateShortcut(filePath);
+                    return (string)shortcut.TargetPath;
                 }
                 catch
                 {
@@ -524,9 +523,9 @@ namespace Desktop_Frames
             {
                 try
                 {
-                    WshShell shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                    return shortcut.Arguments;
+                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                    dynamic shortcut = shell.CreateShortcut(filePath);
+                    return (string)shortcut.Arguments;
                 }
                 catch
                 {

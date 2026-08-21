@@ -7,7 +7,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
-using IWshRuntimeLibrary;
 
 namespace Desktop_Frames
 {
@@ -216,9 +215,9 @@ namespace Desktop_Frames
                     // Check if .lnk file targets web URL
                     if (System.IO.File.Exists(filePath))
                     {
-                        WshShell shell = new WshShell();
-                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                        string target = shortcut.TargetPath ?? "";
+                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                        dynamic shortcut = shell.CreateShortcut(filePath);
+                        string target = (string)(shortcut.TargetPath ?? "");
                         return target.StartsWith("http://") || target.StartsWith("https://");
                     }
                 }
@@ -263,9 +262,9 @@ namespace Desktop_Frames
                     // Extract URL from .lnk file
                     if (System.IO.File.Exists(filePath))
                     {
-                        WshShell shell = new WshShell();
-                        IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
-                        return shortcut.TargetPath ?? "";
+                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                        dynamic shortcut = shell.CreateShortcut(filePath);
+                        return (string)(shortcut.TargetPath ?? "");
                     }
                 }
             }

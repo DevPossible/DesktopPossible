@@ -1,4 +1,3 @@
-using IWshRuntimeLibrary;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
@@ -43,10 +42,10 @@ namespace Desktop_Frames
                 // Method 1: Try WshShell with enhanced Unicode folder detection
                 try
                 {
-                    WshShell shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
-                    string targetPath = shortcut.TargetPath?.Trim();
-                    string arguments = shortcut.Arguments?.Trim();
+                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                    dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                    string? targetPath = ((string?)shortcut.TargetPath)?.Trim();
+                    string? arguments = ((string?)shortcut.Arguments)?.Trim();
 
                     // Check if this is our Unicode folder shortcut (explorer.exe + folder argument)
                     if (!string.IsNullOrEmpty(targetPath) &&
@@ -150,10 +149,10 @@ namespace Desktop_Frames
                 }
 
                 // It's a shortcut - get the real folder path
-                WshShell shell = new WshShell();
-                IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
-                string targetPath = shortcut.TargetPath?.Trim();
-                string arguments = shortcut.Arguments?.Trim();
+                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                string? targetPath = ((string?)shortcut.TargetPath)?.Trim();
+                string? arguments = ((string?)shortcut.Arguments)?.Trim();
 
                 // Check if this is a Unicode folder shortcut (explorer.exe + folder argument)
                 if (!string.IsNullOrEmpty(targetPath) &&

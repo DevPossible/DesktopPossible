@@ -10,7 +10,6 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
-using IWshRuntimeLibrary;
 using Newtonsoft.Json.Linq;
 using Microsoft.VisualBasic;
 
@@ -779,9 +778,9 @@ namespace Desktop_Frames
                 if (Path.GetExtension(path).ToLower() == ".lnk")
                 {
                     // If it's a shortcut, get the target path
-                    WshShell shell = new WshShell();
-                    IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(path);
-                    pathToCopy = shortcut.TargetPath;
+                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                    dynamic shortcut = shell.CreateShortcut(path);
+                    pathToCopy = (string)shortcut.TargetPath;
                 }
                 else
                 {

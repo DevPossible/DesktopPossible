@@ -1,5 +1,4 @@
-﻿using IWshRuntimeLibrary;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -514,13 +513,13 @@ namespace Desktop_Frames
         {
             try
             {
-                WshShell shell = new WshShell();
-                IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(filePath);
+                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                dynamic shortcut = shell.CreateShortcut(filePath);
 
                 // Handle custom IconLocation with index - but prioritize missing folder icons
-                if (!string.IsNullOrEmpty(shortcut.IconLocation))
+                if (!string.IsNullOrEmpty((string?)shortcut.IconLocation))
                 {
-                    string[] iconParts = shortcut.IconLocation.Split(',');
+                    string[] iconParts = ((string)shortcut.IconLocation).Split(',');
                     string iconPath = iconParts[0];
                     int iconIndex = 0;
 
@@ -533,7 +532,7 @@ namespace Desktop_Frames
                     bool isTargetMissing = string.IsNullOrEmpty(targetPath) ||
                                          (!System.IO.File.Exists(targetPath) && !Directory.Exists(targetPath));
                     bool isFolderShortcut = (!string.IsNullOrEmpty(targetPath) && Directory.Exists(targetPath)) ||
-                                          (shortcut.TargetPath?.ToLower().Contains("explorer.exe") == true);
+                                          (((string?)shortcut.TargetPath)?.ToLower().Contains("explorer.exe") == true);
 
                     // If it's a missing folder shortcut with system folder icon, use our custom missing icon
                     if (isTargetMissing && isFolderShortcut && iconPath.ToLower().Contains("shell32.dll"))
