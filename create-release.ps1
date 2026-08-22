@@ -11,7 +11,7 @@
     4. Pushes main to trigger the GitLab release pipeline
 
     The GitLab pipeline handles version calculation and tagging automatically.
-    Releases are published to the GitHub mirror at: https://github.com/DevPossible/DesktopFramesPossible
+    Releases are published to the GitHub mirror at: https://github.com/DevPossible/DesktopPossible
 
 .PARAMETER SkipTests
     Skip building and running tests before release.
@@ -238,5 +238,5 @@ Write-Host "  3. Tag the release and publish it to the GitHub mirror" -Foregroun
 
 Write-Host "`nMonitor the release pipeline:" -ForegroundColor White
 Write-Host "  GitLab: Check your project's pipelines" -ForegroundColor Blue
-Write-Host "  GitHub Releases: https://github.com/DevPossible/DesktopFramesPossible/releases" -ForegroundColor Blue
+Write-Host "  GitHub Releases: https://github.com/DevPossible/DesktopPossible/releases" -ForegroundColor Blue
 Write-Host ""

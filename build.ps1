@@ -1,10 +1,10 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Builds the DesktopFramesPossible solution.
+    Builds the DesktopPossible solution.
 
 .DESCRIPTION
-    Builds src/DesktopFramesPossible.sln with the dotnet CLI. The project targets
+    Builds src/DesktopPossible.sln with the dotnet CLI. The project targets
     net10.0-windows (WPF + WinForms) but COM interop is late-bound, so it compiles
     on any OS with the .NET 10+ SDK (EnableWindowsTargeting is set in
     Directory.Build.props). The app itself runs on Windows only.
@@ -28,11 +28,11 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $BuildDir = Join-Path $PSScriptRoot '.build'
-$ProjectName = 'DesktopFramesPossible'
+$ProjectName = 'DesktopPossible'
 
 Push-Location $PSScriptRoot
 try {
-    Write-Host "=== DesktopFramesPossible Build ($Configuration) ===" -ForegroundColor Cyan
+    Write-Host "=== DesktopPossible Build ($Configuration) ===" -ForegroundColor Cyan
 
     $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
     if (-not $dotnet) {
@@ -50,7 +50,7 @@ try {
             Write-Host "  [WARN] Could not fully clean build directory (files may be locked)" -ForegroundColor Yellow
             Write-Host "  Attempting to kill processes locking files..." -ForegroundColor Yellow
 
-            # Try to kill any running DesktopFramesPossible processes
+            # Try to kill any running DesktopPossible processes
             Get-Process -Name $ProjectName -ErrorAction SilentlyContinue |
                 Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -67,7 +67,7 @@ try {
         }
     }
 
-    dotnet build src/DesktopFramesPossible.sln --configuration $Configuration
+    dotnet build src/DesktopPossible.sln --configuration $Configuration
     if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
     $exePath = Join-Path $BuildDir $ProjectName 'bin' $Configuration 'net10.0-windows10.0.19041.0' "$ProjectName.exe"

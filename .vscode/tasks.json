@@ -5,7 +5,7 @@
       "label": "build (Debug)",
       "type": "process",
       "command": "dotnet",
-      "args": ["build", "src/DesktopFramesPossible.sln", "--configuration", "Debug"],
+      "args": ["build", "src/DesktopPossible.sln", "--configuration", "Debug"],
       "problemMatcher": "$msCompile",
       "group": { "kind": "build", "isDefault": true }
     },
@@ -13,7 +13,7 @@
       "label": "build (Release)",
       "type": "process",
       "command": "dotnet",
-      "args": ["build", "src/DesktopFramesPossible.sln", "--configuration", "Release"],
+      "args": ["build", "src/DesktopPossible.sln", "--configuration", "Release"],
       "problemMatcher": "$msCompile",
       "group": "build"
     },
@@ -21,7 +21,7 @@
       "label": "test",
       "type": "process",
       "command": "dotnet",
-      "args": ["test", "src/DesktopFramesPossible.sln", "--configuration", "Debug"],
+      "args": ["test", "src/DesktopPossible.sln", "--configuration", "Debug"],
       "problemMatcher": "$msCompile",
       "group": { "kind": "test", "isDefault": true }
     }

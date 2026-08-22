@@ -13,13 +13,13 @@ $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
     # Verify build outputs exist (dotnet build does not work here due to COMReference items)
-    $testOutputDir = Join-Path $PSScriptRoot '.build' 'DesktopFramesPossible.Tests' 'bin' 'Release'
+    $testOutputDir = Join-Path $PSScriptRoot '.build' 'DesktopPossible.Tests' 'bin' 'Release'
     if (-not (Test-Path $testOutputDir)) {
         throw "Build outputs not found at: $testOutputDir`nRun ./build.ps1 first (this project requires full MSBuild; tests run with --no-build)."
     }
 
     # Run unit tests against prebuilt outputs
-    dotnet test src/DesktopFramesPossible.sln --configuration Release --no-build
+    dotnet test src/DesktopPossible.sln --configuration Release --no-build
     if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
 
     Write-Host "  [OK] Smoke tests passed" -ForegroundColor Green

@@ -2,22 +2,22 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch DesktopFramesPossible (Debug)",
+      "name": "Launch DesktopPossible (Debug)",
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build (Debug)",
-      "program": "${workspaceFolder}/.build/DesktopFramesPossible/bin/Debug/net10.0-windows10.0.19041.0/DesktopFramesPossible.exe",
+      "program": "${workspaceFolder}/.build/DesktopPossible/bin/Debug/net10.0-windows10.0.19041.0/DesktopPossible.exe",
       // cwd = exe dir: the app is portable and writes its config/profiles beside
       // the exe, so debug state stays sandboxed inside gitignored .build/
-      "cwd": "${workspaceFolder}/.build/DesktopFramesPossible/bin/Debug/net10.0-windows10.0.19041.0",
+      "cwd": "${workspaceFolder}/.build/DesktopPossible/bin/Debug/net10.0-windows10.0.19041.0",
       "console": "internalConsole",
       "justMyCode": true
     },
     {
-      "name": "Attach to running DesktopFramesPossible",
+      "name": "Attach to running DesktopPossible",
       "type": "coreclr",
       "request": "attach",
-      "processName": "DesktopFramesPossible"
+      "processName": "DesktopPossible"
     }
   ]
 }

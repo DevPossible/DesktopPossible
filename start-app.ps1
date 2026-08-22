@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 # Usage: ./start-app.ps1                 # Run without building
 # Usage: ./start-app.ps1 -Build          # Build first, then run
 
-$ProjectName = 'DesktopFramesPossible'
+$ProjectName = 'DesktopPossible'
 $Configuration = 'Release'
 $Framework = 'net10.0-windows10.0.19041.0'
 

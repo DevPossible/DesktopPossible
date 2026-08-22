@@ -24,7 +24,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\DesktopFramesPossible\DesktopFramesPossible.csproj" />
+		<ProjectReference Include="..\..\src\DesktopPossible\DesktopPossible.csproj" />
 	</ItemGroup>
 
 </Project>

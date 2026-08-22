@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Packages DesktopFramesPossible for distribution.
+    Packages DesktopPossible for distribution.
 
 .DESCRIPTION
     Resolves the version (conventional commits via scripts/get-version.ps1),
@@ -36,7 +36,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$ProjectName = 'DesktopFramesPossible'
+$ProjectName = 'DesktopPossible'
 $Runtime = 'win-x64'
 $DistDir = Join-Path $PSScriptRoot '.dist'
 $BuildDir = Join-Path $PSScriptRoot '.build'
@@ -76,7 +76,7 @@ function Update-Changelog {
 
 Push-Location $PSScriptRoot
 try {
-    Write-Host "=== DesktopFramesPossible Packaging ===" -ForegroundColor Cyan
+    Write-Host "=== DesktopPossible Packaging ===" -ForegroundColor Cyan
 
     # Determine version
     if (-not $Version) {

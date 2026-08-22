@@ -1,5 +1,5 @@
 # =============================================================================
-# DesktopFramesPossible - GitLab CI/CD
+# DesktopPossible - GitLab CI/CD
 #
 # Flow (stages): validate -> test -> version -> package -> mirror -> release
 #   - Merge requests and pushes to develop/main: compile verification (Linux).
@@ -23,7 +23,7 @@
 #                      on this repository (origin, gitlab.devpossible.com);
 #                      used to push the release tag back to origin.
 #   GITHUB_REPO        Optional override of the mirror repository; defaults to
-#                      "DevPossible/DesktopFramesPossible" (set below).
+#                      "DevPossible/DesktopPossible" (set below).
 # =============================================================================
 
 workflow:
@@ -43,7 +43,7 @@ stages:
 
 variables:
   GIT_DEPTH: "0" # full history: version calc, changelog, and mirroring need tags
-  GITHUB_REPO: "DevPossible/DesktopFramesPossible"
+  GITHUB_REPO: "DevPossible/DesktopPossible"
 
 # Release jobs only ever run for pushes to main.
 .main_only:
@@ -349,7 +349,7 @@ github_release:
       fi
 
       # 2) Upload the packaged zip as a release asset.
-      zip_path=".dist/DesktopFramesPossible-${VERSION}-win-x64.zip"
+      zip_path=".dist/DesktopPossible-${VERSION}-win-x64.zip"
       if [ ! -f "$zip_path" ]; then
         echo "Package artifact not found: ${zip_path}"
         ls -la .dist || true

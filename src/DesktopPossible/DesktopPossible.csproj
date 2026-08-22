@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-		<AssemblyName>DesktopFramesPossible</AssemblyName>
+		<AssemblyName>DesktopPossible</AssemblyName>
 		<RootNamespace>Desktop_Frames</RootNamespace>
 		<Nullable>enable</Nullable>
 		<UseWPF>true</UseWPF>

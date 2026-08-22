@@ -1,5 +1,5 @@
 blank_issues_enabled: false  # This prevents users from opening a blank issue without a template!
 contact_links:
   - name: 💬 Ask a Question (Discussions)
-    url: https://github.com/DevPossible/DesktopFramesPossible/discussions
+    url: https://github.com/DevPossible/DesktopPossible/discussions
     about: Please ask questions, share ideas, or request help here. Do not open an Issue for these.

@@ -13,17 +13,17 @@ $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
     # Verify build outputs exist (dotnet build does not work here due to COMReference items)
-    $testOutputDir = Join-Path $PSScriptRoot '.build' 'DesktopFramesPossible.Tests' 'bin' 'Release'
+    $testOutputDir = Join-Path $PSScriptRoot '.build' 'DesktopPossible.Tests' 'bin' 'Release'
     if (-not (Test-Path $testOutputDir)) {
         throw "Build outputs not found at: $testOutputDir`nRun ./build.ps1 first (this project requires full MSBuild; tests run with --no-build)."
     }
 
     # Run all tests included in the solution
-    dotnet test src/DesktopFramesPossible.sln --configuration Release --no-build
+    dotnet test src/DesktopPossible.sln --configuration Release --no-build
     if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
 
     # Run any extra test projects from tests/ not already in the solution
-    $solutionContent = Get-Content (Join-Path $PSScriptRoot 'src' 'DesktopFramesPossible.sln') -Raw
+    $solutionContent = Get-Content (Join-Path $PSScriptRoot 'src' 'DesktopPossible.sln') -Raw
     $extraTests = Get-ChildItem -Path 'tests' -Recurse -Filter '*.csproj' -ErrorAction SilentlyContinue |
         Where-Object { $solutionContent -notmatch [regex]::Escape($_.Name) }
 

@@ -18,11 +18,11 @@
   <PropertyGroup>
     <Authors>DevPossible</Authors>
     <Company>DevPossible</Company>
-    <Product>DesktopFrames+Possible</Product>
+    <Product>DesktopPossible</Product>
     <Copyright>Copyright (c) DevPossible $([System.DateTime]::Now.Year)</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/DevPossible/DesktopFramesPossible</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/DevPossible/DesktopFramesPossible.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/DevPossible/DesktopPossible</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DevPossible/DesktopPossible.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 </Project>
