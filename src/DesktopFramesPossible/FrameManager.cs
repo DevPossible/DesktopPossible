@@ -72,6 +72,25 @@ namespace Desktop_Frames
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        /// <summary>
+        /// Frames are desktop furniture: on creation they must start at the BOTTOM of
+        /// the Z-order (just above the wallpaper/icons), not on top of the user's apps.
+        /// Pinned (AlwaysOnTop) frames are left alone.
+        /// </summary>
+        private static void SendFrameToBottom(Window win)
+        {
+            try
+            {
+                if (win == null || win.Topmost) return;
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                if (hwnd == IntPtr.Zero) return;
+                IntPtr HWND_BOTTOM = new IntPtr(1);
+                const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
+                SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            catch { }
+        }
+
 
         // Tracks temporary navigation paths for Portal frames. Key: frameId, Value: CurrentPath
         private static Dictionary<string, string> _portalNavigationStates = new Dictionary<string, string>();
@@ -5622,6 +5641,7 @@ namespace Desktop_Frames
             // Make window focusable for key events during drag
             win.Focusable = true;
             win.Show();
+            SendFrameToBottom(win); // desktop furniture: start behind the user's apps
 
 
 
@@ -7557,6 +7577,7 @@ namespace Desktop_Frames
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             win.Show();
+            SendFrameToBottom(win); // desktop furniture: start behind the user's apps
 
 
 
