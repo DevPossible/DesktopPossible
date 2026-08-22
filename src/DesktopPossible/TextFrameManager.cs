@@ -380,8 +380,15 @@ namespace Desktop_Frames
             d[KeyDrawMode] = "Shadow";
             d[KeyRefresh] = "60";
             d[KeyOpacity] = "100";
+
+            // CreateFrame reads optional keys (IsLocked, AlwaysOnTop, ...) that the defaults don't set.
+            // An ExpandoObject THROWS on a missing member; a JObject (what every frame loaded from
+            // disk is) yields null — so hand the rest of the app the JObject form.
+            var record = Newtonsoft.Json.Linq.JObject.FromObject(frame);
+            int index = FrameDataManager.FrameData.IndexOf(frame);
+            if (index >= 0) FrameDataManager.FrameData[index] = record; else FrameDataManager.FrameData.Add(record);
             FrameDataManager.SaveFrameData();
-            return frame;
+            return record;
         }
 
         /// <summary>
@@ -399,9 +406,8 @@ namespace Desktop_Frames
 
                 var wa = SystemParameters.WorkArea;
                 const double width = 440, height = 300;
-                dynamic frame = CreateNew("System Info", wa.Right - width - 24, wa.Top + 24, width, height);
-                var d = (IDictionary<string, object>)frame;
-                d[KeyTemplate] =
+                var record = (Newtonsoft.Json.Linq.JObject)CreateNew("System Info", wa.Right - width - 24, wa.Top + 24, width, height);
+                record[KeyTemplate] =
                     "{ComputerName}\n" +
                     "CPU: {CPU}  ({Cores} threads, {CPUUsage} busy)\n" +
                     "RAM: {RAMUsed} of {RAM} in use ({RAMUsage})\n" +
@@ -409,9 +415,9 @@ namespace Desktop_Frames
                     "External IP: {ExternalIP}\n" +
                     "\n" +
                     "{Disks}";
-                d[KeyAlign] = "Right";
-                d[KeySize] = "13";
-                d[KeyRefresh] = "180";
+                record[KeyAlign] = "Right";
+                record[KeySize] = "13";
+                record[KeyRefresh] = "180";
                 FrameDataManager.SaveFrameData();
 
                 SettingsManager.SystemInfoFrameCreated = true;
