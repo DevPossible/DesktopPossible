@@ -263,7 +263,21 @@ namespace Desktop_Frames
             cbSounds.Click += (s, e) => soundGrid.IsEnabled = cbSounds.IsChecked == true;
             // ----------------------------------------
 
-            //     CreateCheckBox(c, "Enable Profile Automation", "EnableProfileAutomation", SettingsManager.EnableProfileAutomation);
+            // --- Virtual Desktops ---
+            CreateSectionHeader(c, "Virtual Desktops", _userAccentColor);
+
+            // Checkbox: follow Windows virtual desktops by name (profile "Work" activates
+            // on a desktop named "Work"; unmatched desktops fall back to Default).
+            CheckBox vdAutoCb = CreateCheckBoxReturn(c, "Automatically Switch Profiles with Virtual Desktop", "EnableVirtualDesktopAutomation", SettingsManager.EnableVirtualDesktopAutomation);
+            // Use Click event to ensure it only fires on user interaction, then SaveSettings immediately
+            vdAutoCb.Click += (s, e) => {
+                bool isChecked = vdAutoCb.IsChecked == true;
+                SettingsManager.EnableVirtualDesktopAutomation = isChecked;
+                SettingsManager.SaveSettings(); // Force write to JSON immediately
+                if (isChecked) VirtualDesktopAutomationManager.Start();   // applies current desktop immediately
+                else VirtualDesktopAutomationManager.Stop(switchToDefault: true);
+            };
+
             t.Content = new ScrollViewer { Content = c, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             _tabControl.Items.Add(t);
         }
@@ -524,67 +538,22 @@ namespace Desktop_Frames
         private static void CreateProfilesTab()
         {
             TabItem t = new TabItem();
-            StackPanel c = new StackPanel();
-            CreateSectionHeader(c, "Profile Management", ColorProfiles);
+            Grid c = new Grid();
+            c.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            c.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            // Button 1: Manage Profiles (Green)
-            Button btnManageProfiles = CreateStyledButton("Manage Profiles", Color.FromRgb(34, 139, 34)); // Tools Green
-            btnManageProfiles.Width = 255; btnManageProfiles.Height = 45; btnManageProfiles.Margin = new Thickness(15, 0, 0, 15);
-            btnManageProfiles.HorizontalAlignment = HorizontalAlignment.Left;
-            btnManageProfiles.Click += (s, e) => { new ProfileManagerForm().ShowDialog(); };
+            StackPanel headerPanel = new StackPanel();
+            CreateSectionHeader(headerPanel, "Profile Management", ColorProfiles);
+            Grid.SetRow(headerPanel, 0);
+            c.Children.Add(headerPanel);
 
-            // Button 2: Manage Automation (Blue)
-            Button btnManageAutomation = CreateStyledButton("Manage Automation", Color.FromRgb(0, 123, 191)); // Tools Blue
-            btnManageAutomation.Width = 255; btnManageAutomation.Height = 45; btnManageAutomation.Margin = new Thickness(15, 0, 0, 15);
-            btnManageAutomation.HorizontalAlignment = HorizontalAlignment.Left;
-            btnManageAutomation.Click += (s, e) => { new AutomationRulesForm().ShowDialog(); };
+            // Profile management embedded directly in the tab (the same panel is hosted
+            // by the tray menu's "Manage Profiles..." window, see ProfileManagerForm).
+            ProfileManagerPanel profilePanel = new ProfileManagerPanel();
+            Grid.SetRow(profilePanel, 1);
+            c.Children.Add(profilePanel);
 
-            // Separator and Toggle
-            c.Children.Add(btnManageProfiles);
-            c.Children.Add(btnManageAutomation);
-
-            // Checkbox for Automation (Synchronized with Tray)
-            CheckBox autoCb = new CheckBox
-            {
-                Name = "EnableProfileAutomation",
-                Content = "Enable Profile Automation",
-                IsChecked = SettingsManager.EnableProfileAutomation,
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 13,
-                Margin = new Thickness(15, 10, 0, 8)
-            };
-            // Use Click event to ensure it only fires on user interaction, then SaveSettings immediately
-            autoCb.Click += (s, e) => {
-                bool isChecked = autoCb.IsChecked == true;
-                SettingsManager.EnableProfileAutomation = isChecked;
-                SettingsManager.SaveSettings(); // Force write to JSON immediately
-                TrayManager.Instance?.UpdateAutomationMenuCheck(isChecked);
-                if (isChecked) AutomationManager.Start();
-            };
-            c.Children.Add(autoCb);
-
-            // Checkbox: follow Windows virtual desktops by name (profile "Work" activates
-            // on a desktop named "Work"; unmatched desktops fall back to Default).
-            CheckBox vdAutoCb = new CheckBox
-            {
-                Name = "EnableVirtualDesktopAutomation",
-                Content = "Automatically Switch Profiles with Virtual Desktop",
-                IsChecked = SettingsManager.EnableVirtualDesktopAutomation,
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 13,
-                Margin = new Thickness(15, 0, 0, 8)
-            };
-            // Use Click event to ensure it only fires on user interaction, then SaveSettings immediately
-            vdAutoCb.Click += (s, e) => {
-                bool isChecked = vdAutoCb.IsChecked == true;
-                SettingsManager.EnableVirtualDesktopAutomation = isChecked;
-                SettingsManager.SaveSettings(); // Force write to JSON immediately
-                if (isChecked) VirtualDesktopAutomationManager.Start();   // applies current desktop immediately
-                else VirtualDesktopAutomationManager.Stop(switchToDefault: true);
-            };
-            c.Children.Add(vdAutoCb);
-
-            t.Content = new ScrollViewer { Content = c, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            t.Content = c;
             _tabControl.Items.Add(t);
         }
 
@@ -752,7 +721,12 @@ namespace Desktop_Frames
             TabItem t = new TabItem();
             StackPanel c = new StackPanel();
             CreateSectionHeader(c, "Log", ColorLookDeeper);
-            CreateCheckBox(c, "Enable logging", "EnableLogging", SettingsManager.IsLogEnabled);
+            CheckBox logCb = CreateCheckBoxReturn(c, "Enable logging", "EnableLogging", SettingsManager.IsLogEnabled);
+            // Use Click event to ensure it only fires on user interaction, then SaveSettings immediately
+            logCb.Click += (s, e) => {
+                SettingsManager.IsLogEnabled = logCb.IsChecked == true;
+                SettingsManager.SaveSettings(); // Force write to JSON immediately
+            };
             Button b = CreateStyledButton("Open Log", ColorLookDeeper); b.Width = 100; b.Height = 25; b.HorizontalAlignment = HorizontalAlignment.Left;
             b.Click += (s, e) => OpenLogFile();
             c.Children.Add(b);
@@ -987,14 +961,6 @@ namespace Desktop_Frames
                             };
                         }
                     }
-
-                    // REMOVED: EnableProfileAutomation logic is now handled exclusively in the Profiles tab.
-                    //if (cb.Name == "EnableProfileAutomation")
-                    //{
-                    //    SettingsManager.EnableProfileAutomation = cb.IsChecked == true;
-                    //    if (SettingsManager.EnableProfileAutomation) AutomationManager.Start();
-                    //}
-
                 }
 
 

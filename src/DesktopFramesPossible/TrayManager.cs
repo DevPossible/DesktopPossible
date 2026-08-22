@@ -48,25 +48,12 @@ namespace Desktop_Frames
 
         private const int HT_CAPTION = 0x2;
 
-        private ToolStripMenuItem _automationMenuItem; //
         private ToolStripMenuItem _autoOrganizeMenuItem; // NEW
 
         private class HiddenFrame
         {
             public string Title { get; set; }
             public NonActivatingWindow Window { get; set; }
-        }
-
-        public void UpdateAutomationMenuCheck(bool isChecked)
-        {
-            if (_automationMenuItem != null)
-            {
-                // This prevents infinite loops by checking the value first
-                if (_automationMenuItem.Checked != isChecked)
-                {
-                    _automationMenuItem.Checked = isChecked;
-                }
-            }
         }
 
         public void UpdateAutoOrganizeMenuCheck(bool isChecked)
@@ -251,16 +238,6 @@ namespace Desktop_Frames
             _profilesMenuItem = new ToolStripMenuItem("Profiles");
             trayMenu.Items.Add(_profilesMenuItem);
 
-            // Standalone Automation Toggle with explicit Save
-            _automationMenuItem = new ToolStripMenuItem("Enable Profile Automation") { CheckOnClick = true };
-            _automationMenuItem.Checked = SettingsManager.EnableProfileAutomation;
-            _automationMenuItem.Click += (s, e) => {
-                SettingsManager.EnableProfileAutomation = _automationMenuItem.Checked;
-                try { SettingsManager.SaveSettings(); } catch { }
-                if (SettingsManager.EnableProfileAutomation) AutomationManager.Start();
-            };
-            trayMenu.Items.Add(_automationMenuItem);
-
             var smartTopSeparator = new ToolStripSeparator();
             trayMenu.Items.Add(smartTopSeparator);
 
@@ -315,8 +292,6 @@ namespace Desktop_Frames
             {
                 focusFrameItem.Visible = SettingsManager.EnableFocusFrameHotkey;
                 if (focusFrameItem.Visible) focusFrameItem.Text = $"Focus Frame... ({GetFocusFrameHotkeyString()})";
-
-                _automationMenuItem.Visible = SettingsManager.EnableProfileAutomation;
 
                 bool autoOrg = SettingsManager.EnableAutoOrganize;
                 smartRulesItem.Visible = autoOrg;

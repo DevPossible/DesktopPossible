@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -9,80 +9,27 @@ using System.Windows.Shapes;
 
 namespace Desktop_Frames
 {
-    public class ProfileManagerForm : Window
+    /// <summary>
+    /// Profile management UI: the profile list (switch/reorder/duplicate/rename/delete)
+    /// plus the "add new" row. Hosted directly in the Options window's Profiles tab and
+    /// by the thin ProfileManagerForm window opened from the tray menu.
+    /// </summary>
+    public class ProfileManagerPanel : ContentControl
     {
         private StackPanel _listPanel;
 
-        public ProfileManagerForm()
+        public ProfileManagerPanel()
         {
-            // Window Setup
-            Title = "Profile Manager";
-            Width = 480;
-            Height = 720; // Height increased to prevent footer cutoff
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            ResizeMode = ResizeMode.NoResize;
-            WindowStyle = WindowStyle.None;
-            AllowsTransparency = true;
-            Background = Brushes.Transparent;
-
-            // Main Container (Card) - Updated to match CustomizeFrameForm style
-            Border mainBorder = new Border
-            {
-                Background = Brushes.White,
-                // Added distinct border definition
-                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
-                BorderThickness = new Thickness(1),
-                // Squared corners to match reference
-                CornerRadius = new CornerRadius(0),
-                Margin = new Thickness(8),
-                Effect = new DropShadowEffect
-                {
-                    Color = Colors.Black,
-                    Direction = 270,
-                    ShadowDepth = 2,
-                    BlurRadius = 10,
-                    Opacity = 0.1
-                }
-            };
-
             Grid rootGrid = new Grid();
-            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 0: Header
-            rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // 1: List
-            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 2: Add New
-            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 3: Footer
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // 0: List
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 1: Add New
 
-            // --- 1. HEADER ---
-            Border header = new Border
-            {
-                Background = GetAccentBrush(),
-                // Squared corners
-                CornerRadius = new CornerRadius(0),
-                Padding = new Thickness(15),
-                Height = 50 // Fixed height for consistency
-            };
-
-            Grid headerGrid = new Grid();
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            StackPanel titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            titleStack.Children.Add(new TextBlock { Text = "Profile Manager", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Brushes.White });
-            // Subtitle removed or kept small to fit clean header style
-
-            Button closeBtn = new Button { Content = "✕", Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Brushes.White, FontSize = 16, Cursor = System.Windows.Input.Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
-            closeBtn.Click += (s, e) => Close();
-
-            headerGrid.Children.Add(titleStack);
-            headerGrid.Children.Add(closeBtn); Grid.SetColumn(closeBtn, 1);
-            header.Child = headerGrid;
-            header.MouseLeftButtonDown += (s, e) => DragMove();
-
-            // --- 2. LIST AREA ---
+            // --- 1. LIST AREA ---
             ScrollViewer scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 10, 0, 10) };
             _listPanel = new StackPanel { Margin = new Thickness(16, 0, 16, 0) };
             scroll.Content = _listPanel;
 
-            // --- 3. ADD NEW SECTION ---
+            // --- 2. ADD NEW SECTION ---
             Border addBorder = new Border
             {
                 BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
@@ -126,43 +73,18 @@ namespace Desktop_Frames
             addGrid.Children.Add(btnAdd); Grid.SetColumn(btnAdd, 1);
             addBorder.Child = addGrid;
 
-            // --- 4. FOOTER ---
-            Border footer = new Border
-            {
-                Padding = new Thickness(16),
-                Background = new SolidColorBrush(Color.FromRgb(248, 249, 250)),
-                // Squared corners
-                CornerRadius = new CornerRadius(0),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
-                BorderThickness = new Thickness(0, 1, 0, 0)
-            };
-            Button btnClose = new Button
-            {
-                Content = "Close",
-                Width = 100,
-                Height = 34,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Background = Brushes.White,
-                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
-                BorderThickness = new Thickness(1)
-            };
-            btnClose.Click += (s, e) => Close();
-            footer.Child = btnClose;
-
             // Assembly
-            rootGrid.Children.Add(header);
-            rootGrid.Children.Add(scroll); Grid.SetRow(scroll, 1);
-            rootGrid.Children.Add(addBorder); Grid.SetRow(addBorder, 2);
-            rootGrid.Children.Add(footer); Grid.SetRow(footer, 3);
+            rootGrid.Children.Add(scroll);
+            rootGrid.Children.Add(addBorder); Grid.SetRow(addBorder, 1);
+            Content = rootGrid;
 
-            mainBorder.Child = rootGrid;
-            Content = mainBorder;
+            // Refresh whenever the panel becomes visible again (e.g. switching to the Profiles tab)
+            IsVisibleChanged += (s, e) => { if (e.NewValue is bool visible && visible) RefreshList(); };
 
             RefreshList();
         }
 
-        private void RefreshList()
+        public void RefreshList()
         {
             _listPanel.Children.Clear();
             var profiles = ProfileManager.GetProfiles();
@@ -342,10 +264,116 @@ namespace Desktop_Frames
             };
         }
 
-        private SolidColorBrush GetAccentBrush()
+        internal static SolidColorBrush GetAccentBrush()
         {
             try { return new SolidColorBrush(Utility.GetColorFromName(SettingsManager.SelectedColor)); }
             catch { return new SolidColorBrush(Color.FromRgb(66, 133, 244)); }
+        }
+    }
+
+    /// <summary>
+    /// Thin window wrapper around ProfileManagerPanel, kept for the tray menu's
+    /// "Manage Profiles..." entry. The Options window embeds the panel directly.
+    /// </summary>
+    public class ProfileManagerForm : Window
+    {
+        public ProfileManagerForm()
+        {
+            // Window Setup
+            Title = "Profile Manager";
+            Width = 480;
+            Height = 720; // Height increased to prevent footer cutoff
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            ResizeMode = ResizeMode.NoResize;
+            WindowStyle = WindowStyle.None;
+            AllowsTransparency = true;
+            Background = Brushes.Transparent;
+
+            // Main Container (Card) - Updated to match CustomizeFrameForm style
+            Border mainBorder = new Border
+            {
+                Background = Brushes.White,
+                // Added distinct border definition
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(1),
+                // Squared corners to match reference
+                CornerRadius = new CornerRadius(0),
+                Margin = new Thickness(8),
+                Effect = new DropShadowEffect
+                {
+                    Color = Colors.Black,
+                    Direction = 270,
+                    ShadowDepth = 2,
+                    BlurRadius = 10,
+                    Opacity = 0.1
+                }
+            };
+
+            Grid rootGrid = new Grid();
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 0: Header
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // 1: Panel
+            rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 2: Footer
+
+            // --- 1. HEADER ---
+            Border header = new Border
+            {
+                Background = ProfileManagerPanel.GetAccentBrush(),
+                // Squared corners
+                CornerRadius = new CornerRadius(0),
+                Padding = new Thickness(15),
+                Height = 50 // Fixed height for consistency
+            };
+
+            Grid headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            StackPanel titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            titleStack.Children.Add(new TextBlock { Text = "Profile Manager", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Brushes.White });
+            // Subtitle removed or kept small to fit clean header style
+
+            Button closeBtn = new Button { Content = "✕", Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Brushes.White, FontSize = 16, Cursor = System.Windows.Input.Cursors.Hand, VerticalAlignment = VerticalAlignment.Center };
+            closeBtn.Click += (s, e) => Close();
+
+            headerGrid.Children.Add(titleStack);
+            headerGrid.Children.Add(closeBtn); Grid.SetColumn(closeBtn, 1);
+            header.Child = headerGrid;
+            header.MouseLeftButtonDown += (s, e) => DragMove();
+
+            // --- 2. SHARED PANEL (list + add new) ---
+            ProfileManagerPanel panel = new ProfileManagerPanel();
+
+            // --- 3. FOOTER ---
+            Border footer = new Border
+            {
+                Padding = new Thickness(16),
+                Background = new SolidColorBrush(Color.FromRgb(248, 249, 250)),
+                // Squared corners
+                CornerRadius = new CornerRadius(0),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(0, 1, 0, 0)
+            };
+            Button btnClose = new Button
+            {
+                Content = "Close",
+                Width = 100,
+                Height = 34,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(1)
+            };
+            btnClose.Click += (s, e) => Close();
+            footer.Child = btnClose;
+
+            // Assembly
+            rootGrid.Children.Add(header);
+            rootGrid.Children.Add(panel); Grid.SetRow(panel, 1);
+            rootGrid.Children.Add(footer); Grid.SetRow(footer, 2);
+
+            mainBorder.Child = rootGrid;
+            Content = mainBorder;
         }
     }
 }

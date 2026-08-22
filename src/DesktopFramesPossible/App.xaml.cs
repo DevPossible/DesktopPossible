@@ -130,12 +130,6 @@ namespace Desktop_Frames
                     Framemanager.LoadAndCreateFrames(_targetChecker);
 
                     // --- PRODUCTION START LOGIC ---
-                    if (SettingsManager.EnableProfileAutomation)
-                    {
-                        AutomationManager.Start();
-                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Startup: Profile Automation Engine ignited.");
-                    }
-
                     if (SettingsManager.EnableVirtualDesktopAutomation)
                     {
                         VirtualDesktopAutomationManager.Start();
