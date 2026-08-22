@@ -89,7 +89,12 @@ namespace Desktop_Frames
             {
                 if (child == null) continue;
                 child.Measure(new Size(cw, double.PositiveInfinity));
-                if (child.DesiredSize.Height > maxChildHeight) maxChildHeight = child.DesiredSize.Height;
+                // Cell height comes from ICON panels only. Adorner children (drop-preview
+                // ghost Borders) have no intrinsic height — letting them into this max
+                // once collapsed CellHeight to ~4px on an empty frame, which made
+                // CellFromPoint compute an enormous row for a top-of-frame drop.
+                if (child is StackPanel && child.DesiredSize.Height > maxChildHeight)
+                    maxChildHeight = child.DesiredSize.Height;
                 int row = Math.Max(0, GetGridRow(child));
                 if (row > maxRow) maxRow = row;
             }

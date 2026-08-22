@@ -8417,11 +8417,15 @@ namespace Desktop_Frames
 
                 int columns = GetFreeArrangeColumns(frame);
 
-                // Honor the cursor cell from an external drop when it is free.
+                // Honor the cursor cell from an external drop: the item lands EXACTLY
+                // where the user pointed; occupants chain-push aside (same semantics
+                // as the internal drag). Never falls back to a far-away first-free
+                // cell — that used to dump drops below the visible area.
                 if (PendingExternalDropCell is (int, int) preferred)
                 {
                     PendingExternalDropCell = null; // single use — extra items flow first-free
-                    if (GridLayout.TryPlaceAt(targetList, newItem, preferred, columns)) return;
+                    GridLayout.PlaceWithDisplacement(targetList, newItem, preferred, columns);
+                    return;
                 }
 
                 if (newItem is JObject jItem)

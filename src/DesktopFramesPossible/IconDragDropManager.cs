@@ -914,7 +914,10 @@ namespace Desktop_Frames
             }
 
             int columns = Math.Max(1, panel.Columns);
-            var hover = GridLayout.CellFromPoint(panelPoint.X, panelPoint.Y, panel.CellWidth, panel.CellHeight, columns);
+            // Defensive cell height: never trust a degenerate measured value (an empty
+            // frame's metrics) — a tiny divisor turns a top-of-frame drop into row 40.
+            double cellHeight = panel.CellHeight > 8 ? panel.CellHeight : panel.CellWidth;
+            var hover = GridLayout.CellFromPoint(panelPoint.X, panelPoint.Y, panel.CellWidth, cellHeight, columns);
             if (!occupied.Contains(hover)) return hover;
 
             for (int idx = 0; ; idx++)
@@ -937,6 +940,10 @@ namespace Desktop_Frames
                     ClearExternalDropPreview();
                     _externalGhost = new Border
                     {
+                        // Explicit cell-sized dimensions: the ghost must never influence
+                        // (or depend on) the panel's measured cell metrics.
+                        Width = panel.CellWidth,
+                        Height = panel.CellHeight > 8 ? panel.CellHeight : panel.CellWidth,
                         BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 0, 150, 255)),
                         BorderThickness = new Thickness(2),
                         CornerRadius = new CornerRadius(6),

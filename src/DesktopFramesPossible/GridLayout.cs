@@ -189,6 +189,59 @@ namespace Desktop_Frames
         }
 
         /// <summary>
+        /// Places an item at EXACTLY the target cell, chain-pushing any occupants
+        /// forward row-major (same semantics as the internal drag's displacement
+        /// preview). Used for external drops: the item lands where the user pointed —
+        /// never in a far-away "first free" cell. The new item may be a JObject
+        /// already in the list or a not-yet-added item (JObject or IDictionary);
+        /// identity is the "Filename" key.
+        /// </summary>
+        public static void PlaceWithDisplacement(JArray items, object newItem, (int Col, int Row) target, int columns)
+        {
+            if (items == null || newItem == null) return;
+            if (columns < 1) columns = 1;
+            target = (ClampColumn(Math.Max(0, target.Col), columns), Math.Max(0, target.Row));
+
+            string newKey =
+                (newItem as JObject)?["Filename"]?.ToString() ??
+                (newItem is IDictionary<string, object> d && d.TryGetValue("Filename", out var f) ? f?.ToString() : null) ??
+                string.Empty;
+
+            var others = new List<(string Key, int Col, int Row)>();
+            foreach (var item in items.OfType<JObject>())
+            {
+                if (ReferenceEquals(item, newItem)) continue;
+                string key = item["Filename"]?.ToString();
+                if (key == null || key == newKey) continue;
+                if (TryGetCell(item, out var cell)) others.Add((key, cell.Col, cell.Row));
+            }
+
+            var map = PreviewDisplacement(others, newKey, target, columns);
+
+            foreach (var item in items.OfType<JObject>())
+            {
+                if (ReferenceEquals(item, newItem)) continue;
+                string key = item["Filename"]?.ToString();
+                if (key != null && map.TryGetValue(key, out var cell))
+                {
+                    item[ColKey] = cell.Col;
+                    item[RowKey] = cell.Row;
+                }
+            }
+
+            if (newItem is JObject jNew)
+            {
+                jNew[ColKey] = target.Col;
+                jNew[RowKey] = target.Row;
+            }
+            else if (newItem is IDictionary<string, object> dictNew)
+            {
+                dictNew[ColKey] = target.Col;
+                dictNew[RowKey] = target.Row;
+            }
+        }
+
+        /// <summary>
         /// Tries to stamp an item with a specific cell (clamped to the column count).
         /// Returns false when the cell is occupied by another item — caller falls back
         /// to PlaceInFirstFreeCell. The item may be a JObject already in the list
