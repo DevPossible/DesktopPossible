@@ -378,7 +378,7 @@ namespace Desktop_Frames
             _frameSaveDebounceTimer.Start();
         }
 
-        private static void FlushPendingFrameSave()
+        public static void FlushPendingFrameSave()
         {
             if (!_frameSavePending) return;
             _frameSaveDebounceTimer?.Stop();
