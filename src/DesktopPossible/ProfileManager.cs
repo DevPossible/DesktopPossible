@@ -79,7 +79,7 @@ namespace Desktop_Frames
 
         static ProfileManager()
         {
-            _appBaseDir = System.AppContext.BaseDirectory;
+            _appBaseDir = AppPaths.DataRoot; // beside the exe (portable) or %LocalAppData% (MSI install)
             _profilesRootDir = Path.Combine(_appBaseDir, "Profiles");
         }
 

@@ -7,7 +7,8 @@
     Resolves the version (conventional commits via scripts/get-version.ps1),
     builds the solution, runs smoke tests, publishes a self-contained win-x64
     build via dotnet publish (COM interop is late-bound, so this works on any OS
-    with the .NET SDK), and produces a zip plus version.json in .dist/.
+    with the .NET SDK), and produces a portable zip, an MSI installer (WiX, via
+    the local `wix` dotnet tool) and version.json in .dist/.
 
 .PARAMETER Version
     Explicit version to package (x.y.z). When omitted, the version is resolved
@@ -23,6 +24,9 @@
     Publish without single-file packaging. Documented fallback if single-file
     publish misbehaves with COM interop / WPF.
 
+.PARAMETER NoMsi
+    Skip building the MSI installer (zip only).
+
 .EXAMPLE
     ./package.ps1
     ./package.ps1 -Version 1.2.3 -SkipTests -NonInteractive
@@ -31,7 +35,8 @@ param(
     [string]$Version = '',
     [switch]$SkipTests,
     [switch]$NonInteractive,
-    [switch]$NoSingleFile
+    [switch]$NoSingleFile,
+    [switch]$NoMsi
 )
 
 $ErrorActionPreference = 'Stop'
@@ -149,6 +154,22 @@ try {
     $archivePath = Join-Path $DistDir "$ProjectName-$Version-$Runtime.zip"
     Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $archivePath -Force
     Write-Host "  [OK] Created: $archivePath" -ForegroundColor Green
+
+    # Build the MSI installer (WiX v4+ authoring in installer/DesktopPossible.wxs).
+    # The `wix` dotnet tool is pinned in .config/dotnet-tools.json and runs on any OS.
+    if (-not $NoMsi) {
+        Write-Host "`n=== Building MSI ===" -ForegroundColor Cyan
+        & dotnet tool restore
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool restore failed (wix)" }
+
+        $msiPath = Join-Path $DistDir "$ProjectName-$Version-$Runtime.msi"
+        $wxs = Join-Path $PSScriptRoot 'installer' 'DesktopPossible.wxs'
+        & dotnet wix build $wxs -arch x64 -d "Version=$Version" -d "PublishDir=$publishDir" -d "RepoRoot=$PSScriptRoot" -pdbtype none -o $msiPath
+        if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE" }
+        Write-Host "  [OK] Created: $msiPath" -ForegroundColor Green
+    } else {
+        Write-Host "  [SKIP] MSI installer (-NoMsi)" -ForegroundColor DarkGray
+    }
 
     # Create version file
     @{

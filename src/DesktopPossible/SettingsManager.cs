@@ -164,7 +164,7 @@ namespace Desktop_Frames
             // Migration: when the master file doesn't exist yet, it is seeded from the
             // current profile's legacy options.json (the settings the user was running
             // with) — legacy per-profile files are left in place but no longer read.
-            string appRoot = AppDomain.CurrentDomain.BaseDirectory;
+            string appRoot = AppPaths.DataRoot;
             string masterPath = Path.Combine(appRoot, "MasterOptions.json");
             string localPath = ProfileManager.GetProfileFilePath("options.json");
 
@@ -587,7 +587,7 @@ namespace Desktop_Frames
 
             try
             {
-                string appRoot = AppDomain.CurrentDomain.BaseDirectory;
+                string appRoot = AppPaths.DataRoot;
                 string profilesDir = Path.Combine(appRoot, "Profiles");
 
                 if (!Directory.Exists(profilesDir)) return;

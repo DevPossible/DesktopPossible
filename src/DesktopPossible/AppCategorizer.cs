@@ -709,7 +709,7 @@ namespace Desktop_Frames
         #region Category cache (category_cache.json at the app root)
 
         /// <summary>Default cache file location: beside the exe (portable-app convention).</summary>
-        public static string CacheFilePath => Path.Combine(AppContext.BaseDirectory, "category_cache.json");
+        public static string CacheFilePath => Path.Combine(AppPaths.DataRoot, "category_cache.json");
 
         /// <summary>Loads the category cache; any failure yields an empty cache.</summary>
         public static Dictionary<string, CategoryCacheEntry> LoadCategoryCache(string path)

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DesktopPossible MSI (WiX v4+ authoring; built by package.ps1 via the `wix` dotnet tool).
+
+  Installs the self-contained single-file publish into Program Files, drops the
+  DesktopPossible.installed marker beside the exe (the app then keeps its data under
+  %LocalAppData%\DesktopPossible\Data instead of beside the exe), and adds a Start
+  Menu shortcut. MajorUpgrade lets a newer MSI replace an older install in place.
+
+  Preprocessor variables (passed with -d):
+    Version    x.y.z product version
+    PublishDir folder holding the published DesktopPossible.exe
+    RepoRoot   repository root (Source paths resolve against the working dir, not this file)
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="DesktopPossible"
+           Manufacturer="DevPossible"
+           Version="$(Version)"
+           UpgradeCode="7C1E3B52-8A4D-4F0B-9C7E-5D2A6B9F1E34"
+           Language="1033"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of DesktopPossible is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="$(RepoRoot)\src\DesktopPossible\Resources\logo2.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/DevPossible/DesktopPossible" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="DesktopPossible" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="MainExe">
+        <File Id="MainExe" Source="$(PublishDir)\DesktopPossible.exe" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut"
+                    Directory="ProgramMenuFolder"
+                    Name="DesktopPossible"
+                    Description="Desktop frames for Windows"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon"
+                    Advertise="yes" />
+        </File>
+      </Component>
+      <Component Id="InstalledMarker">
+        <!-- Tells the app it is installed (data goes to %LocalAppData%), see AppPaths.cs. -->
+        <File Source="$(RepoRoot)\installer\DesktopPossible.installed" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="DesktopPossible" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+    </Feature>
+  </Package>
+</Wix>

@@ -4390,7 +4390,7 @@ namespace Desktop_Frames
             {
                 try
                 {
-                    string logPath = System.IO.Path.Combine(System.AppContext.BaseDirectory, "Desktop_Frames.log");
+                    string logPath = System.IO.Path.Combine(AppPaths.DataRoot, "Desktop_Frames.log");
                     if (System.IO.File.Exists(logPath))
                     {
                         System.IO.File.Delete(logPath);

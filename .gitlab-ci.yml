@@ -232,6 +232,7 @@ package:
   artifacts:
     paths:
       - .dist/*.zip
+      - .dist/*.msi
       - .dist/version.json
     expire_in: 30 days
 
@@ -327,7 +328,8 @@ github_release:
         --arg tag "v${VERSION}" \
         --arg name "DesktopPossible v${VERSION}" \
         --argjson body "${body}" \
-        '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false }')"
+        --argjson pre "$( [ "${version%%.*}" = "0" ] && echo true || echo false )" \
+        '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre }')"
 
       status="$(curl -s -o response.json -w "%{http_code}" \
         -X POST \
@@ -348,33 +350,34 @@ github_release:
         exit 1
       fi
 
-      # 2) Upload the packaged zip as a release asset.
-      zip_path=".dist/DesktopPossible-${VERSION}-win-x64.zip"
-      if [ ! -f "$zip_path" ]; then
-        echo "Package artifact not found: ${zip_path}"
-        ls -la .dist || true
-        exit 1
-      fi
-      asset_name="$(basename "$zip_path")"
-
+      # 2) Upload the packaged zip and MSI as release assets.
       release_id="$(curl -s -H "$auth" -H "$accept" "${api}/releases/tags/v${VERSION}" | jq -r '.id')"
       if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
         echo "Could not resolve the release id for tag v${VERSION}."
         exit 1
       fi
 
+      for asset_path in ".dist/DesktopPossible-${VERSION}-win-x64.zip" ".dist/DesktopPossible-${VERSION}-win-x64.msi"; do
+      if [ ! -f "$asset_path" ]; then
+        echo "Package artifact not found: ${asset_path}"
+        ls -la .dist || true
+        exit 1
+      fi
+      asset_name="$(basename "$asset_path")"
+      case "$asset_name" in *.msi) content_type="application/x-msi" ;; *) content_type="application/zip" ;; esac
+
       existing_asset="$(curl -s -H "$auth" -H "$accept" "${api}/releases/${release_id}/assets?per_page=100" \
         | jq -r --arg name "$asset_name" '.[] | select(.name == $name) | .id' | head -n 1)"
       if [ -n "$existing_asset" ]; then
         echo "Asset ${asset_name} already exists (id ${existing_asset}). Treating as success."
-        exit 0
+        continue
       fi
 
       status="$(curl -s -o upload.json -w "%{http_code}" \
         -X POST \
         -H "$auth" \
-        -H "Content-Type: application/zip" \
-        --data-binary @"${zip_path}" \
+        -H "Content-Type: ${content_type}" \
+        --data-binary @"${asset_path}" \
         "https://uploads.github.com/repos/${GITHUB_REPO}/releases/${release_id}/assets?name=${asset_name}")"
 
       if [ "$status" = "201" ]; then

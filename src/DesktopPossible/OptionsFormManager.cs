@@ -1408,7 +1408,7 @@ namespace Desktop_Frames
         {
             try
             {
-                string p = System.IO.Path.Combine(System.AppContext.BaseDirectory, "Desktop_Frames.log");
+                string p = System.IO.Path.Combine(AppPaths.DataRoot, "Desktop_Frames.log");
                 if (System.IO.File.Exists(p)) Process.Start(new ProcessStartInfo { FileName = p, UseShellExecute = true });
                 else MessageBoxesManager.ShowOKOnlyMessageBoxForm("Log file not found.", "Information");
             }

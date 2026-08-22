@@ -164,7 +164,7 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, $"Starting export of frame: {frame.Title}");
 
-                string exeDir = System.AppContext.BaseDirectory;
+                string exeDir = AppPaths.DataRoot;
                 string frameTitle = frame.Title.ToString();
 
                 // Sanitize folder name
@@ -283,7 +283,7 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, "Starting frame import process");
 
-                string exeDir = System.AppContext.BaseDirectory;
+                string exeDir = AppPaths.DataRoot;
 				string exportsDir = Path.Combine(exeDir, "Exports");
 
                 var openDialog = new Microsoft.Win32.OpenFileDialog

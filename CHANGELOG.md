@@ -14,6 +14,19 @@ release history is preserved in
 
 ### Added
 
+- MSI installer (`DesktopPossible-<version>-win-x64.msi`): installs to Program Files
+  with a Start Menu shortcut and in-place upgrades; installed runs keep their data in
+  `%LocalAppData%\DesktopPossible\Data`. The portable zip is unchanged.
+- Text frames: bginfo-style live system information painted over the wallpaper
+  (template tokens, fonts, colours, draw modes, refresh timer), with a starter
+  System Info frame on the Default profile.
+- Frame Edit Mode (tray toggle, off by default) gates moving, resizing and
+  layering of frames; click-to-raise within the frame band.
+- Send to Profile (copy/move a frame to another profile), Arrange Frames,
+  an "Other" category for Arrange Now, grid-mode scroll/pan, transparent colours,
+  a per-frame Title Bar Color, native Windows context menus on icons, and a
+  configurable hover delay before a faded frame wakes.
+
 - New application logo and icon set for the DesktopPossible brand.
 - Root build and workflow scripts: `build.ps1`, `test-smoke.ps1`, `test-full.ps1`,
   `start-app.ps1`, `package.ps1`, and `create-release.ps1`.

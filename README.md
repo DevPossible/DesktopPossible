@@ -31,7 +31,7 @@ DesktopPossible creates **virtual frames** on your desktop, letting you group an
 - **Dynamic visibility:** peek-behind, roll-up, auto-hide, focus mode, and keep-on-top pinning.
 - **Broad launch support:** files, folders, web links, Store apps, Steam games, Spotify URIs, run-as-admin / run-as-different-user.
 - **Theming:** per-frame colours, global tint, and a wallpaper-matching "Chameleon" mode.
-- **Fully portable:** no installer, no system pollution — configuration lives beside the executable.
+- **Portable or installed, your choice:** a zip that keeps its configuration beside the executable, or an MSI that installs to Program Files and keeps data in `%LocalAppData%`.
 
 ### Portal Details view
 
@@ -72,13 +72,19 @@ A Windows Explorer–style list view for Portal frames, as an alternative to the
 
 ## Installation
 
-DesktopPossible is a **portable app** — no installer required:
+Every [release](https://github.com/DevPossible/DesktopPossible/releases) ships two downloads:
 
-1. Download `DesktopPossible-<version>-win-x64.zip` from the [latest release](https://github.com/DevPossible/DesktopPossible/releases).
-2. Unzip it anywhere you like (for example `C:\Tools\DesktopPossible`).
-3. Run `DesktopPossible.exe`.
+**Installer (recommended):** run `DesktopPossible-<version>-win-x64.msi`. It installs to
+`C:\Program Files\DesktopPossible`, adds a Start Menu shortcut, and upgrades an existing
+install in place. Your configuration lives in `%LocalAppData%\DesktopPossible\Data`.
+Uninstall from *Settings > Apps* like any other program (your data folder is left untouched).
 
-All configuration is stored beside the executable, so moving the folder moves your setup with it. To launch at boot, enable the start-with-Windows option inside the app — it registers (and cleans up) the autostart entry for you.
+**Portable:** download `DesktopPossible-<version>-win-x64.zip`, unzip it anywhere you like
+(for example `C:\Tools\DesktopPossible`) and run `DesktopPossible.exe`. All configuration is
+stored beside the executable, so moving the folder moves your setup with it.
+
+Either way, to launch at boot enable the start-with-Windows option inside the app — it
+registers (and cleans up) the autostart entry for you.
 
 Requires Windows 10 or 11. The download is self-contained; no separate .NET installation is needed.
 

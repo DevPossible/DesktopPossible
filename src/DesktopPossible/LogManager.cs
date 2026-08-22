@@ -33,7 +33,7 @@ namespace Desktop_Frames
 
         static LogManager()
         {
-            string dir = System.AppContext.BaseDirectory;
+            string dir = AppPaths.DataRoot;
             _logFilePath = System.IO.Path.Combine(dir, "Desktop_Frames.log");
             _diagFilePath = System.IO.Path.Combine(dir, "portal_diag.log");
         }

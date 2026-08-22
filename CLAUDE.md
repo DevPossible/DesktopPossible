@@ -7,8 +7,9 @@ This file provides context for Claude Code when working on DesktopPossible.
 DesktopPossible is a free, open-source Stardock Fences alternative for
 Windows 10/11: it creates virtual "frames" on the desktop to group icons,
 mirror folders (Portal frames), hold notes and images, with profiles, hotkeys,
-theming, and a smart auto-sort engine. It is a portable app — unzip, run
-`DesktopPossible.exe`, config lives beside the exe.
+theming, and a smart auto-sort engine. It ships as a portable zip (config
+beside the exe) and as an MSI installer (Program Files; config under
+`%LocalAppData%\DesktopPossible\Data`) — see `AppPaths.DataRoot`.
 
 **Hard-fork context:** this is a hard fork of
 [Desktop Frames +](https://github.com/limbo666/DesktopFramesPlus) by
@@ -48,7 +49,7 @@ and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
 | `./test-smoke.ps1` | Run unit tests (fast, headless-safe) |
 | `./test-full.ps1` | Run the full test suite |
 | `./start-app.ps1` | Build (unless `-NoBuild`) and launch the app |
-| `./package.ps1` | Produce the self-contained single-file portable zip |
+| `./package.ps1` | Produce the self-contained single-file portable zip and the MSI installer |
 | `./create-release.ps1` | **User-only** — triggers a release (never run this) |
 | `./scripts/get-version.ps1` / `.sh` | Calculate next semver from conventional commits |
 
@@ -204,6 +205,14 @@ project files, manifests, or tags.
 
 - **csproj encoding:** `DesktopPossible.csproj` must stay UTF-8. Some
   editors/tools re-save it with a different encoding and break the build.
+- **Data root is `AppPaths.DataRoot`, never the exe folder directly:** beside the
+  exe when portable, `%LocalAppData%\DesktopPossible\Data` when the MSI's
+  `DesktopPossible.installed` marker is present (Program Files is read-only for
+  users). Build every data path from it.
+- **MSI:** `installer/DesktopPossible.wxs` (WiX v4+ authoring, `wix` dotnet tool
+  pinned in `.config/dotnet-tools.json`, built by `package.ps1`). Keep the
+  `UpgradeCode` GUID stable forever — it is what lets a new MSI upgrade an old
+  install.
 - **Portable config beside the exe:** the app reads/writes `Profiles/` and
   `ProfileOptions.json` next to the executable. Never rename these — the
   migration engine and user upgrades depend on the exact names.
