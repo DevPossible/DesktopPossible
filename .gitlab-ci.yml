@@ -1,0 +1,393 @@
+# =============================================================================
+# DesktopPossible - GitLab CI/CD
+#
+# Flow (stages): validate -> test -> version -> package -> mirror -> release
+#   - Merge requests and pushes to develop/main: compile verification (Linux).
+#   - Pushes to main additionally: validate GitHub access, compute the release
+#     version + changelog, package the win-x64 zip, tag and mirror to GitHub
+#     (main branch + release tags ONLY - never any other branch), then create
+#     the GitHub release with the zip attached.
+#
+# All jobs run on ordinary Linux shared runners. COM interop is late-bound
+# (no COMReference items), so the net10.0-windows app compiles and cross-
+# publishes with the plain .NET SDK (EnableWindowsTargeting in
+# Directory.Build.props). Tests target net10.0-windows and can only EXECUTE on
+# Windows: they run locally via create-release.ps1 before every release
+# promotion, and an optional manual `test-windows` job exists for a Windows
+# runner (tag `windows`) if one is ever registered.
+#
+# Required CI/CD variables (Settings > CI/CD > Variables, masked + protected):
+#   GITHUB_PAT         GitHub personal access token with `repo` scope on the
+#                      mirror repository (push, create releases, upload assets).
+#   GITLAB_PUSH_TOKEN  Project/group access token with `write_repository` scope
+#                      on this repository (origin, gitlab.devpossible.com);
+#                      used to push the release tag back to origin.
+#   GITHUB_REPO        Optional override of the mirror repository; defaults to
+#                      "DevPossible/DesktopPossible" (set below).
+# =============================================================================
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
+stages:
+  - validate
+  - test
+  - version
+  - package
+  - mirror
+  - release
+
+variables:
+  GIT_DEPTH: "0" # full history: version calc, changelog, and mirroring need tags
+  GITHUB_REPO: "DevPossible/DesktopPossible"
+
+# Release jobs only ever run for pushes to main.
+.main_only:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# -----------------------------------------------------------------------------
+# validate: fail fast if the GitHub mirror is not reachable with GITHUB_PAT.
+# -----------------------------------------------------------------------------
+validate_github:
+  stage: validate
+  extends: .main_only
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl git
+  script:
+    - |
+      set -eu
+
+      if [ -z "${GITHUB_PAT:-}" ]; then
+        echo "GITHUB_PAT is not set. Add it as a masked/protected GitLab CI/CD variable."
+        exit 1
+      fi
+
+      echo "GITHUB_PAT is set."
+      response="$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: token ${GITHUB_PAT}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/${GITHUB_REPO}")"
+
+      if [ "$response" != "200" ]; then
+        echo "GitHub API access failed: HTTP ${response}"
+        echo "Check that GITHUB_PAT can read ${GITHUB_REPO}."
+        exit 1
+      fi
+
+      git ls-remote "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPO}.git" HEAD >/dev/null
+      echo "GitHub access validation passed."
+
+# -----------------------------------------------------------------------------
+# build: compile verification with the plain .NET SDK (Linux).
+# Runs for merge requests and pushes to develop/main. Test EXECUTION requires
+# Windows (net10.0-windows) and happens locally via create-release.ps1 before
+# every release promotion; see also the manual test-windows job below.
+# -----------------------------------------------------------------------------
+build:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  script:
+    - pwsh ./build.ps1
+
+# Optional: full test run on a Windows runner (tag `windows`), if registered.
+# Manual + allow_failure so pipelines never block when no such runner exists.
+test-windows:
+  stage: test
+  tags:
+    - windows
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: true
+  script:
+    - ./build.ps1
+    - ./test-smoke.ps1
+
+# -----------------------------------------------------------------------------
+# version: compute the release version + changelog (main only).
+# Reuses an existing v-tag on HEAD; otherwise computes via scripts/get-version.sh
+# and bumps patch until the tag is free. Emits VERSION/TAG_EXISTS/SHOULD_RELEASE
+# as dotenv variables plus changelog.md for the GitHub release body.
+# -----------------------------------------------------------------------------
+version:
+  stage: version
+  extends: .main_only
+  image: alpine:latest
+  needs:
+    - build
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      set -eu
+
+      echo "HEAD: $(git rev-parse HEAD)"
+      echo "Tags at HEAD: $(git tag --points-at HEAD | tr '\n' ' ')"
+
+      existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+
+      tag_exists="false"
+      should_release="true"
+
+      if [ -n "$existing_tag" ]; then
+        version="${existing_tag#v}"
+        tag_exists="true"
+        echo "HEAD is already tagged: ${existing_tag} - reusing it."
+      else
+        version="$(sh scripts/get-version.sh)"
+        echo "Computed version: ${version}"
+
+        if [ -n "$(git tag -l "v${version}")" ]; then
+          tag_commit="$(git rev-list -n 1 "v${version}")"
+          head_commit="$(git rev-parse HEAD)"
+
+          if [ "$tag_commit" = "$head_commit" ]; then
+            should_release="false"
+            echo "Tag v${version} already points at HEAD - nothing to release."
+          else
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            patch="${rest#*.}"
+
+            patch=$((patch + 1))
+            while [ -n "$(git tag -l "v${major}.${minor}.${patch}")" ]; do
+              patch=$((patch + 1))
+            done
+
+            version="${major}.${minor}.${patch}"
+            echo "Tag collision - bumped to: ${version}"
+          fi
+        fi
+      fi
+
+      last_tag="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+      if [ -z "$last_tag" ]; then
+        last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+      fi
+
+      {
+        echo "## What's Changed"
+        echo ""
+        if [ -n "$last_tag" ] && [ "$last_tag" != "v${version}" ]; then
+          git log "${last_tag}..HEAD" --pretty=format:"- %s" --reverse
+          echo ""
+          echo ""
+          echo "**Full Changelog**: https://github.com/${GITHUB_REPO}/compare/${last_tag}...v${version}"
+        else
+          git log --pretty=format:"- %s" --reverse | head -n 50
+          echo ""
+          echo ""
+          echo "**Full Changelog**: https://github.com/${GITHUB_REPO}/commits/v${version}"
+        fi
+      } > changelog.md
+
+      {
+        echo "VERSION=${version}"
+        echo "TAG_EXISTS=${tag_exists}"
+        echo "SHOULD_RELEASE=${should_release}"
+      } > version.env
+
+      cat version.env
+  artifacts:
+    reports:
+      dotenv: version.env
+    paths:
+      - changelog.md
+      - version.env
+    expire_in: 30 days
+
+# -----------------------------------------------------------------------------
+# package: cross-publish the win-x64 zip with the plain .NET SDK (Linux, main
+# only). Tests cannot execute on Linux, hence -SkipTests (they ran locally via
+# create-release.ps1 before the promotion to main). VERSION arrives via the
+# version job's dotenv report.
+# -----------------------------------------------------------------------------
+package:
+  stage: package
+  extends: .main_only
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  needs:
+    - job: version
+      artifacts: true
+    - build
+  script:
+    - |
+      set -eu
+      if [ "$SHOULD_RELEASE" != "true" ]; then
+        echo "No release needed for v${VERSION}. Skipping package."
+        exit 0
+      fi
+      pwsh ./package.ps1 -Version "$VERSION" -NonInteractive -SkipTests
+  artifacts:
+    paths:
+      - .dist/*.zip
+      - .dist/*.msi
+      - .dist/version.json
+    expire_in: 30 days
+
+# -----------------------------------------------------------------------------
+# mirror: tag the release on origin and mirror to the GitHub shopfront.
+# ONLY the main branch and release tags are ever pushed to GitHub - no other
+# branch (develop, feature branches, etc.) must ever reach the mirror.
+# -----------------------------------------------------------------------------
+mirror:
+  stage: mirror
+  extends: .main_only
+  image: alpine:latest
+  needs:
+    - job: version
+      artifacts: true
+    - build
+    - validate_github
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      set -eu
+
+      # HARD GUARD: never mirror anything but main. The rules already restrict
+      # this job to main pushes; this is defense in depth.
+      if [ "${CI_COMMIT_BRANCH:-}" != "main" ]; then
+        echo "Refusing to mirror: this job only runs for pushes to main."
+        exit 1
+      fi
+
+      if [ "$SHOULD_RELEASE" != "true" ]; then
+        echo "No release needed for v${VERSION}. Skipping mirror."
+        exit 0
+      fi
+
+      git config user.email "gitlab-ci@devpossible.com"
+      git config user.name "GitLab CI"
+
+      if [ "$TAG_EXISTS" != "true" ]; then
+        git tag -a "v${VERSION}" -m "Release v${VERSION}"
+
+        if [ -z "${GITLAB_PUSH_TOKEN:-}" ]; then
+          echo "GITLAB_PUSH_TOKEN is required to push release tags back to GitLab."
+          echo "Create a masked/protected project or group access token with write_repository scope."
+          exit 1
+        fi
+
+        git remote set-url origin "https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        git push origin "v${VERSION}"
+      else
+        echo "Tag v${VERSION} already exists."
+      fi
+
+      git remote add github "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPO}.git" 2>/dev/null \
+        || git remote set-url github "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPO}.git"
+
+      # Push main and the release tag - nothing else, ever.
+      git push github "HEAD:main" --force
+      git push github "v${VERSION}"
+
+# -----------------------------------------------------------------------------
+# release: create the GitHub release (422 = already exists = success) and
+# upload the packaged zip as a release asset (existing asset = success).
+# -----------------------------------------------------------------------------
+github_release:
+  stage: release
+  extends: .main_only
+  image: alpine:latest
+  needs:
+    - job: version
+      artifacts: true
+    - job: package
+      artifacts: true
+    - mirror
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      set -eu
+
+      if [ "$SHOULD_RELEASE" != "true" ]; then
+        echo "No release needed for v${VERSION}."
+        exit 0
+      fi
+
+      api="https://api.github.com/repos/${GITHUB_REPO}"
+      auth="Authorization: token ${GITHUB_PAT}"
+      accept="Accept: application/vnd.github.v3+json"
+
+      # 1) Create the release from changelog.md.
+      body="$(jq -Rs . < changelog.md)"
+      payload="$(jq -n \
+        --arg tag "v${VERSION}" \
+        --arg name "DesktopPossible v${VERSION}" \
+        --argjson body "${body}" \
+        --argjson pre "$( [ "${version%%.*}" = "0" ] && echo true || echo false )" \
+        '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre }')"
+
+      status="$(curl -s -o response.json -w "%{http_code}" \
+        -X POST \
+        -H "$auth" \
+        -H "$accept" \
+        -H "Content-Type: application/json" \
+        "${api}/releases" \
+        -d "${payload}")"
+
+      if [ "$status" = "201" ]; then
+        echo "Created GitHub release v${VERSION}."
+      elif [ "$status" = "422" ]; then
+        echo "GitHub release v${VERSION} already exists. Treating as success."
+        cat response.json
+      else
+        echo "Failed to create GitHub release. HTTP ${status}"
+        cat response.json
+        exit 1
+      fi
+
+      # 2) Upload the packaged zip and MSI as release assets.
+      release_id="$(curl -s -H "$auth" -H "$accept" "${api}/releases/tags/v${VERSION}" | jq -r '.id')"
+      if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
+        echo "Could not resolve the release id for tag v${VERSION}."
+        exit 1
+      fi
+
+      for asset_path in ".dist/DesktopPossible-${VERSION}-win-x64.zip" ".dist/DesktopPossible-${VERSION}-win-x64.msi"; do
+      if [ ! -f "$asset_path" ]; then
+        echo "Package artifact not found: ${asset_path}"
+        ls -la .dist || true
+        exit 1
+      fi
+      asset_name="$(basename "$asset_path")"
+      case "$asset_name" in *.msi) content_type="application/x-msi" ;; *) content_type="application/zip" ;; esac
+
+      existing_asset="$(curl -s -H "$auth" -H "$accept" "${api}/releases/${release_id}/assets?per_page=100" \
+        | jq -r --arg name "$asset_name" '.[] | select(.name == $name) | .id' | head -n 1)"
+      if [ -n "$existing_asset" ]; then
+        echo "Asset ${asset_name} already exists (id ${existing_asset}). Treating as success."
+        continue
+      fi
+
+      status="$(curl -s -o upload.json -w "%{http_code}" \
+        -X POST \
+        -H "$auth" \
+        -H "Content-Type: ${content_type}" \
+        --data-binary @"${asset_path}" \
+        "https://uploads.github.com/repos/${GITHUB_REPO}/releases/${release_id}/assets?name=${asset_name}")"
+
+      if [ "$status" = "201" ]; then
+        echo "Uploaded ${asset_name} to release v${VERSION}."
+      elif [ "$status" = "422" ]; then
+        echo "Asset ${asset_name} already exists on release v${VERSION}. Treating as success."
+        cat upload.json
+      else
+        echo "Failed to upload release asset. HTTP ${status}"
+        cat upload.json
+        exit 1
+      fi
+      done

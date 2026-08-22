@@ -1,0 +1,22 @@
+{
+  "Meta": {
+    "LatestVersion": "3.0.0.0",
+    "CriticalUpdate": false,
+    "DownloadUrl": "https://github.com/DevPossible/DesktopPossible/releases",
+    "ForceKillSwitch": false
+  },
+  "Announcements": [
+    {
+      "Id": "MSG_20260821_dfpdev1",
+      "Type": "Info",
+      "Title": "DesktopPossible dev channel",
+      "Body": "This is the development test announcement for DesktopPossible. If you can read this, the remote manifest pipeline is working.",
+      "Link": "https://github.com/DevPossible/DesktopPossible/releases",
+      "TargetVersionMin": "0.0.0.0",
+      "TargetVersionMax": "99.9.9.9",
+      "MaxDisplayCount": 1,
+      "AutoCloseSeconds": 20,
+      "CanUserDismiss": true
+    }
+  ]
+}

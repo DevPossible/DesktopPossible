@@ -1,4 +1,11 @@
-# Build output
+# Centralized build output
+.build/
+.dist/
+
+# AI agent scratch
+.aitemp/
+
+# Legacy build output patterns
 [Bb]in/
 [Oo]bj/
 [Dd]ebug/
@@ -23,9 +30,17 @@ packages/
 project.lock.json
 project.assets.json
 
+# Test results
+TestResults/
+*.trx
+
 # Misc
 *.log
 *.tmp
 Thumbs.db
 desktop.ini
+nul
 _dfp.zip
+
+# Claude Code agent worktrees
+.claude/worktrees/

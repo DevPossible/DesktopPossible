@@ -1,0 +1,4 @@
+This file marks an MSI (Program Files) installation of DesktopPossible.
+While it sits beside DesktopPossible.exe, the app stores its data under
+%LocalAppData%\DesktopPossible\Data instead of beside the executable.
+Delete it (or use the portable zip) to run in portable mode.

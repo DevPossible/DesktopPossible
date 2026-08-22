@@ -1,0 +1,22 @@
+{
+  "Meta": {
+    "LatestVersion": "0.9.0.0",
+    "CriticalUpdate": false,
+    "DownloadUrl": "https://github.com/DevPossible/DesktopPossible/releases",
+    "ForceKillSwitch": false
+  },
+  "Announcements": [
+    {
+      "Id": "MSG_20260821_dfp1",
+      "Type": "Info",
+      "Title": "Welcome to the DesktopPossible 0.9 beta",
+      "Body": "Thanks for trying the DesktopPossible 0.9 beta, the hard fork of Desktop Frames + maintained by DevPossible. This is a beta: please report anything odd on the GitHub issues page.",
+      "Link": "https://github.com/DevPossible/DesktopPossible/releases",
+      "TargetVersionMin": "0.0.0.0",
+      "TargetVersionMax": "99.9.9.9",
+      "MaxDisplayCount": 1,
+      "AutoCloseSeconds": 0,
+      "CanUserDismiss": true
+    }
+  ]
+}

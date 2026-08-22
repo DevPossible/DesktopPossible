@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build (Debug)",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "src/DesktopPossible.sln", "--configuration", "Debug"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "build (Release)",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "src/DesktopPossible.sln", "--configuration", "Release"],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "src/DesktopPossible.sln", "--configuration", "Debug"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "test", "isDefault": true }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+<Project>
+  <!--
+    Centralized build output configuration.
+    Redirects all bin/obj folders to /.build/{ProjectName}/
+  -->
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory).build\$(MSBuildProjectName)\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory).build\$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)\</IntermediateOutputPath>
+    <!-- Legacy in-project bin/obj (e.g. IDE-created before this file is honored) must never be compiled -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
+    <!-- Allow compiling the net8.0-windows TFM on non-Windows build hosts (Linux CI). COM interop is late-bound. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <!-- Common package/assembly metadata -->
+  <PropertyGroup>
+    <Authors>DevPossible</Authors>
+    <Company>DevPossible</Company>
+    <Product>DesktopPossible</Product>
+    <Copyright>Copyright (c) DevPossible $([System.DateTime]::Now.Year)</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DevPossible/DesktopPossible</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DevPossible/DesktopPossible.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+</Project>

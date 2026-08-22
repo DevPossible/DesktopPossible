@@ -1,103 +1,145 @@
-<h1 align="center">Desktop Frames + Kai</h1>
+<h1 align="center">DesktopPossible</h1>
 <p align="center"><i>Organize your desktop like magic!</i></p>
 <p align="center"><b>A free, open-source Stardock Fences alternative for Windows 10/11</b> — group desktop icons into frames, mirror folders, and tidy your desktop.</p>
 
 <p align="center">
-  <img width="150" height="150" alt="Desktop Frames" src="https://github.com/user-attachments/assets/a88f7771-8ae8-4be8-86dc-4e8aabfa5a77" />
+  <img width="150" height="150" alt="DesktopPossible logo" src="docs/images/logo.png" />
 </p>
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/DevPossible/DesktopPossible)](https://github.com/DevPossible/DesktopPossible/releases)
+
 ---
 
-> ### 🔱 This is a personal fork
-> A personal fork of [**limbo666/DesktopFramesPlus**](https://github.com/limbo666/DesktopFramesPlus) (MIT), which is itself a continuation of the original **BirdyFences** by HakanKokcu. All upstream work belongs to those authors — see [Credits](#-credits).
+> ### This is a hard fork
+> DesktopPossible is a **hard fork** of [**Desktop Frames +**](https://github.com/limbo666/DesktopFramesPlus) (MIT) by **limbo666 / Nikos Georgousis**, which is itself a continuation of the original **BirdyFences** by **HakanKokcu**. All upstream work belongs to those authors — see [Credits](#credits).
 >
-> **About the name:** *Kai* (改) is Japanese for a *revised / modified version* — fitting for a fork — and a nod to the fact that its enhancements were built with **AI** assistance.
+> As a hard fork, this project **does not track or merge upstream commits** — it evolves independently from the point of the fork. If you want the original prebuilt tool, use the [upstream releases](https://github.com/limbo666/DesktopFramesPlus/releases).
 >
-> This fork adds a Windows Explorer–style **Details view**, **per-frame transparency**, global + per-frame **hotkeys**, **dark-mode menus**, themed chrome, and various **performance** fixes. See [**Fork Enhancements**](#-fork-enhancements).
+> **A note on AI assistance:** in the interest of transparency, the fork-specific enhancements in this repository were built with substantial help from [Claude](https://www.anthropic.com/claude) (Anthropic's AI assistant) — used for writing, refactoring, and debugging the added code. The upstream projects are the work of their original human authors.
 
 ---
 
-## Why this fork exists
+## Features
 
-I put this together for my own use after **Fences 3 stopped being supported** on my setup, and because I wasn't a fan of the **current publisher's monetization model**. I wanted a free, open-source desktop-organizer that does what I need without the subscription/upsell direction, so I forked an existing MIT-licensed project and extended it to fill the gaps.
+DesktopPossible creates **virtual frames** on your desktop, letting you group and organize icons cleanly.
 
-It's shared publicly in case it's useful to anyone in the same boat. It's a hobby project, provided as-is, with no warranty or support commitment.
+### Core
 
-## 🤖 A note on AI assistance
-
-In the interest of transparency: the **fork-specific features in this repo were built with substantial help from [Claude](https://www.anthropic.com/claude) (Anthropic's AI assistant)** — used for writing, refactoring, and debugging the added code. I'm flagging this openly rather than hiding it. The upstream project is the work of its original human authors; the AI assistance applies to the changes made in *this* fork.
-
----
-
-## About Desktop Frames +
-
-Desktop Frames + creates **virtual frames** on your desktop, letting you group and organize icons cleanly. It supports:
-
-- **Multiple frame types:** Data frames (custom shortcuts), Portal frames (live mirror of a folder, with navigation and filters), and Note frames (quick text).
+- **Multiple frame types:** Data frames (custom shortcuts), Portal frames (live mirror of a folder, with navigation and filters), Note frames (quick text), and Image frames.
 - **Tabs, workspace profiles, and a smart-desktop auto-sort engine.**
-- **Dynamic visibility:** peek-behind, roll-up, auto-hide, and focus mode.
+- **Dynamic visibility:** peek-behind, roll-up, auto-hide, focus mode, and keep-on-top pinning.
 - **Broad launch support:** files, folders, web links, Store apps, Steam games, Spotify URIs, run-as-admin / run-as-different-user.
 - **Theming:** per-frame colours, global tint, and a wallpaper-matching "Chameleon" mode.
-
-The original project is well documented upstream — see the [upstream manual](https://github.com/limbo666/DesktopFramesPlus/blob/main/desktop_frames_simple_manual.md) and [tips](https://github.com/limbo666/DesktopFramesPlus/blob/main/TIPS.md).
-
----
-
-## 🔧 Fork Enhancements
-
-Everything in this section is what this fork adds on top of the upstream project.
+- **Portable or installed, your choice:** a zip that keeps its configuration beside the executable, or an MSI that installs to Program Files and keeps data in `%LocalAppData%`.
 
 ### Portal Details view
-A Windows Explorer–style list view for Portal frames, as an alternative to the icon grid.
+
+A Windows Explorer–style list view for Portal frames, as an alternative to the icon grid:
+
 - **Toggle per frame:** right-click a Portal frame → **View → Icons / Details** (remembered per frame).
 - **Columns:** Name, Date modified, Type, Size — resizable, with widths saved per frame.
-- **Click-to-sort** with a **▲ / ▼** indicator; right-click **Sort by / Group by** with Explorer-style buckets (Today / Yesterday / Earlier this week, size ranges, …).
+- **Click-to-sort** with an ascending/descending indicator; right-click **Sort by / Group by** with Explorer-style buckets (Today / Yesterday / Earlier this week, size ranges, and more).
 - **Native shell context menu** on right-click (Open with, Send to, cut/copy/paste, Properties, shell extensions), lazily loaded so the first right-click stays fast.
 - **Zebra striping** (global default + per-frame override), and chrome (headers, scrollbars, selection) themed to the frame's colour.
 
-### Icon (normal) view
-- **Sort by** menu (Name / Date / Type / Size) with **ascending / descending**, plus a "Sorted by …" heading.
+### Icon view
+
+- **Sort by** menu (Name / Date / Type / Size) with ascending/descending order, plus a "Sorted by …" heading.
 - Themed scrollbar to match the frame.
 
-### Frames & title bar
-- **Per-type title glyph** (folder / note / shortcut), tinted to match the other title-bar icons; Portal frames show their folder path on hover.
+### Frames and title bar
+
+- **Per-type title glyph** (folder / note / shortcut / image), tinted to match the other title-bar icons; Portal frames show their folder path on hover.
 - **Rename Frame** from the context menu; hotkey shown in the title.
 - **Per-frame transparency** override (Customize dialog) on top of the global Frame Tint.
+- **Content lock** for Note and Image frames to prevent accidental edits.
 
 ### Hotkeys
+
 - **Show / Hide all frames** (default `Ctrl + Alt + H`, customizable).
 - **Per-frame focus** hotkey (press-to-capture; supports groups and the Windows key).
 - Optional **double-click empty desktop** to toggle native desktop icons.
 
-### Dark mode & theming
+### Dark mode and theming
+
 - **Dark-mode context menus** throughout (frame, icon, Notes editor, and the native shell menu) that follow the OS light/dark setting.
 
-### Performance & footprint
-- **Extension-based caching** of shell icons and type names for fast Portal loads.
-- **Lazy context menus**, batched Portal reconciler, working-set trimming, and removal of unused startup work.
+### Performance and footprint
 
----
+- **Extension-based caching** of shell icons and type names for fast Portal loads.
+- **Lazy context menus**, batched Portal reconciler, working-set trimming, and pre-warmed shell caches for a fast first right-click.
+
+## Installation
+
+Every [release](https://github.com/DevPossible/DesktopPossible/releases) ships two downloads:
+
+**Installer (recommended):** run `DesktopPossible-<version>-win-x64.msi`. It installs to
+`C:\Program Files\DesktopPossible`, adds a Start Menu shortcut, and upgrades an existing
+install in place. Your configuration lives in `%LocalAppData%\DesktopPossible\Data`.
+Uninstall from *Settings > Apps* like any other program (your data folder is left untouched).
+
+**Portable:** download `DesktopPossible-<version>-win-x64.zip`, unzip it anywhere you like
+(for example `C:\Tools\DesktopPossible`) and run `DesktopPossible.exe`. All configuration is
+stored beside the executable, so moving the folder moves your setup with it.
+
+Either way, to launch at boot enable the start-with-Windows option inside the app — it
+registers (and cleans up) the autostart entry for you.
+
+Requires Windows 10 or 11. The download is self-contained; no separate .NET installation is needed.
+
+## Migrating from Desktop Frames +
+
+Coming from the upstream Desktop Frames + app? Your profiles carry over: copy your old `Profiles` folder and `ProfileOptions.json` into the new folder and launch — an automatic migration engine translates your configuration. See the [migration guide](docs/migrating-from-upstream.md) for step-by-step instructions.
 
 ## Building from source
 
-> Compatible with Windows 10/11 · fully portable
+The project targets **.NET 10** (`net10.0-windows10.0.19041.0`) and builds with the plain **.NET SDK** on any OS (COM interop is late-bound; `EnableWindowsTargeting` is preconfigured). The app itself — and its test suite — runs on **Windows only**.
 
-This fork is source-first (no prebuilt releases). It targets **.NET 8 (`net8.0-windows7.0`)** and, because of COM references, must be built with the **full MSBuild** from Visual Studio / Build Tools (not `dotnet build`):
+1. Install the [**.NET 10+ SDK**](https://dotnet.microsoft.com/download).
+2. Clone the repository and run:
 
-1. Install **Visual Studio 2022** (or Build Tools) with the **.NET desktop** workload.
-2. Build `Code/Desktop Frames/Desktop Frames.csproj` in `Release`.
-3. Run `Desktop Frames.exe` from the output folder. Config files are created on first run in a user-writable location.
+```powershell
+./build.ps1        # Builds the solution (dotnet SDK)
+./test-smoke.ps1   # Runs the unit test suite (Windows)
+./start-app.ps1    # Builds (if needed) and launches the app
+```
 
-For the original, prebuilt tool, use the [upstream releases](https://github.com/limbo666/DesktopFramesPlus/releases).
+## Documentation
 
----
+| Topic | Description |
+|-------|-------------|
+| [User Manual](docs/manual.md) | Full feature walkthrough — frames, customization, settings |
+| [Tips & Tricks](docs/tips.md) | Power-user features: portal filters, SpotSearch, profiles |
+| [Advanced Tweaks](docs/tweaks.md) | JSON-level configuration tweaks |
+| [Migrating from Desktop Frames +](docs/migrating-from-upstream.md) | Moving your setup from the upstream app |
+| [Upstream Version History](docs/upstream-version-history.md) | Pre-fork release history from the upstream project |
 
-## 📜 License
+## Contributing
 
-MIT — see [License.md](License.md). The MIT terms of the upstream project are retained.
+Contributions are welcome. Pull requests should target the `develop` branch — `main` is release-only and is updated by the release process.
 
-## 🙏 Credits
+We use [Conventional Commits](https://www.conventionalcommits.org/); commit messages drive automated versioning:
+
+```
+feat: add new frame grouping option    # Minor version bump
+fix: correct portal refresh on rename  # Patch version bump
+feat!: redesign profile storage        # Major version bump (breaking)
+docs: update manual screenshots        # No release
+```
+
+Releases are maintainer-triggered; merged work ships when the maintainer cuts the next release.
+
+## Versioning
+
+Versions follow [Semantic Versioning](https://semver.org/) and are calculated automatically from conventional commit messages. Release tags (`vX.Y.Z`) are created by CI — never by hand.
+
+## License
+
+MIT — see [LICENSE](LICENSE), which retains the full copyright chain: DevPossible (this fork), limbo666 (Desktop Frames +), and HakanKokcu (BirdyFences). Third-party library and asset attributions are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Credits
 
 - Original **BirdyFences** by **HakanKokcu**.
-- **Desktop Frames +** upstream by **limbo666 / Nikos Georgousis** — please star and support the [upstream project](https://github.com/limbo666/DesktopFramesPlus).
-- This personal fork is maintained by **superlanboy**, building on the above under the MIT License, with development help from Claude (see the AI note above).
+- **Desktop Frames +** by **limbo666 / Nikos Georgousis** — please star and support the [upstream project](https://github.com/limbo666/DesktopFramesPlus).
+- **DesktopPossible** is maintained by [DevPossible](https://devpossible.com) ([GitHub](https://github.com/DevPossible)), building on the above under the MIT License, with development assistance from Claude (see the AI note above).
