@@ -45,7 +45,12 @@ namespace Desktop_Frames
             sv.ScrollChanged += (s, e) => adorner?.InvalidateVisual();
             sv.SizeChanged += (s, e) => adorner?.InvalidateVisual();
 
-            sv.MouseLeftButtonDown += (s, e) =>
+            // Empty frame surface must be hit-testable or a press there falls through to the
+            // frame border and never reaches us. Portal frames already paint a watermark.
+            sv.Background ??= Brushes.Transparent;
+
+            // handledEventsToo: an icon/child marking the press handled must not starve the pan.
+            sv.AddHandler(UIElement.MouseLeftButtonDownEvent, new MouseButtonEventHandler((s, e) =>
             {
                 if (!IsPanMode(sv) || !HasOverflow(sv) || IsOnIconOrControl(e.OriginalSource as DependencyObject, sv)) return;
                 state.Start = e.GetPosition(sv);
@@ -53,9 +58,9 @@ namespace Desktop_Frames
                 state.StartV = sv.VerticalOffset;
                 state.Pressed = true;
                 state.Panning = false;
-            };
+            }), true);
 
-            sv.MouseMove += (s, e) =>
+            sv.AddHandler(UIElement.MouseMoveEvent, new MouseEventHandler((s, e) =>
             {
                 if (!state.Pressed || e.LeftButton != MouseButtonState.Pressed) { state.Pressed = state.Panning = false; return; }
                 Point p = e.GetPosition(sv);
@@ -71,9 +76,9 @@ namespace Desktop_Frames
                 sv.ScrollToHorizontalOffset(state.StartH - dx);
                 sv.ScrollToVerticalOffset(state.StartV - dy);
                 e.Handled = true;
-            };
+            }), true);
 
-            sv.MouseLeftButtonUp += (s, e) =>
+            sv.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler((s, e) =>
             {
                 bool wasPanning = state.Panning;
                 state.Pressed = state.Panning = false;
@@ -81,7 +86,7 @@ namespace Desktop_Frames
                 if (sv.IsMouseCaptured) sv.ReleaseMouseCapture();
                 sv.Cursor = null;
                 e.Handled = true; // a pan is not a click on the surface
-            };
+            }), true);
 
             sv.LostMouseCapture += (s, e) => { state.Pressed = state.Panning = false; sv.Cursor = null; };
         }
