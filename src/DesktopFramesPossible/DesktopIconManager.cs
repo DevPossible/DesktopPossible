@@ -88,6 +88,20 @@ namespace Desktop_Frames
             return IntPtr.Zero;
         }
 
+        /// <summary>The desktop list view's ACTUAL current visibility (live shell state),
+        /// or null when the list view cannot be found. Lets callers skip a redundant
+        /// SetDesktopIconsVisible when the shell is already in the desired state.</summary>
+        public static bool? AreDesktopIconsVisible()
+        {
+            try
+            {
+                IntPtr listView = GetDesktopListView();
+                if (listView == IntPtr.Zero) return null;
+                return IsWindowVisible(listView);
+            }
+            catch { return null; }
+        }
+
         public static void SetDesktopIconsVisible(bool visible)
         {
             // --- BUG FIX: Prevent late-firing hide commands from executing during app teardown ---

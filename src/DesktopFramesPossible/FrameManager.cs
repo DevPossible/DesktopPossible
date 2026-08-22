@@ -322,16 +322,22 @@ namespace Desktop_Frames
             }
         }
 
-        public static void ReloadFrames()
+        public static void ReloadFrames(bool silent = false)
         {
             try
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Reloading all frames...");
 
-                // 1. Life Support
-                Window lifeSupport = MessageBoxesManager.CreateWaitWindow("DesktopFrames+Possible", "Refreshing configuration...");
-                lifeSupport.Show();
-                System.Windows.Forms.Application.DoEvents();
+                // 1. Life Support (skipped for silent/automated switches — no flashing card;
+                //    app lifetime no longer depends on a window existing since
+                //    ShutdownMode=OnExplicitShutdown was set in App.xaml)
+                Window lifeSupport = null;
+                if (!silent)
+                {
+                    lifeSupport = MessageBoxesManager.CreateWaitWindow("DesktopFrames+Possible", "Refreshing configuration...");
+                    lifeSupport.Show();
+                    System.Windows.Forms.Application.DoEvents();
+                }
 
                 // 2. Clean up Old State
                 if (TrayManager.Instance != null)
@@ -349,13 +355,21 @@ namespace Desktop_Frames
                 _heartTextBlocks.Clear();
                 foreach (var portal in _portalFrames.Values) try { portal.Dispose(); } catch { }
                 _portalFrames.Clear();
+                LazyIconLoader.ClearQueue();  // drop stale icon requests from the closed frames
+                ImageFramemanager.ResetAll(); // forget image hosts + dispose their file watchers
                 FrameDataManager.FrameData?.Clear();
-                _currentTargetChecker?.Stop();
+                _currentTargetChecker?.Dispose(); // stop AND release the underlying timer
 
                 // Clear Auto Roll tracking to prevent memory leaks
                 foreach (var timer in _autoRollTimers.Values) timer.Stop();
                 _autoRollTimers.Clear();
                 _autoRolledFrames.Clear();
+
+                // Reset the global auto-hide state: switching profiles while frames were
+                // auto-hidden would otherwise leave a stale flag that inverts the
+                // show/hide-all toggle (Ctrl+Alt+H) after the reload.
+                _hideSequenceId++; // cancel any in-flight hide/flash sequence
+                _areFramesAutoHidden = false;
 
                 // 3. Re-Load
                 _currentTargetChecker = new TargetChecker(1000);
@@ -413,7 +427,7 @@ namespace Desktop_Frames
                 }
                 // ==================== DEBUG FIX END ====================
 
-                lifeSupport.Close();
+                lifeSupport?.Close();
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Frames reloaded successfully.");
             }
             catch (Exception ex)
@@ -4234,8 +4248,15 @@ namespace Desktop_Frames
             DesktopIconManager.Initialize();
 
             // --- BUG FIX: Enforce Profile Switching State ---
-            // Strictly apply the incoming profile's setting. If false, we explicitly restore visibility!
-            DesktopIconManager.SetDesktopIconsVisible(!SettingsManager.HideDesktopElementsOnStart);
+            // Strictly apply the incoming profile's setting — but only touch the shell when
+            // the desired state differs from the live one. Profiles with identical settings
+            // no longer flicker the real desktop icons on every switch; differing profiles
+            // still toggle (by design).
+            bool desiredIconsVisible = !SettingsManager.HideDesktopElementsOnStart;
+            if (DesktopIconManager.AreDesktopIconsVisible() != desiredIconsVisible)
+            {
+                DesktopIconManager.SetDesktopIconsVisible(desiredIconsVisible);
+            }
 
             // Initialize Auto-Backup Timer
             BackupManager.InitializeAutoBackup();

@@ -29,6 +29,15 @@ namespace Desktop_Frames
         // NEW OPTION: Display OSD on switch
         public static bool DisplayProfileNameOnSwitch { get; set; } = false;
 
+        // True while SwitchToProfile is running. Nested/concurrent switch requests are
+        // refused, and VirtualDesktopAutomationManager skips poll ticks while set —
+        // ReloadFrames pumps messages (DoEvents), so the 500ms poll could otherwise nest
+        // a second switch inside the first.
+        public static bool IsSwitching { get; private set; }
+
+        /// <summary>Raised at the end of a successful profile switch with the new profile name.</summary>
+        public static event Action<string> ProfileChanged;
+
         public static void SetManualBaseProfile(string name) => _manualBaseProfile = name;
 
         private static string _appBaseDir;
@@ -398,14 +407,49 @@ namespace Desktop_Frames
             }
         }
 
-        public static void SwitchToProfile(string profileName)
+        /// <summary>
+        /// Switches the active profile. Returns true when the target is active afterwards
+        /// (switched now, or already active); false when the switch was refused (another
+        /// switch in progress) or failed. Silent switches (virtual-desktop automation)
+        /// skip the wait-window card and the on_enter.bat hook; manual switches are unchanged.
+        /// </summary>
+        public static bool SwitchToProfile(string profileName, bool silent = false)
         {
-            if (string.Equals(_currentProfileName, profileName, StringComparison.OrdinalIgnoreCase)) return;
+            if (string.Equals(_currentProfileName, profileName, StringComparison.OrdinalIgnoreCase)) return true;
+
+            if (IsSwitching)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                    $"SwitchToProfile refused: a switch is already in progress (requested '{profileName}').");
+                return false;
+            }
 
             string targetDir = Path.Combine(_profilesRootDir, profileName);
-            if (!Directory.Exists(targetDir)) return;
+            if (!Directory.Exists(targetDir))
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"SwitchToProfile failed: profile folder not found for '{profileName}'.");
+                return false;
+            }
 
+            IsSwitching = true;
+            try
+            {
             LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, $"SWITCHING PROFILE: {_currentProfileName} -> {profileName}");
+
+            // --- FLUSH BEFORE TEARDOWN ---
+            // End all note edits (saves text + stops their autosave timers) and persist the
+            // outgoing profile's frame data while FrameDataManager still points at the OLD
+            // profile, so no late save can land old-profile data on the new profile's file.
+            try
+            {
+                NoteFramemanager.ForceEndAllEdits();
+                if (FrameDataManager.FrameData != null) FrameDataManager.SaveFrameData();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Error flushing outgoing profile data: {ex.Message}");
+            }
 
             // --- CRITICAL FIX: Close Ghost Windows ---
             // Close auxiliary windows to prevent them from persisting data from the previous profile
@@ -449,9 +493,19 @@ namespace Desktop_Frames
             _currentProfileName = profileName;
             SaveConfigInternal();
 
+            // Known global side effect: the process-wide current directory follows the
+            // active profile (legacy relative-path behavior relies on it). Kept deliberately.
             System.IO.Directory.SetCurrentDirectory(CurrentProfileDir);
+
+            // Repoint AND clear in the same step: once the json path targets the new
+            // profile, no stale in-memory frame data from the old profile may remain saveable.
+            FrameDataManager.FrameData?.Clear();
             FrameDataManager.Initialize();
             SettingsManager.LoadSettings();
+
+            // Reload the auto-organize rules for the new profile and start/stop its engine,
+            // so SaveRules can never write the old profile's rules into the new profile's file.
+            AutoOrganizeManager.ReinitializeForProfile();
 
             // --- CRITICAL FIX: CLEAR BEFORE RELOAD ---
             // 1. Clear the old profile's hidden fences FIRST
@@ -463,7 +517,7 @@ namespace Desktop_Frames
 
 
             // 2. NOW load the new fences (which will re-populate the list correctly)
-            Framemanager.ReloadFrames();
+            Framemanager.ReloadFrames(silent);
             // -----------------------------------------
 
             if (TrayManager.Instance != null)
@@ -477,23 +531,29 @@ namespace Desktop_Frames
                 TrayManager.Instance.UpdateProfilesMenu();
             }
 
-            // --- Hook Trigger ---
-            try
+            // --- Hook Trigger (manual switches only) ---
+            // Deliberately skipped for silent/automated switches: virtual-desktop automation
+            // can switch profiles every few seconds, and launching an arbitrary process per
+            // automated switch is a footgun (process storms, focus stealing).
+            if (!silent)
             {
-                string hookScript = Path.Combine(targetDir, "on_enter.bat");
-                if (File.Exists(hookScript))
+                try
                 {
-                    var psi = new System.Diagnostics.ProcessStartInfo
+                    string hookScript = Path.Combine(targetDir, "on_enter.bat");
+                    if (File.Exists(hookScript))
                     {
-                        FileName = hookScript,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                    };
-                    System.Diagnostics.Process.Start(psi);
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = hookScript,
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                        };
+                        System.Diagnostics.Process.Start(psi);
+                    }
                 }
+                catch { }
             }
-            catch { }
 
             // --- NEW: OSD Popup ---
             if (DisplayProfileNameOnSwitch)
@@ -501,6 +561,25 @@ namespace Desktop_Frames
                 ShowProfileSwitchOSD(profileName);
 
 
+            }
+
+            // Notify listeners (Profile Manager panel's Active badge, etc.) — defensively.
+            try { ProfileChanged?.Invoke(profileName); }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"ProfileChanged handler error: {ex.Message}");
+            }
+
+            return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Profile switch to '{profileName}' failed: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                IsSwitching = false;
             }
         }
         private static void ShowProfileSwitchOSD(string profileName)

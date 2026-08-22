@@ -249,6 +249,21 @@ namespace Desktop_Frames
                     }
                 };
 
+                // Stop the autosave timer when the hosting frame window closes (ReloadFrames /
+                // profile-switch teardown), so an orphaned timer can't fire a save after
+                // FrameDataManager has been repointed at another profile.
+                bool closedHookAttached = false;
+                noteTextBox.Loaded += (s, e) =>
+                {
+                    if (closedHookAttached) return;
+                    var hostWindow = FindParentWindow(noteTextBox);
+                    if (hostWindow != null)
+                    {
+                        closedHookAttached = true;
+                        hostWindow.Closed += (cs, ce) => { try { autoSaveTimer.Stop(); } catch { } };
+                    }
+                };
+
                 // CRITICAL: Store original layout properties to maintain anchoring during editing
                 Thickness originalMargin = noteTextBox.Margin;
                 HorizontalAlignment originalHAlign = noteTextBox.HorizontalAlignment;
@@ -543,6 +558,25 @@ namespace Desktop_Frames
             if (noteTextBox != null && _editModeExits.TryGetValue(noteTextBox, out var exit))
             {
                 try { exit(); } catch { }
+            }
+        }
+
+        /// <summary>Forces every live note out of edit mode (saving its text and stopping its
+        /// autosave timer). Called before a profile switch so no pending autosave can fire
+        /// after FrameDataManager has been repointed at the new profile.</summary>
+        public static void ForceEndAllEdits()
+        {
+            try
+            {
+                foreach (var entry in _editModeExits)
+                {
+                    try { entry.Value?.Invoke(); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameUpdate,
+                    $"Error force-ending note edits: {ex.Message}");
             }
         }
 

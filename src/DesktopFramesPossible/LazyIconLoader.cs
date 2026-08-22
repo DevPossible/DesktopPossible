@@ -42,6 +42,17 @@ namespace Desktop_Frames
             _loadQueue.Enqueue(request);
         }
 
+        /// <summary>Drops all pending requests. Called during ReloadFrames teardown so dead
+        /// requests from closed frames don't delay icons for the freshly created ones.</summary>
+        public static void ClearQueue()
+        {
+            try
+            {
+                while (_loadQueue.TryDequeue(out _)) { }
+            }
+            catch { }
+        }
+
         private static async Task ProcessLoadQueue(CancellationToken token)
         {
             while (!token.IsCancellationRequested)

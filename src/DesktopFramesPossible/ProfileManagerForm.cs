@@ -81,6 +81,17 @@ namespace Desktop_Frames
             // Refresh whenever the panel becomes visible again (e.g. switching to the Profiles tab)
             IsVisibleChanged += (s, e) => { if (e.NewValue is bool visible && visible) RefreshList(); };
 
+            // Refresh the Active badge when a switch happens elsewhere (tray, hotkeys,
+            // virtual-desktop automation) while this panel is showing. Subscribed on Loaded
+            // and unsubscribed on Unloaded so a closed panel doesn't leak via the static event.
+            Action<string> onProfileChanged = _ => Dispatcher.BeginInvoke(new Action(RefreshList));
+            Loaded += (s, e) =>
+            {
+                ProfileManager.ProfileChanged -= onProfileChanged; // guard against double-subscribe
+                ProfileManager.ProfileChanged += onProfileChanged;
+            };
+            Unloaded += (s, e) => ProfileManager.ProfileChanged -= onProfileChanged;
+
             RefreshList();
         }
 

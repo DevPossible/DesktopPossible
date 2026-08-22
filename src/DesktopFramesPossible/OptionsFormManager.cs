@@ -19,6 +19,11 @@ namespace Desktop_Frames
         private static Window _optionsWindow;
         private static Color _userAccentColor;
 
+        /// <summary>True while the Options dialog is open. Virtual-desktop profile switching
+        /// is suspended while set: the dialog edits the CURRENT profile, and a switch under
+        /// it would make Save push the old profile's snapshot into the new profile's options.</summary>
+        public static bool IsOpen { get; private set; }
+
         // Colors for tabs
         private static readonly Color ColorStyle = Color.FromRgb(128, 0, 128); // Purple
         private static readonly Color ColorTools = Color.FromRgb(34, 139, 34); // Green
@@ -112,7 +117,15 @@ namespace Desktop_Frames
                 // Pause Here:
                 AutoOrganizeManager.Pause();
 
-                _optionsWindow.ShowDialog();
+                IsOpen = true;
+                try
+                {
+                    _optionsWindow.ShowDialog();
+                }
+                finally
+                {
+                    IsOpen = false;
+                }
 
                 // Resume Here:
                 AutoOrganizeManager.Resume();

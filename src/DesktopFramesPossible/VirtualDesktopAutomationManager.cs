@@ -107,9 +107,26 @@ namespace Desktop_Frames
                     return;
                 }
 
+                // A switch is already running — this poll can tick re-entrantly, because
+                // ReloadFrames pumps messages (DoEvents). Skip the tick entirely; since
+                // _lastDesktopId is only committed on success, the switch retries next tick.
+                if (ProfileManager.IsSwitching) return;
+
+                // The Options dialog edits the CURRENT profile; switching underneath it would
+                // make Save push the old profile's snapshot into the new profile's options.json.
+                // Suspend VD-driven switching until the dialog closes.
+                if (OptionsFormManager.IsOpen) return;
+
+                // Defer while the user is interacting: Mouse.Captured covers WPF context menus
+                // (and any capture-based interaction); the pressed left button covers DragMove's
+                // modal loop — DispatcherTimer ticks DO pump during DragMove, and destroying the
+                // window being dragged would lose its final position.
+                if (System.Windows.Input.Mouse.Captured != null ||
+                    System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+                    return;
+
                 Guid current = GetCurrentDesktopId();
                 if (current == Guid.Empty || current == _lastDesktopId) return;
-                _lastDesktopId = current;
 
                 string desktopName = GetDesktopDisplayName(current);
                 if (string.IsNullOrWhiteSpace(desktopName)) return;
@@ -123,7 +140,12 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                     $"VirtualDesktopAutomation: now on desktop '{desktopName}' ({current}) -> profile '{target}'.");
 
-                PerformProfileSwitch(target);
+                // Commit the desktop id only after the switch succeeded (already-active counts
+                // as success), so a failed or refused switch is retried on the next tick.
+                if (PerformProfileSwitch(target))
+                {
+                    _lastDesktopId = current;
+                }
             }
             catch (Exception ex)
             {
@@ -236,20 +258,33 @@ namespace Desktop_Frames
             return null;
         }
 
-        /// <summary>Runs on the UI thread. No-op when the target is already active.</summary>
-        private static void PerformProfileSwitch(string profileName)
+        /// <summary>Runs on the UI thread. Returns true when the target profile is active
+        /// afterwards (switched now, or already active); false when the switch was refused
+        /// or failed — failures are logged at Error level, never silently swallowed.</summary>
+        private static bool PerformProfileSwitch(string profileName)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(profileName)) return;
-                if (string.Equals(ProfileManager.CurrentProfileName, profileName, StringComparison.OrdinalIgnoreCase)) return;
+                if (string.IsNullOrWhiteSpace(profileName)) return false;
+                if (string.Equals(ProfileManager.CurrentProfileName, profileName, StringComparison.OrdinalIgnoreCase)) return true;
 
-                ProfileManager.SwitchToProfile(profileName);
+                if (!ProfileManager.SwitchToProfile(profileName, silent: true))
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                        $"VirtualDesktopAutomation: switch to profile '{profileName}' failed or was refused; will retry next tick.");
+                    return false;
+                }
 
                 try { TrayManager.Instance?.UpdateTrayIcon(); } catch { }
                 try { TrayManager.Instance?.UpdateProfilesMenu(); } catch { }
+                return true;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"VirtualDesktopAutomation: switch to profile '{profileName}' threw: {ex.Message}");
+                return false;
+            }
         }
 
         private static IVirtualDesktopManager CreateManager()

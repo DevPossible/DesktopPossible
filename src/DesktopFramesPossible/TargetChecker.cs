@@ -4,11 +4,12 @@ using System.Timers;
 
 namespace Desktop_Frames
 {
-    public class TargetChecker
+    public class TargetChecker : IDisposable
     {
         private readonly Timer _timer;
         private readonly Dictionary<string, (Action checkAction, bool isFolder)> _checkActions;
         private readonly object _lockObject = new object();
+        private bool _disposed;
 
         public TargetChecker(double interval)
         {
@@ -26,6 +27,21 @@ namespace Desktop_Frames
         public void Stop()
         {
             _timer.Stop();
+        }
+
+        /// <summary>Stops and releases the underlying timer. Replaced instances (e.g. during
+        /// ReloadFrames) must be disposed, not just stopped, so they don't accumulate.</summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            try
+            {
+                _timer.Stop();
+                _timer.Elapsed -= OnTimedEvent;
+                _timer.Dispose();
+            }
+            catch { }
         }
 
         public void AddCheckAction(string key, Action checkAction, bool isFolder)

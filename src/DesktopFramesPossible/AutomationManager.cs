@@ -130,7 +130,12 @@ namespace Desktop_Frames
         {
             try
             {
-                ProfileManager.SwitchToProfile(profileName);
+                if (!ProfileManager.SwitchToProfile(profileName))
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                        $"AutomationManager: switch to profile '{profileName}' failed or was refused.");
+                    return;
+                }
 
                 // Update UI safely
                 if (System.Windows.Application.Current != null)

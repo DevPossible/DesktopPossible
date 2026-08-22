@@ -194,6 +194,17 @@ namespace Desktop_Frames
                 // 3. WRITE TO THE ACTIVE SOURCE (Includes AllowAutoReposition now)
                 var optionsData = GetCurrentPropertiesAsObject();
                 string formattedJson = JsonConvert.SerializeObject(optionsData, Formatting.Indented);
+
+                // Skip the disk write when the file already holds exactly this content.
+                // LoadSettings calls SaveSettings unconditionally (to back-fill new keys into
+                // old files) — without this check every profile switch rewrote options.json.
+                try
+                {
+                    if (File.Exists(_activeOptionsPath) && File.ReadAllText(_activeOptionsPath) == formattedJson)
+                        return;
+                }
+                catch { /* unreadable — fall through and write */ }
+
                 File.WriteAllText(_activeOptionsPath, formattedJson);
             }
             catch (Exception ex)

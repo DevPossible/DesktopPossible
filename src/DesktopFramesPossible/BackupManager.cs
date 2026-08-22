@@ -562,6 +562,11 @@ namespace Desktop_Frames
         // Called at startup to schedule the daily auto-backup
         public static void InitializeAutoBackup()
         {
+            // Stop any previous timer first — profile switches re-run this initializer, and
+            // an orphaned timer would keep firing a backup every 5 minutes forever.
+            try { _autoBackupTimer?.Stop(); } catch { }
+            _autoBackupTimer = null;
+
             if (!SettingsManager.EnableAutoBackup) return;
 
             // Check if already ran today FOR THE CURRENT PROFILE
@@ -571,16 +576,19 @@ namespace Desktop_Frames
                 return;
             }
 
-            _autoBackupTimer = new System.Windows.Threading.DispatcherTimer
+            var timer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromMinutes(5)
             };
-            _autoBackupTimer.Tick += (s, e) =>
+            timer.Tick += (s, e) =>
             {
-                _autoBackupTimer.Stop();
+                // Stop THIS timer instance — not whatever the static field points to by now
+                // (a later profile switch may have replaced it).
+                timer.Stop();
                 PerformAutoBackup();
             };
-            _autoBackupTimer.Start();
+            _autoBackupTimer = timer;
+            timer.Start();
             LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, "Auto-backup scheduled for 5 minutes from now.");
         }
 

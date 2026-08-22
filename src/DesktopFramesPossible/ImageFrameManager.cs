@@ -55,6 +55,24 @@ namespace Desktop_Frames
             catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, $"DeleteAssetDir: {ex.Message}"); }
         }
 
+        /// <summary>Clears all per-frame UI state: forgets the content hosts and disposes
+        /// every file watcher. Called during ReloadFrames teardown so hosts/watchers from
+        /// closed frames don't accumulate across profile switches. Asset folders on disk
+        /// are untouched (per-frame DeleteAssetDir handles those).</summary>
+        public static void ResetAll()
+        {
+            try
+            {
+                _hosts.Clear();
+                foreach (var w in _watchers.Values)
+                {
+                    try { w.EnableRaisingEvents = false; w.Dispose(); } catch { }
+                }
+                _watchers.Clear();
+            }
+            catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, $"ImageFramemanager.ResetAll: {ex.Message}"); }
+        }
+
         // ---- Lock -----------------------------------------------------------
 
         // Content lock is shared across frame types — delegate to the central helper.

@@ -38,6 +38,36 @@ namespace Desktop_Frames
             if (SettingsManager.EnableAutoOrganize) Start();
         }
 
+        /// <summary>Re-syncs the engine after a profile switch: reloads the rules from the
+        /// newly active profile (so SaveRules can never write the old profile's rules into
+        /// the new profile's auto_organize.json) and starts/stops the watcher per the new
+        /// profile's EnableAutoOrganize setting.</summary>
+        public static void ReinitializeForProfile()
+        {
+            try
+            {
+                // Reset first: LoadRules leaves the old list in place when the new profile
+                // has no auto_organize.json yet.
+                Rules = new List<OrganizeRule>();
+                LoadRules();
+
+                if (SettingsManager.EnableAutoOrganize)
+                {
+                    if (_watcher == null) Start();
+                    else _watcher.EnableRaisingEvents = true;
+                }
+                else
+                {
+                    Stop();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"Auto-Organize reinitialize for profile failed: {ex.Message}");
+            }
+        }
+
         public static void LoadRules()
         {
             try
