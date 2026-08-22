@@ -118,7 +118,9 @@ namespace Desktop_Frames
                     .FirstOrDefault(p => p.Name.Equals(desktopName, StringComparison.OrdinalIgnoreCase))?.Name
                     ?? DefaultProfileName;
 
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
+                // Info (not Debug): fires only on actual desktop changes — low volume,
+                // and the primary signal when diagnosing switching issues.
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                     $"VirtualDesktopAutomation: now on desktop '{desktopName}' ({current}) -> profile '{target}'.");
 
                 PerformProfileSwitch(target);
@@ -131,16 +133,48 @@ namespace Desktop_Frames
         }
 
         /// <summary>
-        /// The current desktop's Guid, found by probing visible top-level windows with
-        /// the documented IVirtualDesktopManager API: the first window that is both
-        /// tracked (non-empty desktop id) and on the current desktop reveals the
-        /// current desktop's id. Our OWN windows are excluded — the app's frames are
-        /// visible on every desktop but report the desktop they were created on,
-        /// which would freeze the probe on that desktop forever. Returns Guid.Empty
-        /// when undeterminable this tick (e.g. a desktop with no windows on it) —
-        /// callers keep the last known id.
+        /// The current desktop's Guid. Primary source: Explorer's registry value
+        /// CurrentVirtualDesktop (root VirtualDesktops key on current builds, the
+        /// per-session SessionInfo key on older ones) — updated by Explorer on every
+        /// switch and valid even for desktops with no windows on them. Fallback:
+        /// probing visible top-level windows via IVirtualDesktopManager (cannot
+        /// identify empty desktops). Returns Guid.Empty when undeterminable this
+        /// tick — callers keep the last known id.
         /// </summary>
         private static Guid GetCurrentDesktopId()
+        {
+            // 1) Root key (Windows 11 current builds)
+            Guid fromRegistry = ReadCurrentDesktopFromRegistry(VirtualDesktopsKeyPath);
+            if (fromRegistry != Guid.Empty) return fromRegistry;
+
+            // 2) Per-session key (older Windows 10/11 builds)
+            fromRegistry = ReadCurrentDesktopFromRegistry(
+                $@"Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\{System.Diagnostics.Process.GetCurrentProcess().SessionId}\VirtualDesktops");
+            if (fromRegistry != Guid.Empty) return fromRegistry;
+
+            // 3) Window probe (cannot identify desktops that have no windows on them)
+            return ProbeCurrentDesktopFromWindows();
+        }
+
+        private static Guid ReadCurrentDesktopFromRegistry(string keyPath)
+        {
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(keyPath))
+                {
+                    if (key?.GetValue("CurrentVirtualDesktop") is byte[] bytes && bytes.Length >= 16)
+                    {
+                        byte[] slice = new byte[16];
+                        Array.Copy(bytes, 0, slice, 0, 16);
+                        return new Guid(slice);
+                    }
+                }
+            }
+            catch { }
+            return Guid.Empty;
+        }
+
+        private static Guid ProbeCurrentDesktopFromWindows()
         {
             var mgr = _manager;
             if (mgr == null) return Guid.Empty;
