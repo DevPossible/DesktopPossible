@@ -139,19 +139,36 @@ namespace Desktop_Frames
         public static void LoadSettings()
         {
             // 1. DETERMINE SOURCE
+            // Application settings are GLOBAL — profiles hold content (frames, layout),
+            // not options. One MasterOptions.json at the app root serves every profile;
+            // without this, toggles like virtual-desktop auto-switching silently "reset"
+            // on every profile switch (each profile's options.json had its own copy).
+            // Migration: when the master file doesn't exist yet, it is seeded from the
+            // current profile's legacy options.json (the settings the user was running
+            // with) — legacy per-profile files are left in place but no longer read.
             string appRoot = AppDomain.CurrentDomain.BaseDirectory;
             string masterPath = Path.Combine(appRoot, "MasterOptions.json");
             string localPath = ProfileManager.GetProfileFilePath("options.json");
 
-            if (File.Exists(masterPath))
+            if (!File.Exists(masterPath))
             {
-                _activeOptionsPath = masterPath;
-                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.Settings, "MasterOptions.json found. Switched to Global Configuration Mode.");
+                try
+                {
+                    if (File.Exists(localPath))
+                    {
+                        AtomicFile.WriteAllText(masterPath, File.ReadAllText(localPath));
+                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.Settings,
+                            "Migrated per-profile options.json to app-level MasterOptions.json (settings are global; profiles hold content only).");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Settings,
+                        $"Failed to seed MasterOptions.json: {ex.Message}");
+                }
             }
-            else
-            {
-                _activeOptionsPath = localPath;
-            }
+
+            _activeOptionsPath = masterPath;
 
             // 2. READ DATA
             try
@@ -180,7 +197,7 @@ namespace Desktop_Frames
             catch (Exception ex)
             {
                 Console.WriteLine($"Error loading settings: {ex.Message}");
-                if (string.IsNullOrEmpty(_activeOptionsPath)) _activeOptionsPath = localPath;
+                if (string.IsNullOrEmpty(_activeOptionsPath)) _activeOptionsPath = masterPath;
                 SaveSettings();
             }
         }
@@ -535,6 +552,13 @@ namespace Desktop_Frames
         /// </summary>
         public static void BroadcastHotkeysToAllProfiles()
         {
+            // Settings are app-global now (one MasterOptions.json; profiles hold
+            // content + title only — per-frame display lives in frames.json).
+            // Per-profile options.json files are no longer read, so broadcasting
+            // into them is dead work. Kept as a no-op for call-site compatibility.
+            return;
+#pragma warning disable CS0162 // legacy body retained for reference
+
             try
             {
                 string appRoot = AppDomain.CurrentDomain.BaseDirectory;
@@ -587,6 +611,7 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Settings, $"Critical failure broadcasting hotkeys: {ex.Message}");
             }
         }
+
         #endregion
 
     }
