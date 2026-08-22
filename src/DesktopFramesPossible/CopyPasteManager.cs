@@ -327,6 +327,10 @@ namespace Desktop_Frames
                 // Add item to the identified list
                 targetItems.Add(pastedItem);
 
+                // FREE ARRANGE: shared placement — first free grid cell in the target frame
+                // (never keeps a stale cell copied from the source frame; no-op in flow mode)
+                Framemanager.PlaceItemInFreeGrid(targetFrame, targetItems, (object)pastedItem);
+
                 // Save frame data
                 FrameDataManager.SaveFrameData();
 

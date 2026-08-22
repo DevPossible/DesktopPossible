@@ -582,6 +582,71 @@ namespace Desktop_Frames
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
 
+        #region OS Click Mode (Explorer's "Single-click to open an item" Folder Option)
+
+        /// <summary>
+        /// SHELLSTATE (shlobj_core.h): the first DWORD packs the boolean bitfields
+        /// (LSB-first, MSVC layout): bit 0 fShowAllObjects, 1 fShowExtensions,
+        /// 2 fNoConfirmRecycle, 3 fShowSysFiles, 4 fShowCompColor,
+        /// 5 fDoubleClickInWebView, 6 fDesktopHTML, 7 fWin95Classic, ...
+        /// The remaining fields are reserved here only so the struct has the full
+        /// native size for SHGetSetSettings to write into.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SHELLSTATE
+        {
+            public uint Flags1;          // boolean bitfields (see above)
+            public uint dwWin95Unused;
+            public uint uWin95Unused;
+            public int lParamSort;
+            public int iSortDirection;
+            public uint version;
+            public uint uNotUsed;
+            public uint Flags2;          // second bitfield DWORD
+        }
+
+        [DllImport("shell32.dll")]
+        private static extern void SHGetSetSettings(ref SHELLSTATE lpss, uint dwMask, [MarshalAs(UnmanagedType.Bool)] bool bSet);
+
+        private const uint SSF_DOUBLECLICKINWEBVIEW = 0x00000080;
+        private const uint SSF_WIN95CLASSIC = 0x00000400;
+        private const uint SHELLSTATE_DOUBLECLICKINWEBVIEW_BIT = 0x00000020; // bit 5 of Flags1
+        private const uint SHELLSTATE_WIN95CLASSIC_BIT = 0x00000080;         // bit 7 of Flags1
+
+        private static bool _osClickModeRead;
+        private static bool? _osSingleClickToOpen;
+
+        /// <summary>
+        /// Reads Explorer's Folder Options click mode via the documented SHGetSetSettings
+        /// shell API. Single-click mode means fDoubleClickInWebView is FALSE and the shell
+        /// is not in Win95-classic mode (classic always implies double-click).
+        /// Returns: true = OS opens items on single click, false = double click,
+        /// null = the read failed (callers fall back to the app's own setting).
+        /// Cached for the app run — no per-click API cost.
+        /// </summary>
+        public static bool? OsPrefersSingleClickToOpen()
+        {
+            if (_osClickModeRead) return _osSingleClickToOpen;
+            _osClickModeRead = true;
+            try
+            {
+                var state = new SHELLSTATE();
+                SHGetSetSettings(ref state, SSF_DOUBLECLICKINWEBVIEW | SSF_WIN95CLASSIC, false);
+                bool doubleClick = (state.Flags1 & SHELLSTATE_DOUBLECLICKINWEBVIEW_BIT) != 0 ||
+                                   (state.Flags1 & SHELLSTATE_WIN95CLASSIC_BIT) != 0;
+                _osSingleClickToOpen = !doubleClick;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                    $"SHGetSetSettings click-mode read failed, falling back to app setting: {ex.Message}");
+                _osSingleClickToOpen = null;
+            }
+            return _osSingleClickToOpen;
+        }
+
+        #endregion
+
         // --- NEW: Native Shell API for robust icon extraction ---
         // --- UPDATED: Strict Unicode Shell API ---
     

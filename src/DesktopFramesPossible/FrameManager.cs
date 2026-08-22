@@ -1871,6 +1871,8 @@ namespace Desktop_Frames
                             if (activeTab != null)
                             {
                                 var tabItems = activeTab["Items"] as JArray ?? new JArray();
+                                // FREE ARRANGE: shared placement — first free grid cell (no-op in flow mode)
+                                PlaceItemInFreeGrid(actualFrame, tabItems, newItemDict);
                                 tabItems.Add(JObject.FromObject(newItem));
                                 targetList = tabItems; // Mark as target for ordering
                             }
@@ -1878,6 +1880,8 @@ namespace Desktop_Frames
                     }
                     else
                     {
+                        // FREE ARRANGE: shared placement — first free grid cell (no-op in flow mode)
+                        PlaceItemInFreeGrid(actualFrame, actualItems, newItemDict);
                         actualItems.Add(JObject.FromObject(newItem));
                     }
 
@@ -3567,6 +3571,10 @@ namespace Desktop_Frames
                         var items = activeTab["Items"] as JArray ?? new JArray();
                         string tabName = activeTab["TabName"]?.ToString() ?? $"Tab {tabIndex}";
 
+                        // FREE ARRANGE: each tab is its own grid — assign cells to any
+                        // items that lack one (e.g. imported tabs) before rendering.
+                        if (EnsureFreeGridCells(frame, items)) FrameDataManager.SaveFrameData();
+
                         // 4. Sort items by DisplayOrder
                         var sortedItems = items
                             .OfType<JObject>()
@@ -5081,6 +5089,45 @@ namespace Desktop_Frames
                         LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameUpdate, $"Error in Clear Dead Shortcuts: {ex.Message}");
                     }
                 };
+
+                // --- FREE ARRANGE (Data frames only): icons at absolute grid cells. ---
+                // Sits where Portal frames get their View/Sort options.
+                MenuItem miFreeArrange = new MenuItem
+                {
+                    Header = "Free arrange",
+                    IsCheckable = true,
+                    IsChecked = IsFreeArrange(frame)
+                };
+                miFreeArrange.Click += (s, e) =>
+                {
+                    try
+                    {
+                        string liveId = frame.Id?.ToString();
+                        dynamic liveFrame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == liveId) ?? frame;
+                        bool enable = miFreeArrange.IsChecked;
+
+                        UpdateFrameProperty(liveFrame, "FreeArrange", enable ? "true" : "false",
+                            $"Set Free arrange to {enable}");
+
+                        // UpdateFrameProperty replaces the frame object in FrameData — re-resolve.
+                        liveFrame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == liveId) ?? liveFrame;
+
+                        // Re-render: on enable this assigns first-free cells to items without one
+                        // and persists them; on disable the cells are KEPT for a later re-enable.
+                        RefreshFrameUsingFormApproach(win, liveFrame);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
+                            $"Error toggling Free arrange: {ex.Message}");
+                    }
+                };
+                CnMnFramemanager.Items.Add(miFreeArrange);
+                CnMnFramemanager.Opened += (s, e) =>
+                {
+                    dynamic lfArrange = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frame.Id?.ToString());
+                    miFreeArrange.IsChecked = IsFreeArrange(lfArrange ?? frame);
+                };
             }
 
             // 2. Open Folder (Portal Only)
@@ -5845,6 +5892,8 @@ namespace Desktop_Frames
                             newItemDict["AlwaysRunAsAdmin"] = false;
                             newItemDict["DisplayOrder"] = nextDisplayOrder;
 
+                            // FREE ARRANGE: shared placement — first free grid cell (no-op in flow mode)
+                            PlaceItemInFreeGrid(liveFrame, items, newItemDict);
                             items.Add(JObject.FromObject(newItem));
 
                             if (tabsEnabled && Convert.ToInt32(liveFrame.CurrentTab?.ToString() ?? "0") == 0)
@@ -6809,14 +6858,18 @@ namespace Desktop_Frames
             // WrapPanel wpcont = new WrapPanel();
 
             // --- FIX START ---
-            WrapPanel wpcont = new WrapPanel
+            // FreeGridPanel IS a WrapPanel: identical flow layout normally, absolute grid
+            // placement when the frame's "Free arrange" toggle is on (Data frames only).
+            FreeGridPanel wpcont = new FreeGridPanel
             {
                 Orientation = Orientation.Horizontal,
                 ItemWidth = double.NaN,
                 ItemHeight = double.NaN,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0)
+                Margin = new Thickness(0),
+                FreeArrange = IsFreeArrange(frame),
+                CellWidth = GetFreeArrangeCellWidth(frame)
             };
 
             // CRITICAL: Tag the panel with the frame ID so AddIcon can find settings
@@ -6956,6 +7009,10 @@ namespace Desktop_Frames
 
                     if (items != null)
                     {
+                        // FREE ARRANGE: items without a persisted cell (e.g. pre-feature data)
+                        // are auto-placed first-free row-major at load and persisted.
+                        if (EnsureFreeGridCells(frame, items)) FrameDataManager.SaveFrameData();
+
                         // Sort
                         var sortedItems = items.OfType<JObject>()
                             .OrderBy(item => item["DisplayOrder"]?.Type == JTokenType.Integer ? item["DisplayOrder"].Value<int>() : 0)
@@ -7105,6 +7162,23 @@ namespace Desktop_Frames
             win.Drop += (sender, e) =>
             {
                 e.Handled = true;
+
+                // OLE drag that started from THIS frame and was dropped back on it:
+                // no-op — returning None keeps the source item and nothing is added.
+                if (IconDragDropManager.IsOleDragFromFrame(frame.Id?.ToString()))
+                {
+                    e.Effects = DragDropEffects.None;
+                    return;
+                }
+
+                // OLE drag from ANOTHER of our frames: default to None (item not taken).
+                // Only a successful add below upgrades this to Move, which makes the source
+                // frame remove its item when DoDragDrop returns — a clean cross-frame move
+                // with no duplicates. Locked frames / failed adds leave None (item stays).
+                if (IconDragDropManager.IsOleDragInProgress)
+                {
+                    e.Effects = DragDropEffects.None;
+                }
 
                 // Image frames: the dropped image becomes THE image (honours the lock).
                 if (frame.ItemsType?.ToString() == "Image")
@@ -7331,7 +7405,16 @@ namespace Desktop_Frames
 
                                 int nextDisplayOrder = items.Count;
                                 newItemDict["DisplayOrder"] = nextDisplayOrder;
+                                // FREE ARRANGE: shared placement — first free grid cell (no-op in flow mode)
+                                PlaceItemInFreeGrid(freshFrame ?? frame, items, newItemDict);
                                 items.Add(JObject.FromObject(newItem));
+
+                                // Cross-frame OLE drag: the item is now ours — report Move so
+                                // the source frame removes its copy (no duplicates).
+                                if (IconDragDropManager.IsOleDragInProgress)
+                                {
+                                    e.Effects = DragDropEffects.Move;
+                                }
 
                                 if (!string.IsNullOrEmpty(frameId))
                                 {
@@ -7467,6 +7550,13 @@ namespace Desktop_Frames
                     if (frame.ItemsType?.ToString() == "Portal" && portalCopiedCount > 0)
                     {
                         ShowPortalToast(win, $"Copied {portalCopiedCount} item{(portalCopiedCount > 1 ? "s" : "")}");
+
+                        // Cross-frame OLE drag into a portal: the item now lives in the
+                        // portal's folder — report Move so the source frame removes its item.
+                        if (IconDragDropManager.IsOleDragInProgress)
+                        {
+                            e.Effects = DragDropEffects.Move;
+                        }
                     }
 
                     FrameDataManager.SaveFrameData();
@@ -7702,12 +7792,42 @@ namespace Desktop_Frames
                 try { disableShadow = settings.DisableTextShadow?.ToString().ToLower() == "true"; } catch { }
             }
 
+            // FREE ARRANGE: keep the panel's mode/cell size in sync with the frame settings.
+            // AddIcon runs on every render path, so this catches customization changes
+            // (icon spacing) without touching each refresh call site.
+            if (wpcont is FreeGridPanel freeGridPanel)
+            {
+                try
+                {
+                    if ((object)settings != null)
+                    {
+                        freeGridPanel.FreeArrange = IsFreeArrange(settings);
+                        freeGridPanel.CellWidth = GetFreeArrangeCellWidth(settings);
+                    }
+                }
+                catch { }
+            }
+
             // --- STEP 3: Create UI Elements ---
             StackPanel sp = new StackPanel
             {
                 Margin = new Thickness(iconSpacing),
                 Width = 60 + (iconSpacing * 2)
             };
+
+            // FREE ARRANGE: mirror the item's persisted grid cell onto the visual so
+            // FreeGridPanel can place it (harmless no-op in flow mode / for Portal items).
+            try
+            {
+                int gridCol = -1, gridRow = -1;
+                if (iconDict.ContainsKey(GridLayout.ColKey) &&
+                    int.TryParse(iconDict[GridLayout.ColKey]?.ToString(), out int parsedCol)) gridCol = parsedCol;
+                if (iconDict.ContainsKey(GridLayout.RowKey) &&
+                    int.TryParse(iconDict[GridLayout.RowKey]?.ToString(), out int parsedRow)) gridRow = parsedRow;
+                FreeGridPanel.SetGridCol(sp, gridCol);
+                FreeGridPanel.SetGridRow(sp, gridRow);
+            }
+            catch { }
 
             System.Windows.Controls.Image ico = new System.Windows.Controls.Image
             {
@@ -8078,7 +8198,111 @@ namespace Desktop_Frames
             wpcont.Children.Add(sp);
         }
 
+        #region Free Arrange (grid placement)
 
+        /// <summary>
+        /// True when this frame renders icons at absolute grid cells ("Free arrange").
+        /// Data frames only; absent/false property = classic WrapPanel flow (backward compatible).
+        /// </summary>
+        public static bool IsFreeArrange(dynamic frame)
+        {
+            try
+            {
+                return frame?.ItemsType?.ToString() == "Data" &&
+                       frame?.FreeArrange?.ToString().ToLower() == "true";
+            }
+            catch { return false; } // ExpandoObject without the member throws — treat as off
+        }
+
+        /// <summary>
+        /// Pixel width of one grid cell for this frame: the exact slot a WrapPanel cell
+        /// occupies — icon StackPanel width (60 + 2*spacing) plus its left/right margins
+        /// (spacing each) — so free-arrange visuals match the flow layout 1:1.
+        /// </summary>
+        public static double GetFreeArrangeCellWidth(dynamic frame)
+        {
+            int iconSpacing = 5;
+            try { iconSpacing = Convert.ToInt32(frame.IconSpacing?.ToString() ?? "5"); } catch { }
+            return 60 + (iconSpacing * 4);
+        }
+
+        /// <summary>
+        /// Current visible column count for the frame: floor(available width / cell width), min 1.
+        /// Prefers the live panel; falls back to the persisted frame width when no window exists
+        /// (e.g. rule-engine inserts while the frame is hidden).
+        /// </summary>
+        public static int GetFreeArrangeColumns(dynamic frame)
+        {
+            double cellWidth = GetFreeArrangeCellWidth(frame);
+
+            try
+            {
+                string frameId = frame.Id?.ToString();
+                if (!string.IsNullOrEmpty(frameId) && System.Windows.Application.Current != null)
+                {
+                    var win = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>()
+                        .FirstOrDefault(w => w.Tag?.ToString() == frameId);
+                    if (win != null && FindWrapPanel(win) is FreeGridPanel panel && panel.ActualWidth > 0)
+                        return GridLayout.ColumnsForWidth(panel.ActualWidth, cellWidth);
+                }
+            }
+            catch { }
+
+            double frameWidth = 230;
+            try { frameWidth = Convert.ToDouble(frame.Width?.ToString() ?? "230"); } catch { }
+            return GridLayout.ColumnsForWidth(frameWidth - 10, cellWidth); // ~10px frame chrome
+        }
+
+        /// <summary>
+        /// THE shared placement routine: stamps an item being added to a free-arrange frame's
+        /// item list with the first free grid cell (row-major). No-op for flow-layout frames.
+        /// EVERY add path must call this — desktop drops, URL drops, spacers, paste,
+        /// cross-frame moves, imports, and any rule-engine insert — so an item can never
+        /// land on an occupied cell. Callers persist via their existing SaveFrameData call.
+        /// </summary>
+        /// <param name="frame">The destination frame.</param>
+        /// <param name="targetList">The destination item list (main Items or a tab's Items).</param>
+        /// <param name="newItem">The item: an IDictionary (new, not yet added) or a JObject (already in the list).</param>
+        public static void PlaceItemInFreeGrid(dynamic frame, JArray targetList, object newItem)
+        {
+            try
+            {
+                if (targetList == null || newItem == null || !IsFreeArrange(frame)) return;
+
+                int columns = GetFreeArrangeColumns(frame);
+                if (newItem is JObject jItem)
+                    GridLayout.PlaceInFirstFreeCell(targetList, jItem, columns);
+                else if (newItem is IDictionary<string, object> dictItem)
+                    GridLayout.PlaceInFirstFreeCell(targetList, dictItem, columns);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
+                    $"Error placing item in free grid: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Assigns first-free cells (row-major, in DisplayOrder) to any item missing a valid
+        /// unique cell. Returns true when something changed — the caller must SaveFrameData.
+        /// No-op for flow-layout frames.
+        /// </summary>
+        public static bool EnsureFreeGridCells(dynamic frame, JArray items)
+        {
+            try
+            {
+                if (items == null || !IsFreeArrange(frame)) return false;
+                return GridLayout.EnsureCells(items, GetFreeArrangeColumns(frame));
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
+                    $"Error ensuring free grid cells: {ex.Message}");
+                return false;
+            }
+        }
+
+        #endregion
 
         private static void CreateNewFrame(string title, string itemsType, double x = 20, double y = 20, string customColor = null, string customLaunchEffect = null)
         {
@@ -8135,6 +8359,7 @@ namespace Desktop_Frames
             newframeDict["ColumnWidths"] = "";
             newframeDict["DetailsSort"] = "";
             newframeDict["DetailsGroup"] = "None";
+            newframeDict["FreeArrange"] = "false"; // Data frames: absolute grid icon placement toggle
             newframeDict["CustomTint"] = "";
             newframeDict["DetailsStriped"] = ""; // "" = follow global, "On"/"Off" = per-frame override
             // Content lock: only Portals locked by default (a drop into a portal copies real files);
@@ -8707,6 +8932,15 @@ namespace Desktop_Frames
 
                 if (items != null)
                 {
+                    // FREE ARRANGE: sync the panel mode and make sure every item has a cell
+                    // (this refresh runs after toggling the mode and after item adds/moves).
+                    if (wrapPanel is FreeGridPanel freeGridPanel)
+                    {
+                        freeGridPanel.FreeArrange = IsFreeArrange(frame);
+                        freeGridPanel.CellWidth = GetFreeArrangeCellWidth(frame);
+                    }
+                    if (EnsureFreeGridCells(frame, items)) FrameDataManager.SaveFrameData();
+
                     // Sort items by DisplayOrder and add them (SAME AS FORM)
                     var sortedItems = items
                         .OfType<JObject>()
@@ -9121,55 +9355,24 @@ namespace Desktop_Frames
                 isFolder = true;
             }
 
-            // --- NAMED LOCAL FUNCTIONS FOR EVENTS ---
-            void MouseDownHandler(object sender, MouseButtonEventArgs e)
+            // --- CLICK/DRAG STATE MACHINE (down -> track -> up) ---
+            // Icons are movable by plain dragging, so a bare mouse-DOWN can never launch.
+            // The decision happens on mouse-UP: a gesture that never exceeded the system
+            // drag threshold is a click (launch per the OS single/double-click mode); one
+            // that crossed it is a drag (start the move routine, never launch).
+            bool pressPending = false;                     // left button is down, still within the threshold
+            System.Windows.Point pressPoint = default;     // press position relative to the icon
+            int pressClickCount = 1;                       // ClickCount at press time (double-click detection)
+
+            // Launch validation + decision, evaluated at mouse-UP time (clean click only).
+            void TryLaunch(int clickCountAtPress)
             {
-                if (e.ChangedButton != MouseButton.Left) return;
+                // OS Folder Options ("Single-click to open an item") wins; the app's own
+                // Single Click to Launch setting is only the fallback when the read fails.
+                bool singleClickToLaunch = Utility.OsPrefersSingleClickToOpen() ?? SettingsManager.SingleClickToLaunch;
 
-                // Runtime Correction for Extension Mismatch
-                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-                {
-                    if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string potentialUrlPath = System.IO.Path.ChangeExtension(path, ".url");
-                        if (System.IO.File.Exists(potentialUrlPath))
-                        {
-                            path = potentialUrlPath;
-                        }
-                    }
-                }
-
-                // CTRL + CLICK LOGIC
-                if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
-                {
-                    NonActivatingWindow win = FindVisualParent<NonActivatingWindow>(sp);
-                    string frameId = win?.Tag?.ToString();
-                    dynamic frame = null;
-                    if (!string.IsNullOrEmpty(frameId))
-                        frame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId);
-
-                    if (frame != null && frame.ItemsType?.ToString() == "Portal")
-                    {
-                        if (isFolder)
-                        {
-                            NavigatePortalFrame(frame, path);
-                            e.Handled = true;
-                            return;
-                        }
-                        else
-                        {
-                            e.Handled = true;
-                            return;
-                        }
-                    }
-
-                    System.Windows.Point mousePosition = e.GetPosition(sp);
-                    IconDragDropManager.StartIconDrag(sp, mousePosition);
-                    e.Handled = true;
+                if (!((singleClickToLaunch && clickCountAtPress == 1) || (!singleClickToLaunch && clickCountAtPress == 2)))
                     return;
-                }
-
-                bool singleClickToLaunch = SettingsManager.SingleClickToLaunch;
 
                 try
                 {
@@ -9217,16 +9420,66 @@ namespace Desktop_Frames
 
                     if (!targetExists && !isStoreApp) return;
 
-                    if ((singleClickToLaunch && e.ClickCount == 1) || (!singleClickToLaunch && e.ClickCount == 2))
-                    {
-                        LaunchItem(sp, path, isFolder, arguments);
-                        e.Handled = true;
-                    }
+                    LaunchItem(sp, path, isFolder, arguments);
                 }
                 catch (Exception ex)
                 {
                     LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Error checking target existence: {ex.Message}");
                 }
+            }
+
+            void MouseDownHandler(object sender, MouseButtonEventArgs e)
+            {
+                if (e.ChangedButton != MouseButton.Left) return;
+
+                // Runtime Correction for Extension Mismatch
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                {
+                    if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string potentialUrlPath = System.IO.Path.ChangeExtension(path, ".url");
+                        if (System.IO.File.Exists(potentialUrlPath))
+                        {
+                            path = potentialUrlPath;
+                        }
+                    }
+                }
+
+                // CTRL + CLICK LOGIC (unchanged: portal navigation / immediate move)
+                if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+                {
+                    NonActivatingWindow win = FindVisualParent<NonActivatingWindow>(sp);
+                    string frameId = win?.Tag?.ToString();
+                    dynamic frame = null;
+                    if (!string.IsNullOrEmpty(frameId))
+                        frame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId);
+
+                    if (frame != null && frame.ItemsType?.ToString() == "Portal")
+                    {
+                        if (isFolder)
+                        {
+                            NavigatePortalFrame(frame, path);
+                            e.Handled = true;
+                            return;
+                        }
+                        else
+                        {
+                            e.Handled = true;
+                            return;
+                        }
+                    }
+
+                    System.Windows.Point mousePosition = e.GetPosition(sp);
+                    IconDragDropManager.StartIconDrag(sp, mousePosition);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Plain left press: arm the state machine. Launch (if any) happens on UP.
+                pressPending = true;
+                pressPoint = e.GetPosition(sp);
+                pressClickCount = e.ClickCount;
+                sp.CaptureMouse(); // keep move/up events even if the cursor leaves the icon
             }
 
             void MouseMoveHandler(object sender, MouseEventArgs e)
@@ -9239,6 +9492,23 @@ namespace Desktop_Frames
                         IconDragDropManager.HandleDragMove(screenPosition);
                     }
                     catch { }
+                    return;
+                }
+
+                // Threshold check: once the gesture exceeds the system drag distance it is
+                // a MOVE — the pending click is dead and the drag routine takes over.
+                if (pressPending && e.LeftButton == MouseButtonState.Pressed)
+                {
+                    System.Windows.Point pos = e.GetPosition(sp);
+                    if (Math.Abs(pos.X - pressPoint.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                        Math.Abs(pos.Y - pressPoint.Y) > SystemParameters.MinimumVerticalDragDistance)
+                    {
+                        pressPending = false;
+                        try { sp.ReleaseMouseCapture(); } catch { }
+                        // StartIconDrag captures the mouse itself and safely no-ops for
+                        // frame types that don't support moving (e.g. Portal items).
+                        IconDragDropManager.StartIconDrag(sp, pressPoint);
+                    }
                 }
             }
 
@@ -9261,7 +9531,23 @@ namespace Desktop_Frames
                     {
                         IconDragDropManager.CancelDrag();
                     }
+                    return;
                 }
+
+                // Clean click (threshold never crossed): resolve the launch decision now.
+                if (pressPending)
+                {
+                    pressPending = false;
+                    try { sp.ReleaseMouseCapture(); } catch { }
+                    TryLaunch(pressClickCount);
+                    e.Handled = true;
+                }
+            }
+
+            void LostCaptureHandler(object sender, MouseEventArgs e)
+            {
+                // Capture stolen (e.g. a context menu opened): the pending click is void.
+                pressPending = false;
             }
 
             void KeyUpHandler(object sender, KeyEventArgs e)
@@ -9280,12 +9566,14 @@ namespace Desktop_Frames
             sp.RemoveHandler(UIElement.MouseMoveEvent, new MouseEventHandler(MouseMoveHandler));
             sp.RemoveHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler(MouseUpHandler));
             sp.RemoveHandler(UIElement.KeyUpEvent, new KeyEventHandler(KeyUpHandler));
+            sp.RemoveHandler(UIElement.LostMouseCaptureEvent, new MouseEventHandler(LostCaptureHandler));
 
             // --- ATTACH FRESH HANDLERS ---
             sp.MouseLeftButtonDown += MouseDownHandler;
             sp.MouseMove += MouseMoveHandler;
             sp.MouseLeftButtonUp += MouseUpHandler;
             sp.KeyUp += KeyUpHandler;
+            sp.LostMouseCapture += LostCaptureHandler;
         }
 
 

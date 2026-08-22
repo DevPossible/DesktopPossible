@@ -546,6 +546,10 @@ namespace Desktop_Frames
                 sourceItems.Remove(itemToMove);
                 destItems.Add(itemToMove);
 
+                // FREE ARRANGE: shared placement — first free grid cell in the destination
+                // frame (never keeps the cell from the source frame; no-op in flow mode)
+                Framemanager.PlaceItemInFreeGrid(targetFrame, destItems, (object)itemToMove);
+
                 // Save changes
                 FrameDataManager.SaveFrameData();
 
