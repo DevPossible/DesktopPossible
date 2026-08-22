@@ -5606,7 +5606,12 @@ namespace Desktop_Frames
             };
 
             // --- NEW: Auto-Hide Interaction Hook ---
-            win.PreviewMouseDown += (s, e) => { if (SettingsManager.AutoResetHideTimer) ResetAutoHideTimer(); };
+            win.PreviewMouseDown += (s, e) =>
+            {
+                if (SettingsManager.AutoResetHideTimer) ResetAutoHideTimer();
+                // Edit Mode: a click raises the frame to the top of the frame band (never above apps).
+                if (e.ChangedButton == MouseButton.Left) FrameZOrder.BringToFront(win);
+            };
             win.PreviewMouseWheel += (s, e) => { if (SettingsManager.AutoResetHideTimer) ResetAutoHideTimer(); };
 
             // --- NEW: Smart CTRL Overlay Engine (Event-Driven, Zero Polling) ---
@@ -7913,7 +7918,7 @@ namespace Desktop_Frames
             }
             win.Show();
             SendFrameToBottom(win); // desktop furniture: start behind the user's apps
-            TextFramemanager.AfterShown(win, frame); // text frames sink below everything else
+            FrameZOrder.AfterShown(win, frame); // restack the band: text frames lowest, content frames by ZOrder
 
 
 

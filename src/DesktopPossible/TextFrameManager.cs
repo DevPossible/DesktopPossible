@@ -313,31 +313,9 @@ namespace Desktop_Frames
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_LAYERED = 0x00080000;
-        private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
-        private static readonly IntPtr HWND_BOTTOM = new(1);
 
         [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
         [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-        [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-        /// <summary>
-        /// Called right after any frame window is shown: a Text frame gets its edit-mode
-        /// state and sinks to the bottom; any other frame pushes every Text frame back
-        /// underneath it (new frames start at HWND_BOTTOM themselves).
-        /// </summary>
-        public static void AfterShown(NonActivatingWindow win, dynamic frame)
-        {
-            if (IsTextFrame(frame))
-            {
-                ApplyEditMode(win, frame, SettingsManager.FrameEditMode);
-                Refresh(frame); // first render ran before the window existed: size it to the text now
-                PushToBottom(win);
-            }
-            else
-            {
-                PushAllToBottom();
-            }
-        }
 
         /// <summary>
         /// Edit Mode on: normal chrome (title bar, border, background) and a solid window so it
@@ -379,27 +357,6 @@ namespace Desktop_Frames
             }
         }
 
-        public static void PushToBottom(Window win)
-        {
-            try
-            {
-                var hwnd = new WindowInteropHelper(win).Handle;
-                if (hwnd != IntPtr.Zero) SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-            catch { }
-        }
-
-        /// <summary>Every Text frame window back to the very bottom of the Z-order.</summary>
-        public static void PushAllToBottom()
-        {
-            try
-            {
-                if (Application.Current == null) return;
-                foreach (var win in Application.Current.Windows.OfType<NonActivatingWindow>())
-                    if (IsTextFrame(LiveFrame(win.Tag?.ToString()))) PushToBottom(win);
-            }
-            catch { }
-        }
 
         #endregion
 
