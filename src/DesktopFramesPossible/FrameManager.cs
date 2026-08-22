@@ -8237,16 +8237,22 @@ namespace Desktop_Frames
 
         /// <summary>
         /// True when this frame renders icons at absolute grid cells ("Free arrange").
-        /// Data frames only; absent/false property = classic WrapPanel flow (backward compatible).
+        /// Data frames only. DEFAULT ON: a Data frame is a grid you can place icons
+        /// anywhere in; the classic auto-flow is the opt-out (FreeArrange == "false"
+        /// via the context-menu toggle). Existing frames migrate losslessly — items
+        /// without cells are assigned row-major in display order at first render,
+        /// which reproduces the flow layout exactly.
         /// </summary>
         public static bool IsFreeArrange(dynamic frame)
         {
             try
             {
-                return frame?.ItemsType?.ToString() == "Data" &&
-                       frame?.FreeArrange?.ToString().ToLower() == "true";
+                if (frame?.ItemsType?.ToString() != "Data") return false;
+                string value = null;
+                try { value = frame?.FreeArrange?.ToString(); } catch { }
+                return !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
             }
-            catch { return false; } // ExpandoObject without the member throws — treat as off
+            catch { return false; }
         }
 
         /// <summary>
