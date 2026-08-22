@@ -36,6 +36,21 @@ namespace Desktop_Frames
             _loaderTask = Task.Run(() => ProcessLoadQueue(_cts.Token));
         }
 
+        /// <summary>Cancels the background loader task (e.g. on app shutdown). Safe to call
+        /// when the loader was never started; Start() can be called again afterwards.</summary>
+        public static void Stop()
+        {
+            if (!_isRunning) return;
+            _isRunning = false;
+            try
+            {
+                _cts?.Cancel();
+                _cts?.Dispose();
+            }
+            catch { }
+            _cts = null;
+        }
+
         public static void RequestIcon(IconLoadRequest request)
         {
             if (string.IsNullOrEmpty(request.FilePath) || request.TargetImage == null) return;
@@ -83,14 +98,32 @@ namespace Desktop_Frames
                             await Application.Current.Dispatcher.InvokeAsync(() =>
                             {
                                 request.TargetImage.Source = icon;
-                                request.OnLoaded?.Invoke();
+                                // A throwing OnLoaded callback must not take down the loader loop.
+                                try { request.OnLoaded?.Invoke(); }
+                                catch (Exception cbEx)
+                                {
+                                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
+                                        $"LazyIconLoader OnLoaded callback failed for {request.FilePath}: {cbEx.Message}");
+                                }
                             }, System.Windows.Threading.DispatcherPriority.Background);
                         }
                         processed++;
                     }
                     await Task.Delay(processed > 0 ? 30 : 100, token);
                 }
-                catch { break; }
+                catch (OperationCanceledException)
+                {
+                    break; // shutdown/Stop requested
+                }
+                catch (Exception ex)
+                {
+                    // BUG FIX: a single stray exception used to kill the loader for the whole
+                    // session (every icon stayed a placeholder, nothing logged). Log and keep going.
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
+                        $"LazyIconLoader queue error (loader continues): {ex.Message}");
+                    try { await Task.Delay(250, token); }
+                    catch (OperationCanceledException) { break; }
+                }
             }
         }
     }

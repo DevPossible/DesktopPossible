@@ -136,7 +136,13 @@ namespace Desktop_Frames
                     if (p != null && File.Exists(p)) File.Delete(p);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Log (don't swallow): a locked/undeletable asset silently accumulating in the
+                // per-frame folder should at least leave a trace.
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                    $"ImageFrame: failed to delete copied image asset: {ex.Message}");
+            }
         }
 
         private static bool IsImageFile(string path)

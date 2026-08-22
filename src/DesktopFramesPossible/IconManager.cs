@@ -37,6 +37,74 @@ namespace Desktop_Frames
         // Icon cache for performance optimization - moved from Framemanager
         // FIX: Made case-insensitive to survive FileSystemWatcher string mutations
         private static readonly Dictionary<string, ImageSource> iconCache = new Dictionary<string, ImageSource>(StringComparer.OrdinalIgnoreCase);
+
+        // Cache cap: the cache is otherwise unbounded (portal navigation accumulates per-file
+        // entries for the app lifetime). Policy: simple clear-and-log when the cap is exceeded —
+        // chosen over LRU because a full clear is O(1), self-heals immediately (icons lazily
+        // re-extract), and avoids per-hit bookkeeping on the hot path.
+        public const int MaxCacheEntries = 2000;
+
+        // --- Missing-file placeholder singletons ---
+        // One shared frozen instance per placeholder image so callers can detect "this is just
+        // the X placeholder" by reference (the old `ico.Source != new placeholder` check was
+        // always true) and so the placeholder is NEVER cached — a cached placeholder used to
+        // survive a drive being re-plugged (cache poisoning: the X icon stuck until restart).
+        // Lazily created (pack URIs need the WPF resource system, unavailable in headless tests).
+        private static readonly object _placeholderLock = new object();
+        private static ImageSource _missingFilePlaceholder;
+        private static ImageSource _missingFolderPlaceholder;
+
+        public static ImageSource MissingFilePlaceholder
+        {
+            get
+            {
+                lock (_placeholderLock)
+                {
+                    return _missingFilePlaceholder ??= CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
+                }
+            }
+        }
+
+        public static ImageSource MissingFolderPlaceholder
+        {
+            get
+            {
+                lock (_placeholderLock)
+                {
+                    return _missingFolderPlaceholder ??= CreateFrozenBitmap("pack://application:,,,/Resources/folder-WhiteX.png");
+                }
+            }
+        }
+
+        /// <summary>True when the source is one of the shared "missing" X placeholders.</summary>
+        public static bool IsPlaceholderIcon(ImageSource source)
+        {
+            if (source == null) return false;
+            lock (_placeholderLock)
+            {
+                return ReferenceEquals(source, _missingFilePlaceholder) ||
+                       ReferenceEquals(source, _missingFolderPlaceholder);
+            }
+        }
+
+        /// <summary>
+        /// Single write path into the icon cache: enforces the size cap and refuses to cache
+        /// the "missing" X placeholders (see MissingFilePlaceholder).
+        /// </summary>
+        public static void CacheIcon(string filePath, ImageSource icon)
+        {
+            if (string.IsNullOrEmpty(filePath) || icon == null || IsPlaceholderIcon(icon)) return;
+            lock (iconCache)
+            {
+                if (!iconCache.ContainsKey(filePath) && iconCache.Count >= MaxCacheEntries)
+                {
+                    iconCache.Clear();
+                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
+                        $"Icon cache exceeded {MaxCacheEntries} entries - cleared (icons re-extract lazily)");
+                }
+                iconCache[filePath] = icon;
+            }
+        }
         #endregion
 
         #region Public Properties - Cache Access
@@ -142,7 +210,7 @@ namespace Desktop_Frames
                 }
                 else
                 {
-                    ico.Source = CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
+                    ico.Source = MissingFilePlaceholder;
 
                     LazyIconLoader.RequestIcon(new IconLoadRequest
                     {
@@ -195,20 +263,34 @@ namespace Desktop_Frames
                 if (fileLower.Contains("spotify"))
                 {
                     var spotIcon = CreateFrozenBitmap("pack://application:,,,/Resources/spotify-White.png");
-                    lock (iconCache) { iconCache[filePath] = spotIcon; }
+                    CacheIcon(filePath, spotIcon);
                     return spotIcon;
                 }
                 if (fileLower.Contains("steam") && isShortcut)
                 {
                     var steamIcon = CreateFrozenBitmap("pack://application:,,,/Resources/steam-White.png");
-                    lock (iconCache) { iconCache[filePath] = steamIcon; }
+                    CacheIcon(filePath, steamIcon);
                     return steamIcon;
                 }
 
                 // Check cache first (Thread-safe)
                 lock (iconCache)
                 {
-                    if (iconCache.ContainsKey(filePath)) return iconCache[filePath];
+                    if (iconCache.TryGetValue(filePath, out var cachedHit))
+                    {
+                        // A cached X placeholder is a poisoned entry (e.g. the drive was
+                        // unplugged when the icon was first requested); if the file is back,
+                        // drop the entry and re-extract instead of returning the X forever.
+                        if (IsPlaceholderIcon(cachedHit) &&
+                            (System.IO.File.Exists(filePath) || Directory.Exists(filePath)))
+                        {
+                            iconCache.Remove(filePath);
+                        }
+                        else
+                        {
+                            return cachedHit;
+                        }
+                    }
                 }
 
                 ImageSource extractedIcon = null;
@@ -298,22 +380,16 @@ namespace Desktop_Frames
                     }
                 }
 
-                // Cache and return (Thread-safe)
-                if (extractedIcon != null)
-                {
-                    lock (iconCache)
-                    {
-                        iconCache[filePath] = extractedIcon;
-                    }
-                }
+                // Cache and return (thread-safe; placeholders are never cached — see CacheIcon)
+                CacheIcon(filePath, extractedIcon);
                 return extractedIcon;
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling, $"Error extracting icon for {filePath}: {ex.Message}");
-                var fallbackIcon = CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
-                lock (iconCache) { iconCache[filePath] = fallbackIcon; }
-                return fallbackIcon;
+                // Deliberately NOT cached: a transient failure would otherwise pin the X
+                // placeholder for the whole session (cache poisoning).
+                return MissingFilePlaceholder;
             }
         }
 
@@ -335,12 +411,14 @@ namespace Desktop_Frames
 
                 if (!System.IO.File.Exists(filePath) && !Directory.Exists(filePath))
                 {
-                    // File is missing/deleted
-                    var missingIcon = CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
-                    if (ico.Source != missingIcon)
+                    // File is missing/deleted. Show the SHARED placeholder (reference comparison
+                    // now works — a fresh bitmap each tick made `Source != missingIcon` always
+                    // true) and do NOT cache it: a cached placeholder used to stick until app
+                    // restart even after the drive/file came back.
+                    var missingIcon = MissingFilePlaceholder;
+                    if (!ReferenceEquals(ico.Source, missingIcon))
                     {
                         ico.Source = missingIcon;
-                        lock (iconCache) { iconCache[filePath] = missingIcon; }
                     }
                     return;
                 }
@@ -353,6 +431,14 @@ namespace Desktop_Frames
                     {
                         cachedIcon = cached;
                     }
+                }
+
+                // A cached X placeholder while the file exists means the cache was poisoned
+                // (legacy entry) — treat it as a miss and re-extract.
+                if (IsPlaceholderIcon(cachedIcon))
+                {
+                    lock (iconCache) { iconCache.Remove(filePath); }
+                    cachedIcon = null;
                 }
 
                 if (cachedIcon != null)
@@ -402,7 +488,7 @@ namespace Desktop_Frames
                             }
 
                             ApplyPostCreationIconOverride(ico, filePath);
-                            lock (iconCache) { iconCache[filePath] = ico.Source; }
+                            CacheIcon(filePath, ico.Source);
                         }
                     });
                 }
@@ -493,13 +579,13 @@ namespace Desktop_Frames
                 if (targetToScan.IndexOf("spotify:", StringComparison.OrdinalIgnoreCase) >= 0 || targetToScan.IndexOf("spotify.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     ico.Source = CreateFrozenBitmap("pack://application:,,,/Resources/spotify-White.png");
-                    lock (iconCache) { iconCache[filePath] = ico.Source; } // Poison the cache safely
+                    CacheIcon(filePath, ico.Source);
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling, $"Post-Creation Override: Forced Spotify icon for {filePath}");
                 }
                 else if (targetToScan.IndexOf("steam://", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     ico.Source = CreateFrozenBitmap("pack://application:,,,/Resources/steam-White.png");
-                    lock (iconCache) { iconCache[filePath] = ico.Source; } // Poison the cache safely
+                    CacheIcon(filePath, ico.Source);
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling, $"Post-Creation Override: Forced Steam icon for {filePath}");
                 }
             }
@@ -538,13 +624,13 @@ namespace Desktop_Frames
                 }
 
                 // Final fallback
-                return new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
+                return MissingFilePlaceholder;
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
                     $"Error extracting shortcut icon for {filePath}: {ex.Message}");
-                return new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
+                return MissingFilePlaceholder;
             }
         }
 
@@ -616,7 +702,7 @@ namespace Desktop_Frames
                 {
                     LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
                         $"Using folder-WhiteX.png for missing Unicode folder shortcut {filePath} instead of system icon");
-                    return new BitmapImage(new Uri("pack://application:,,,/Resources/folder-WhiteX.png"));
+                    return MissingFolderPlaceholder;
                 }
 
                 // PREFERRED: ask the shell for the icon it shows on the desktop for this .lnk.
@@ -705,7 +791,7 @@ namespace Desktop_Frames
         {
             return Directory.Exists(folderPath) ?
                 CreateFrozenBitmap("pack://application:,,,/Resources/folder-White.png") :
-                CreateFrozenBitmap("pack://application:,,,/Resources/folder-WhiteX.png");
+                MissingFolderPlaceholder;
         }
 
         /// <summary>
@@ -745,7 +831,7 @@ namespace Desktop_Frames
                 }
                 else
                 {
-                    return CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
+                    return MissingFilePlaceholder;
                 }
             }
             catch (Exception ex)
@@ -757,7 +843,7 @@ namespace Desktop_Frames
                 ImageSource shellIcon = Utility.GetShellIcon(filePath, false);
                 if (shellIcon != null) return FreezeIcon(shellIcon);
 
-                return CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
+                return MissingFilePlaceholder;
             }
         }
 
@@ -987,7 +1073,7 @@ namespace Desktop_Frames
                 }
                 else
                 {
-                    ico.Source = CreateFrozenBitmap("pack://application:,,,/Resources/file-WhiteX.png");
+                    ico.Source = MissingFilePlaceholder;
 
                     LazyIconLoader.RequestIcon(new IconLoadRequest
                     {
@@ -1162,14 +1248,14 @@ namespace Desktop_Frames
                 }
                 else
                 {
-                    return new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
+                    return MissingFilePlaceholder;
                 }
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
                     $"Error updating Unicode shortcut icon for {filePath}: {ex.Message}");
-                return new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
+                return MissingFilePlaceholder;
             }
         }
 
@@ -1202,7 +1288,12 @@ namespace Desktop_Frames
         /// </summary>
         public static void ClearIconCache()
         {
-            iconCache.Clear();
+            // FIX: must take the cache lock — an unlocked Clear() racing the LazyIconLoader
+            // background thread could corrupt the dictionary (and kill the loader loop).
+            lock (iconCache)
+            {
+                iconCache.Clear();
+            }
             LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
                 "Icon cache cleared");
         }
@@ -1214,7 +1305,10 @@ namespace Desktop_Frames
         /// </summary>
         public static int GetCacheSize()
         {
-            return iconCache.Count;
+            lock (iconCache)
+            {
+                return iconCache.Count;
+            }
         }
         #endregion
     }

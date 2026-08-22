@@ -10,6 +10,9 @@ namespace Desktop_Frames
         private readonly Dictionary<string, (Action checkAction, bool isFolder)> _checkActions;
         private readonly object _lockObject = new object();
         private bool _disposed;
+        // Re-entrancy guard: System.Timers.Timer raises Elapsed on the thread pool, so a slow
+        // pass (network/COM probes) could overlap the next tick. 1 = a pass is in progress.
+        private int _checkInProgress;
 
         public TargetChecker(double interval)
         {
@@ -72,6 +75,9 @@ namespace Desktop_Frames
 
         private void OnTimedEvent(object sender, ElapsedEventArgs e)
         {
+            // Skip this tick entirely if the previous pass is still running — overlapping
+            // passes stack up thread-pool threads and hammer the same targets concurrently.
+            if (System.Threading.Interlocked.Exchange(ref _checkInProgress, 1) == 1) return;
             try
             {
                 List<(Action checkAction, bool isFolder)> actionsSnapshot;
@@ -115,6 +121,10 @@ namespace Desktop_Frames
                     LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.BackgroundValidation,
                         $"Error in TargetChecker timer event: {ex.Message}");
                 }
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _checkInProgress, 0);
             }
         }
     }

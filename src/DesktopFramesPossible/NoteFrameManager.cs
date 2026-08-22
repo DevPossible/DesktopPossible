@@ -1158,18 +1158,12 @@ namespace Desktop_Frames
         /// </summary>
         private static double GetNoteFontSize(string fontSize)
         {
-            double result;
             switch (fontSize?.ToLower())
             {
                 case "small": return 11;
                 case "large": return 16;
                 case "extra large": return 20;
                 default: return 14; // Medium
-
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-        $"GetNoteFontSize: '{fontSize}' -> {result}");
-                    return result;
-
             }
         }
 

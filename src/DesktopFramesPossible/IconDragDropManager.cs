@@ -692,15 +692,25 @@ namespace Desktop_Frames
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception panelEx)
+                    {
+                        // Log (don't silently skip): a failing panel measurement quietly skews
+                        // the computed drop index.
+                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI,
+                            $"CalculateDropPosition: skipping unmeasurable icon panel: {panelEx.Message}");
+                    }
                 }
 
                 // Bounds Check
                 int maxCount = _sourceItemsList?.Count ?? 0;
                 return Math.Max(0, Math.Min(bestInsertIndex, maxCount));
             }
-            catch
+            catch (Exception ex)
             {
+                // Log (don't swallow): a silent index-0 result reorders the item to the front
+                // with no trace of why.
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI,
+                    $"CalculateDropPosition failed; defaulting to drop index 0: {ex.Message}");
                 return 0;
             }
         }

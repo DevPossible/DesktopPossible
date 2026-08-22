@@ -582,6 +582,10 @@ namespace Desktop_Frames
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
 
+        // HICON handles must be released with DestroyIcon (user32), not DeleteObject (gdi32).
+        [DllImport("user32.dll")]
+        private static extern bool DestroyIcon(IntPtr hIcon);
+
         #region OS Click Mode (Explorer's "Single-click to open an item" Folder Option)
 
         /// <summary>
@@ -742,17 +746,23 @@ namespace Desktop_Frames
 
                 if (shinfo.hIcon == IntPtr.Zero) return null;
 
-                var img = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                    shinfo.hIcon,
-                    Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions());
-
-                if (img.CanFreeze)
+                System.Windows.Media.Imaging.BitmapSource img;
+                try
                 {
-                    img.Freeze();
-                }
+                    img = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                        shinfo.hIcon,
+                        Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
 
-                DeleteObject(shinfo.hIcon);
+                    if (img.CanFreeze)
+                    {
+                        img.Freeze();
+                    }
+                }
+                finally
+                {
+                    DestroyIcon(shinfo.hIcon);
+                }
 
                 if (cacheExt != null && img != null)
                 {

@@ -56,7 +56,9 @@ public class NonActivatingWindow : Window
         // Block Aero Snap maximize/restore commands
         if (msg == WM_SYSCOMMAND)
         {
-            int command = wParam.ToInt32() & 0xFFF0;
+            // x64 FIX: wParam can carry high bits on 64-bit Windows; ToInt32() would throw
+            // OverflowException inside the window procedure. Take the 64-bit value and mask.
+            int command = (int)(wParam.ToInt64() & 0xFFF0);
             if (command == SC_MAXIMIZE || command == SC_RESTORE)
             {
                 handled = true;
@@ -207,7 +209,7 @@ public class NonActivatingWindow : Window
         if (_idleTimer == null)
         {
             _idleTimer = new System.Windows.Threading.DispatcherTimer();
-            _idleTimer.Tick += (s, ev) => ExecuteIdleFadeOut();
+            _idleTimer.Tick += IdleTimer_Tick;
 
             this.MouseEnter += (s, ev) => ResetIdleTimer(true);
             this.MouseLeave += (s, ev) => ResetIdleTimer(false);
@@ -215,6 +217,24 @@ public class NonActivatingWindow : Window
         }
 
         RefreshIdleSettings();
+    }
+
+    private void IdleTimer_Tick(object sender, EventArgs e) => ExecuteIdleFadeOut();
+
+    /// <summary>
+    /// LEAK FIX: a running DispatcherTimer is rooted by its Dispatcher, and its Tick handler
+    /// rooted this window — every closed frame window used to stay alive (with its whole visual
+    /// tree) for the app lifetime. Stop the timer and detach the handler on close.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_idleTimer != null)
+        {
+            _idleTimer.Stop();
+            _idleTimer.Tick -= IdleTimer_Tick;
+            _idleTimer = null;
+        }
+        base.OnClosed(e);
     }
 
     public void RefreshIdleSettings()
@@ -235,6 +255,7 @@ public class NonActivatingWindow : Window
 
     private void ResetIdleTimer(bool isMouseInside)
     {
+        if (_idleTimer == null) return; // window already closed
         if (!SettingsManager.FramesFadeOutFx) return;
 
         _idleTimer.Stop();
@@ -251,6 +272,7 @@ public class NonActivatingWindow : Window
 
     private void ExecuteIdleFadeOut()
     {
+        if (_idleTimer == null) return; // window already closed
         _idleTimer.Stop();
 
         // --- BUG FIX: Prevent fading if the mouse is currently resting on the frame ---
@@ -286,6 +308,8 @@ public class NonActivatingWindow : Window
 
     private void RestoreOpacity()
     {
+        if (_idleTimer == null) return; // window already closed
+
         if (!_isIdleFaded)
         {
             if (SettingsManager.FramesFadeOutFx) _idleTimer.Start();

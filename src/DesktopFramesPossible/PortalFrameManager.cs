@@ -15,7 +15,7 @@ using Microsoft.VisualBasic;
 
 namespace Desktop_Frames
 {
-    public class PortalFramemanager
+    public class PortalFramemanager : IDisposable
     {
         // New field for the active filter
         private string _currentFilter = null;
@@ -44,7 +44,14 @@ namespace Desktop_Frames
         private GridViewColumn[] _columns;
         private GridView _gridView;                           // the details GridView (for themed headers)
         private DispatcherTimer _columnSaveTimer;
+        // Stored so Dispose can RemoveValueChanged — a DependencyPropertyDescriptor handler that is
+        // never removed roots the GridViewColumns (and through them the whole portal frame) forever.
+        private DependencyPropertyDescriptor _columnWidthDpd;
+        private EventHandler _columnWidthChangedHandler;
         private static readonly double[] DefaultColumnWidths = { 200, 130, 130, 90 };
+        // Snapshot of what the Details rows were last built from, so SyncDetailsView can skip the
+        // expensive per-row rebuild (disk + shell calls per row) when nothing changed.
+        private bool _lastRowsGrayscale;
 
         // Themed header/scrollbar chrome, rebuilt only when the frame's text colour changes.
         private System.Windows.Media.Color _chromeColor;
@@ -333,10 +340,11 @@ namespace Desktop_Frames
                 _currentFilter = frameDict["FilterString"]?.ToString();
             }
 
-            // NEW: Load saved sort mode
+            // NEW: Load saved sort mode (TryParse: corrupt/legacy values fall back to 0=Name
+            // instead of Convert.ToInt32 throwing and killing the frame's construction)
             if (frameDict.ContainsKey("SortMode"))
             {
-                _sortMode = Convert.ToInt32(frameDict["SortMode"]?.ToString() ?? "0");
+                _sortMode = int.TryParse(frameDict["SortMode"]?.ToString(), out int savedSortMode) ? savedSortMode : 0;
             }
             if (frameDict.ContainsKey("SortAsc"))
             {
@@ -457,7 +465,15 @@ namespace Desktop_Frames
                             }
                         }
                     }
-                    catch { } // Handle access denied gracefully
+                    catch (Exception scanEx)
+                    {
+                        // BUG FIX: a failed scan (access denied, share offline) used to be treated
+                        // as "the folder is empty", which removed every displayed icon. Skip this
+                        // reconcile pass instead — the next watcher ping will retry.
+                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                            $"Portal disk scan failed for {targetPath}; skipping reconcile pass: {scanEx.Message}");
+                        return null;
+                    }
 
                     // Snapshot of what's currently shown (O(1) set, no per-item reflection).
                     List<string> currentUIFiles = new List<string>();
@@ -470,6 +486,9 @@ namespace Desktop_Frames
                         ToAdd = currentDiskFiles.Where(p => !uiSet.Contains(p)).ToList()
                     };
                 });
+
+                // Scan failed -> reconcile pass skipped (already logged inside the scan).
+                if (diff == null) return;
 
                 // Abort if the user navigated away while we were scanning!
                 if (myGeneration != _navigationGeneration) return;
@@ -609,7 +628,17 @@ namespace Desktop_Frames
             // --- FIX: ONE CALL ONLY ---
             // We use the new signature that passes '_frame' context.
             // This applies the custom settings (Size, Color, etc.) immediately.
+            // BUG FIX: AddIcon swallows its own failures, so blindly grabbing the last child
+            // could wire handlers (and _uiPaths bookkeeping) to a DIFFERENT item's panel.
+            // Only wire up when a panel was actually appended by this call.
+            int childCountBefore = _wpcont.Children.Count;
             Framemanager.AddIcon(icon, _wpcont, _frame);
+            if (_wpcont.Children.Count <= childCountBefore)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                    $"Portal AddIcon: no panel was created for {path}; skipping handler wiring");
+                return;
+            }
 
             // Now we grab the StackPanel that was just added to attach logic
             StackPanel sp = _wpcont.Children[_wpcont.Children.Count - 1] as StackPanel;
@@ -907,10 +936,13 @@ namespace Desktop_Frames
                 return string.Equals(p, path, StringComparison.OrdinalIgnoreCase);
             });
 
+            // Always drop the path from the dedup set — leaving it behind when the panel isn't
+            // found makes the reconciler permanently believe a ghost item is still displayed.
+            _uiPaths.Remove(path);
+
             if (sp != null)
             {
                 _wpcont.Children.Remove(sp);
-                _uiPaths.Remove(path);
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, $"Successfully removed icon for {path}");
             }
             else
@@ -1014,9 +1046,13 @@ namespace Desktop_Frames
             _columnSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
             _columnSaveTimer.Tick += (s, e) => { _columnSaveTimer.Stop(); SaveColumnWidths(); };
 
-            var dpd = DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn));
+            // LEAK FIX: keep the descriptor + handler so Dispose() can RemoveValueChanged per
+            // column — DPD handlers are stored in a global table and otherwise root the columns
+            // (and the whole portal frame) for the app lifetime.
+            _columnWidthDpd = DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn));
+            _columnWidthChangedHandler = (s, e) => { _columnSaveTimer.Stop(); _columnSaveTimer.Start(); };
             foreach (var col in _columns)
-                dpd.AddValueChanged(col, (s, e) => { _columnSaveTimer.Stop(); _columnSaveTimer.Start(); });
+                _columnWidthDpd.AddValueChanged(col, _columnWidthChangedHandler);
 
             _detailsView.MouseDoubleClick += DetailsView_MouseDoubleClick;
             _detailsView.ContextMenu = BuildRowContextMenu();
@@ -1455,6 +1491,32 @@ namespace Desktop_Frames
             bool grayscale = false;
             try { grayscale = liveFrame.GrayscaleIcons?.ToString().ToLower() == "true"; } catch { }
 
+            // PERF: the rebuild below does per-row disk + shell calls, and used to run in full on
+            // every filter keystroke/sort even when nothing changed. Cheap change detection first:
+            // if the visible item set (count + paths, in order) and the grayscale flag are
+            // unchanged, keep the existing rows (metadata already gathered) and skip the rebuild.
+            var visiblePaths = new List<string>();
+            foreach (StackPanel spCheck in _wpcont.Children.OfType<StackPanel>())
+            {
+                if (spCheck.Visibility != Visibility.Visible) continue;
+                string p = spCheck.Tag?.GetType().GetProperty("FilePath")?.GetValue(spCheck.Tag)?.ToString();
+                if (!string.IsNullOrEmpty(p)) visiblePaths.Add(p);
+            }
+            if (grayscale == _lastRowsGrayscale && _rows.Count == visiblePaths.Count)
+            {
+                bool samePaths = true;
+                for (int i = 0; i < visiblePaths.Count; i++)
+                {
+                    if (!string.Equals(_rows[i].FilePath, visiblePaths[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        samePaths = false;
+                        break;
+                    }
+                }
+                if (samePaths) return;
+            }
+            _lastRowsGrayscale = grayscale;
+
             _rows.Clear();
             foreach (StackPanel sp in _wpcont.Children.OfType<StackPanel>())
             {
@@ -1662,10 +1724,24 @@ namespace Desktop_Frames
 
         public void Dispose()
         {
+            // Invalidate any in-flight reconciler pass so it aborts instead of touching the
+            // (soon to be dead) UI after disposal.
+            _navigationGeneration++;
+
             _watcher?.Dispose();
             _debounceTimer?.Stop();
             _debounceTimer.Tick -= ProcessPendingEvents;
             _columnSaveTimer?.Stop();
+
+            // LEAK FIX: DependencyPropertyDescriptor handlers live in a global table and root
+            // their targets — remove the width-changed handler from every column.
+            if (_columnWidthDpd != null && _columnWidthChangedHandler != null && _columns != null)
+            {
+                foreach (var col in _columns)
+                    _columnWidthDpd.RemoveValueChanged(col, _columnWidthChangedHandler);
+                _columnWidthChangedHandler = null;
+            }
+
             if (_detailsView != null)
             {
                 _detailsView.MouseDoubleClick -= DetailsView_MouseDoubleClick;
