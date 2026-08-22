@@ -117,10 +117,10 @@ namespace Desktop_Frames
                 // Suspend VD-driven switching until the dialog closes.
                 if (OptionsFormManager.IsOpen) return;
 
-                // Same hazard for the Smart Desktop Rules dialog: it edits the CURRENT
-                // profile's auto-organize rules; a switch underneath it would save them
-                // into the new profile's file (and un-pause its watcher mid-edit).
-                if (AutoOrganizeForm.IsOpen) return;
+                // Same hazard while a categorize-and-sort pass is running: it mutates the
+                // CURRENT profile's frame data (creating frames, moving items); a switch
+                // underneath it would tear that data out from under the in-flight moves.
+                if (AppCategorizer.IsSorting) return;
 
                 // Defer while the user is interacting: Mouse.Captured covers WPF context menus
                 // (and any capture-based interaction); the pressed left button covers DragMove's

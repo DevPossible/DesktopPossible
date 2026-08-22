@@ -670,49 +670,14 @@ namespace Desktop_Frames
             cbNotif.Margin = new Thickness(35, 0, 0, 8); // Indent it!
             cbNotif.IsEnabled = cbMain.IsChecked == true;
 
-            // NEW: Live Rule Statistics (Horizontal Layout)
-            StackPanel statsPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(15, 15, 0, 15) };
-            TextBlock txtTotalRules = new TextBlock { Text = $"Total number of rules: {AutoOrganizeManager.Rules.Count}", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, FontWeight = FontWeights.Medium };
-            TextBlock txtSeparator = new TextBlock { Text = "   -   ", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, FontWeight = FontWeights.Medium, Foreground = Brushes.Gray };
-            TextBlock txtEnabledRules = new TextBlock { Text = $"Enabled: {AutoOrganizeManager.Rules.Count(r => r.IsEnabled)}", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, FontWeight = FontWeights.Bold, Foreground = new SolidColorBrush(Color.FromRgb(34, 139, 34)) };
-            statsPanel.Children.Add(txtTotalRules);
-            statsPanel.Children.Add(txtSeparator);
-            statsPanel.Children.Add(txtEnabledRules);
-            c.Children.Add(statsPanel);
-
-            // Navy Blue - Manage Rules Button
-            Button btnManageRules = CreateStyledButton("Smart Desktop Rules...", Color.FromRgb(0, 0, 128));
-            btnManageRules.Width = 255;
-            btnManageRules.Height = 45;
-            btnManageRules.Margin = new Thickness(15, 0, 0, 15);
-            btnManageRules.HorizontalAlignment = HorizontalAlignment.Left;
-            btnManageRules.Click += (s, e) =>
-            {
-                new AutoOrganizeForm().ShowDialog();
-                // Refresh statistics when the editor closes
-                txtTotalRules.Text = $"Total number of rules: {AutoOrganizeManager.Rules.Count}";
-                txtEnabledRules.Text = $"Enabled: {AutoOrganizeManager.Rules.Count(r => r.IsEnabled)}";
-            };
-            c.Children.Add(btnManageRules);
-
-            // Dark Red - Organize Desktop Now Button
-            Button btnOrganizeNow = CreateStyledButton("Organize Now (Run)", Color.FromRgb(139, 0, 0));
-            btnOrganizeNow.Width = 255;
-            btnOrganizeNow.Height = 45;
-            btnOrganizeNow.Margin = new Thickness(15, 0, 0, 15);
-            btnOrganizeNow.HorizontalAlignment = HorizontalAlignment.Left;
-            btnOrganizeNow.Click += (s, e) =>
-            {
-                if (MessageBoxesManager.ShowCustomYesNoMessageBox("This will move existing files on your desktop to your target folders based on your rules.\n\nProceed?", "Sweep Desktop"))
-                {
-                    AutoOrganizeManager.ProcessDesktopNow();
-                }
-            };
-            c.Children.Add(btnOrganizeNow);
-
             TextBlock infoText = new TextBlock
             {
-                Text = "Note: Auto-Organize continuously monitors your Desktop for new files. When a file matches an enabled rule's conditions, it is automatically and physically moved to your target Portal Frame or Folder. Use this to keep your Desktop permanently clean and automatically route downloads to their proper locations.",
+                Text = "Note: Auto-Organize monitors your Desktop for new app shortcuts and programs. " +
+                       "Each new arrival is automatically categorized (Productivity, Utilities, Games, VR, " +
+                       "Developer Tools, Security Apps, Media) and moved into its category frame — the frame " +
+                       "is created automatically when needed. Items that cannot be categorized are left alone. " +
+                       "You can also sort the whole desktop at any time via the tray menu's " +
+                       "\"Sort Desktop into Categories\" command.",
                 FontStyle = FontStyles.Italic,
                 Foreground = Brushes.Gray,
                 Margin = new Thickness(15, 20, 0, 0),

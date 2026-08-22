@@ -503,8 +503,8 @@ namespace Desktop_Frames
             FrameDataManager.Initialize();
             SettingsManager.LoadSettings();
 
-            // Reload the auto-organize rules for the new profile and start/stop its engine,
-            // so SaveRules can never write the old profile's rules into the new profile's file.
+            // Start/stop the auto-categorize desktop watcher per the new profile's
+            // EnableAutoOrganize setting.
             AutoOrganizeManager.ReinitializeForProfile();
 
             // --- CRITICAL FIX: CLEAR BEFORE RELOAD ---

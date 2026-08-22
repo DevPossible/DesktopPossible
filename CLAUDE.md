@@ -119,7 +119,7 @@ The app is ~58 single-class files in `src/DesktopFramesPossible/`, namespace
 `AboutFormManager`, `OptionsFormManager`, `CustomizeFrameFormManager`,
 `NotificationFormManager`, `FrameFocusFormManager`, `MessageBoxesManager`,
 `SearchFormManager`, `TextFormatFormManager` — each owns one dialog/window.
-Related standalone forms: `AutomationRulesForm`, `AutoOrganizeForm`,
+Related standalone forms: `AutomationRulesForm`, 
 `ProfileManagerForm`, `EditShortcutWindow`, `IconPickerDialog`,
 `ItemMoveDialog`.
 

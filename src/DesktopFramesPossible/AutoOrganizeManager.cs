@@ -1,64 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
-using Newtonsoft.Json;
-using Microsoft.VisualBasic.FileIO; // Required for sending to Recycle Bin
 
 namespace Desktop_Frames
 {
-    public enum RuleConflictAction { Rename, Overwrite, Skip }
-
-    public class OrganizeRule
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string Name { get; set; }
-        public string Extensions { get; set; } = "";
-        public string NameContains { get; set; } = "";
-        public string TargetFolderPath { get; set; }
-        public RuleConflictAction ConflictAction { get; set; } = RuleConflictAction.Rename;
-        public bool AutoCreateFrame { get; set; } = false;
-        public bool IsEnabled { get; set; } = true;
-        public int Priority { get; set; } = 0;
-        public DateTime? LastRun { get; set; } // NEW: Tracks last execution
-    }
-
+    /// <summary>
+    /// Watches the desktop and, when Auto-Organize is enabled, automatically
+    /// categorizes NEW desktop arrivals (app shortcuts and executables) into their
+    /// fixed category frame via AppCategorizer. The old user-defined rules engine
+    /// (auto_organize.json + Smart Desktop Rules dialog) was replaced by the fixed
+    /// app-categorization engine; unclassifiable items are left alone.
+    /// </summary>
     public static class AutoOrganizeManager
     {
         private static FileSystemWatcher _watcher;
-        public static List<OrganizeRule> Rules = new List<OrganizeRule>(); // Expose to the UI
-        private static string _rulesFilePath => ProfileManager.GetProfileFilePath("auto_organize.json");
-        // Serializes rule-file writes: background move tasks and the UI can both save.
-        private static readonly object _saveLock = new object();
         private static readonly string _desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
         public static void Initialize()
         {
-            LoadRules();
             if (SettingsManager.EnableAutoOrganize) Start();
         }
 
-        /// <summary>Re-syncs the engine after a profile switch: reloads the rules from the
-        /// newly active profile (so SaveRules can never write the old profile's rules into
-        /// the new profile's auto_organize.json) and starts/stops the watcher per the new
-        /// profile's EnableAutoOrganize setting.</summary>
+        /// <summary>Re-syncs the engine after a profile switch: starts/stops the watcher
+        /// per the new profile's EnableAutoOrganize setting. Respects an active UI pause
+        /// (the Options form paused the watcher and will Resume() it on close — a profile
+        /// switch must not silently un-pause it underneath it).</summary>
         public static void ReinitializeForProfile()
         {
             try
             {
-                // Reset first: LoadRules leaves the old list in place when the new profile
-                // has no auto_organize.json yet.
-                Rules = new List<OrganizeRule>();
-                LoadRules();
-
                 if (SettingsManager.EnableAutoOrganize)
                 {
-                    // Respect an active UI pause: the rules editor (and the Options form)
-                    // paused the watcher and will Resume() it on close — a profile switch
-                    // must not silently un-pause it underneath them.
-                    bool pausedByUi = AutoOrganizeForm.IsOpen || OptionsFormManager.IsOpen;
+                    bool pausedByUi = OptionsFormManager.IsOpen;
 
                     if (_watcher == null)
                     {
@@ -82,56 +55,6 @@ namespace Desktop_Frames
             }
         }
 
-        public static void LoadRules()
-        {
-            try
-            {
-                if (File.Exists(_rulesFilePath))
-                {
-                    string json = File.ReadAllText(_rulesFilePath);
-                    Rules = JsonConvert.DeserializeObject<List<OrganizeRule>>(json) ?? new List<OrganizeRule>();
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Error loading organize rules: {ex.Message}");
-            }
-        }
-
-        public static void SaveRules()
-        {
-            SaveRulesSnapshot(Rules, _rulesFilePath);
-        }
-
-        /// <summary>
-        /// Saves a snapshot of the rules taken earlier by a background task. The save is
-        /// skipped when the profile (rules file path) or the rules list changed since the
-        /// snapshot — an in-flight move must never write the OLD profile's rules into the
-        /// NEW profile's file, nor clobber rules the user just saved in the editor.
-        /// </summary>
-        private static void SaveRulesSnapshot(List<OrganizeRule> rules, string rulesFilePath)
-        {
-            try
-            {
-                lock (_saveLock)
-                {
-                    if (!string.Equals(rulesFilePath, _rulesFilePath, StringComparison.OrdinalIgnoreCase) ||
-                        !ReferenceEquals(rules, Rules))
-                    {
-                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
-                            "Auto-Organize: skipped stale rules save (profile or rules changed since snapshot).");
-                        return;
-                    }
-
-                    AtomicFile.WriteAllText(rulesFilePath, JsonConvert.SerializeObject(rules, Formatting.Indented));
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Error saving organize rules: {ex.Message}");
-            }
-        }
-
         public static void Start()
         {
             if (_watcher != null) return;
@@ -145,12 +68,12 @@ namespace Desktop_Frames
                 };
 
                 // --- THE BROWSER SHIELD ---
-                // Delay exactly 3 seconds before processing. This prevents browsers from panicking 
-                // and deleting the file when we move it before they finish writing the Mark of the Web!
+                // Delay exactly 3 seconds before processing. This prevents browsers/installers
+                // from panicking when we act on a file before they finish writing it.
                 _watcher.Created += (s, e) => Task.Run(async () => { await Task.Delay(3000); await ProcessFileAsync(e.FullPath); });
                 _watcher.Renamed += (s, e) => Task.Run(async () => { await Task.Delay(3000); await ProcessFileAsync(e.FullPath); });
 
-                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Auto-Organize engine started.");
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Auto-Organize engine started (app categorization).");
             }
             catch (Exception ex)
             {
@@ -168,235 +91,46 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Auto-Organize engine stopped.");
             }
         }
-  
-        // FIX: Added 'silent' parameter so the engine can sweep seamlessly in the background
-        public static void ProcessDesktopNow(bool silent = false)
-        {
-            if (Rules == null || Rules.Count == 0) return;
 
-            Task.Run(async () =>
-            {
-                var files = Directory.GetFiles(_desktopPath);
-                foreach (var file in files)
-                {
-                    await ProcessFileAsync(file);
-                }
-
-                if (!silent)
-                {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        MessageBoxesManager.ShowOKOnlyMessageBoxForm("Desktop organization complete!", "Success");
-                    });
-                }
-            });
-        }
-
+        /// <summary>
+        /// Handles one new desktop arrival: only app-like items (.lnk/.url/.exe) are
+        /// considered; the classifier decides the category, and unclassified items are
+        /// left alone. Active temp downloads never match the extension filter.
+        /// </summary>
         private static async Task ProcessFileAsync(string filePath)
         {
-            if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize) return;
-
-            // Snapshot the rules list and its file path at task start: this task runs off
-            // the UI thread and can outlive a profile switch — it must keep working with
-            // (and saving to) the profile that was active when the file event fired.
-            var rulesSnapshot = Rules;
-            string rulesFilePathSnapshot = _rulesFilePath;
-
-            string fileName = Path.GetFileName(filePath);
-            string ext = Path.GetExtension(filePath).ToLower();
-
-            // --- THE SHORTCUT SHIELD ---
-            // Ignore virtual items and active temp downloads
-            if (ext == ".lnk" || ext == ".url" || ext == ".crdownload" || ext == ".part" || ext == ".tmp") return;
-
-            // Sort rules by priority (lower number = higher priority)
-            var activeRules = rulesSnapshot.Where(r => r.IsEnabled).OrderBy(r => r.Priority).ToList();
-
-            foreach (var rule in activeRules)
-            {
-                if (DoesFileMatchRule(fileName, rule))
-                {
-                    await ExecuteMoveAsync(filePath, rule, rulesSnapshot, rulesFilePathSnapshot);
-                    break; // File processed, stop checking rules
-                }
-            }
-        }
-
-        private static bool DoesFileMatchRule(string fileName, OrganizeRule rule)
-        {
-            // 1. Check Extensions
-            if (!string.IsNullOrWhiteSpace(rule.Extensions) && !rule.Extensions.Contains("*.*") && rule.Extensions.Trim() != "*")
-            {
-                string fileExt = Path.GetExtension(fileName).ToLower();
-                var allowedExts = rule.Extensions.Split(new[] { ';', ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                                                 .Select(e => e.Trim().Replace("*", "").ToLower());
-
-                // If the file extension is NOT in the allowed list, reject it
-                if (!allowedExts.Contains(fileExt)) return false;
-            }
-
-            // 2. Check Name Contains (AND condition)
-            if (!string.IsNullOrWhiteSpace(rule.NameContains))
-            {
-                // If the filename does NOT contain the required text, reject it
-                if (fileName.IndexOf(rule.NameContains, StringComparison.OrdinalIgnoreCase) == -1)
-                    return false;
-            }
-
-            // If it survived both filters, it is a perfect match!
-            return true;
-        }
-
-        private static async Task ExecuteMoveAsync(string sourcePath, OrganizeRule rule,
-            List<OrganizeRule> rulesSnapshot, string rulesFilePathSnapshot)
-        {
-            if (!Directory.Exists(rule.TargetFolderPath))
-            {
-                try { Directory.CreateDirectory(rule.TargetFolderPath); }
-                catch { return; }
-            }
-
-            // --- THE DOWNLOAD WAITER ---
-            // Wait up to 60 seconds for the browser/app to release the file lock
-            if (!await WaitForFileUnlockAsync(sourcePath, 60000))
-            {
-                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General, $"Auto-Organize skipped {Path.GetFileName(sourcePath)}: File was locked.");
-                return;
-            }
-
-            string fileName = Path.GetFileName(sourcePath);
-            string destPath = Path.Combine(rule.TargetFolderPath, fileName);
-
             try
             {
-                // --- CONFLICT PROTOCOL ---
-                if (File.Exists(destPath))
+                if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize) return;
+
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                if (ext != ".lnk" && ext != ".url" && ext != ".exe") return;
+
+                // --- THE DOWNLOAD WAITER ---
+                // Wait up to 60 seconds for the writer to release the file lock.
+                if (!await WaitForFileUnlockAsync(filePath, 60000))
                 {
-                    if (rule.ConflictAction == RuleConflictAction.Skip) return;
-
-                    if (rule.ConflictAction == RuleConflictAction.Overwrite)
-                    {
-                        // Safely send the existing file to the Recycle Bin before overwriting
-                        FileSystem.DeleteFile(destPath, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-                    }
-                    else if (rule.ConflictAction == RuleConflictAction.Rename)
-                    {
-                        string nameOnly = Path.GetFileNameWithoutExtension(fileName);
-                        string ext = Path.GetExtension(fileName);
-                        int count = 1;
-
-                        while (File.Exists(destPath))
-                        {
-                            destPath = Path.Combine(rule.TargetFolderPath, $"{nameOnly} ({count}){ext}");
-                            count++;
-                        }
-                    }
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                        $"Auto-Organize skipped {Path.GetFileName(filePath)}: File was locked.");
+                    return;
                 }
 
-                // Execute Physical Move
-                File.Move(sourcePath, destPath);
-                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, $"Auto-Organize moved {fileName} to {rule.TargetFolderPath}");
+                string displayName = Path.GetFileNameWithoutExtension(filePath);
+                var (moved, _) = await AppCategorizer.SortDesktopAsync(new[] { filePath });
 
-                // --- SUCCESS TRACKING & NOTIFICATIONS ---
-                rule.LastRun = DateTime.Now;
-                // Save the new timestamp — against the snapshot taken at task start, so a
-                // profile switch mid-move can never land these rules in the wrong file.
-                SaveRulesSnapshot(rulesSnapshot, rulesFilePathSnapshot);
-
-                if (SettingsManager.EnableAutoOrganizeNotifications)
+                if (moved > 0 && SettingsManager.EnableAutoOrganizeNotifications)
                 {
-                    SmartToast.Show($"Rule: {rule.Name} Executed", $"Moved '{fileName}' to {new DirectoryInfo(rule.TargetFolderPath).Name}");
-                }
-
-
-                // --- AUTO-CREATE FRAME PROTOCOL ---
-                if (rule.AutoCreateFrame)
-                {
-                    Application.Current.Dispatcher.Invoke(() => CheckAndCreatePortalFrame(rule.TargetFolderPath));
+                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        SmartToast.Show("Auto-Categorize", $"Moved '{displayName}' into its category frame");
+                    }));
                 }
             }
             catch (Exception ex)
             {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Auto-Organize failed to move {fileName}: {ex.Message}");
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"Auto-Organize failed for {Path.GetFileName(filePath)}: {ex.Message}");
             }
-        }
-
-        public static void CheckAndCreatePortalFrame(string targetFolder)
-        {
-            // Prevent duplicate frames: Check if a portal fence already points to this folder
-            var existingFrames = Framemanager.GetFrameData();
-            foreach (var f in existingFrames)
-            {
-                try
-                {
-                    string fType = null, fPath = null;
-                    if (f is Newtonsoft.Json.Linq.JObject jObj)
-                    {
-                        fType = jObj["ItemsType"]?.ToString();
-                        fPath = jObj["Path"]?.ToString(); // FIX: Changed from PortalFolderPath to Path
-                    }
-                    else
-                    {
-                        fType = f.GetType().GetProperty("ItemsType")?.GetValue(f)?.ToString() ?? f.ItemsType?.ToString();
-                        fPath = f.GetType().GetProperty("Path")?.GetValue(f)?.ToString() ?? f.Path?.ToString(); // FIX
-                    }
-
-                    if (fType == "Portal" && string.Equals(fPath, targetFolder, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return; // Frame already exists!
-                    }
-                }
-                catch { }
-            }
-
-            // Command Framemanager to generate a new Portal Fence using the exact required schema
-            dynamic newFrame = new Newtonsoft.Json.Linq.JObject();
-            newFrame.Id = Guid.NewGuid().ToString();
-            newFrame.Title = new DirectoryInfo(targetFolder).Name; // FIX: Changed from Name to Title
-            newFrame.X = 100.0; // FIX: Changed from Left to X
-            newFrame.Y = 100.0; // FIX: Changed from Top to Y
-            newFrame.Width = 350.0;
-            newFrame.Height = 250.0;
-            newFrame.ItemsType = "Portal";
-            newFrame.Path = targetFolder; // FIX: Changed from PortalFolderPath to Path
-            newFrame.Items = ""; // Portal expects empty string for Items
-
-            // FIX: Initialize ALL frame properties with defaults to match JSON structure exactly
-            newFrame.IsLocked = "false";
-            newFrame.IsHidden = "false";
-            newFrame.CustomColor = null;
-            newFrame.CustomLaunchEffect = null;
-            newFrame.IsRolled = "false";
-            newFrame.UnrolledHeight = 250.0;
-            newFrame.TextColor = null;
-            newFrame.BoldTitleText = "false";
-            newFrame.TitleTextColor = null;
-            newFrame.DisableTextShadow = "false";
-            newFrame.IconSize = "Medium";
-            newFrame.GrayscaleIcons = "false";
-            newFrame.IconSpacing = 5;
-            newFrame.TitleTextSize = "Medium";
-            newFrame.FrameBorderColor = null;
-            newFrame.FrameBorderThickness = 2;
-
-            // TABS FEATURE requirements
-            newFrame.TabsEnabled = "false";
-            newFrame.CurrentTab = 0;
-            newFrame.Tabs = new Newtonsoft.Json.Linq.JArray();
-
-            // 1. Add to the central data manager
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                FrameDataManager.FrameData.Add(newFrame);
-
-                // 2. Pass a TargetChecker instance to the creation engine
-                Framemanager.CreateFrame(newFrame, new TargetChecker(1000));
-
-                // 3. Save using the correct data manager method
-                FrameDataManager.SaveFrameData();
-            });
-
-            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, $"Auto-Organize spawned a new Portal Fence for {targetFolder}");
         }
 
         private static async Task<bool> WaitForFileUnlockAsync(string filePath, int timeoutMs)
@@ -425,7 +159,6 @@ namespace Desktop_Frames
             return false; // Timed out
         }
 
-
         public static void Pause()
         {
             if (_watcher != null) _watcher.EnableRaisingEvents = false;
@@ -443,9 +176,6 @@ namespace Desktop_Frames
             {
                 _watcher.EnableRaisingEvents = true;
             }
-
-            // Silently sweep the desktop to catch any files that landed while we were paused!
-            ProcessDesktopNow(true);
         }
     }
 }

@@ -269,12 +269,22 @@ namespace Desktop_Frames
             trayMenu.Items.Add(smartTopSeparator);
 
             // --- SMART DESKTOP OPTIONS ---
-            var smartRulesItem = trayMenu.Items.Add("Smart Desktop Rules...", null, (s, e) =>
+            trayMenu.Items.Add("Sort Desktop into Categories", null, async (s, e) =>
             {
-                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                // Fire-and-forget: classification runs in the background; toast on completion.
+                try
                 {
-                    new AutoOrganizeForm().ShowDialog();
-                }));
+                    var (items, categories) = await AppCategorizer.SortDesktopAsync();
+                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        SmartToast.Show("Desktop sorted", $"Sorted {items} items into {categories} categories");
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                        $"Sort Desktop into Categories failed: {ex.Message}");
+                }
             });
 
             _autoOrganizeMenuItem = new ToolStripMenuItem("Enable Auto-Organize") { CheckOnClick = true };
@@ -335,12 +345,10 @@ namespace Desktop_Frames
                 // Re-resolve live so a toggle made from the frame context menu is reflected here.
                 _frameEditModeItem.Checked = SettingsManager.FrameEditMode;
 
-                bool autoOrg = SettingsManager.EnableAutoOrganize;
-                smartRulesItem.Visible = autoOrg;
-                _autoOrganizeMenuItem.Visible = autoOrg;
-                // Collapse the section's leading separator when the whole Smart Desktop group is hidden,
-                // so we don't leave a double divider.
-                smartTopSeparator.Visible = autoOrg;
+                // The Smart Desktop section (manual sort command + auto-categorize toggle)
+                // stays visible regardless of the toggle: the sort command is the primary
+                // entry point and must always be reachable.
+                _autoOrganizeMenuItem.Checked = SettingsManager.EnableAutoOrganize;
             };
 
             _trayIcon.ContextMenuStrip = trayMenu;
