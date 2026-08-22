@@ -275,7 +275,14 @@ namespace Desktop_Frames
                 {
                     if (isLink || Path.GetExtension(filePath)?.ToLower() == ".url" || targetLower.StartsWith("http"))
                     {
-                        extractedIcon = CreateFrozenBitmap("pack://application:,,,/Resources/link-White.png"); // check
+                        // BUG FIX: a web-targeting .lnk dropped from the desktop must keep its custom
+                        // desktop icon (favicon etc.) just like .url files do in step 3 above. Previously
+                        // this branch returned the generic link glyph BEFORE the shortcut's IconLocation
+                        // was ever consulted, so the frame showed a different icon than the desktop.
+                        // The white link glyph remains the fallback when no custom icon is declared.
+                        if (isShortcut) extractedIcon = TryGetShortcutCustomIcon(filePath, targetPath);
+                        if (extractedIcon == null)
+                            extractedIcon = CreateFrozenBitmap("pack://application:,,,/Resources/link-White.png"); // check
                     }
                     else if (isShortcut)
                     {
@@ -513,46 +520,9 @@ namespace Desktop_Frames
         {
             try
             {
-                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                dynamic shortcut = shell.CreateShortcut(filePath);
-
-                // Handle custom IconLocation with index - but prioritize missing folder icons
-                if (!string.IsNullOrEmpty((string?)shortcut.IconLocation))
-                {
-                    string[] iconParts = ((string)shortcut.IconLocation).Split(',');
-                    string iconPath = iconParts[0];
-                    int iconIndex = 0;
-
-                    if (iconParts.Length == 2 && int.TryParse(iconParts[1], out int parsedIndex))
-                    {
-                        iconIndex = parsedIndex;
-                    }
-
-                    // Check if this is a folder shortcut with missing target
-                    bool isTargetMissing = string.IsNullOrEmpty(targetPath) ||
-                                         (!System.IO.File.Exists(targetPath) && !Directory.Exists(targetPath));
-                    bool isFolderShortcut = (!string.IsNullOrEmpty(targetPath) && Directory.Exists(targetPath)) ||
-                                          (((string?)shortcut.TargetPath)?.ToLower().Contains("explorer.exe") == true);
-
-                    // If it's a missing folder shortcut with system folder icon, use our custom missing icon
-                    if (isTargetMissing && isFolderShortcut && iconPath.ToLower().Contains("shell32.dll"))
-                    {
-                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
-                            $"Using folder-WhiteX.png for missing Unicode folder shortcut {filePath} instead of system icon");
-                        return new BitmapImage(new Uri("pack://application:,,,/Resources/folder-WhiteX.png"));
-                    }
-
-                    if (System.IO.File.Exists(iconPath))
-                    {
-                        var customIcon = ExtractIconFromFile(iconPath, iconIndex);
-                        if (customIcon != null)
-                        {
-                            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
-                                $"Extracted custom icon at index {iconIndex} from {iconPath} for {filePath}");
-                            return customIcon;
-                        }
-                    }
-                }
+                // Custom icon declared in the .lnk wins - resolved the way Explorer resolves it
+                var customIcon = TryGetShortcutCustomIcon(filePath, targetPath);
+                if (customIcon != null) return customIcon;
 
                 // Fallback to target icon
                 if (!string.IsNullOrEmpty(targetPath))
@@ -576,6 +546,116 @@ namespace Desktop_Frames
                     $"Error extracting shortcut icon for {filePath}: {ex.Message}");
                 return new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
             }
+        }
+
+        /// <summary>
+        /// Resolves the custom icon a .lnk declares via IconLocation, matching what Explorer
+        /// shows on the desktop. Returns null when the shortcut declares no custom icon
+        /// (IconLocation empty or ",0") or when nothing could be extracted, so callers can
+        /// continue with their own fallbacks (target icon, white link glyph, X overlays).
+        ///
+        /// BUG FIX (dropped desktop shortcuts showed a different icon than the desktop):
+        /// The previous inline parser did a naive Split(',') + File.Exists() on the raw
+        /// IconLocation string. Explorer, however, expands environment variables
+        /// (%SystemRoot%\system32\shell32.dll,4), resolves relative icon paths against the
+        /// shortcut's own folder, and resolves icons stored in the link's PIDL/expandable
+        /// data blocks. When the naive check failed it silently fell back to the TARGET's
+        /// default icon - a different icon than the desktop. We now prefer the shell's own
+        /// resolution (SHGetFileInfo on the .lnk itself, which is exactly what the desktop
+        /// renders) and keep the manual parse - with env-var expansion and relative-path
+        /// resolution - only as a fallback.
+        /// Used by: ExtractShortcutIcon, GetIconForFile (web-target .lnk branch)
+        /// Category: Shortcut Processing
+        /// </summary>
+        public static ImageSource TryGetShortcutCustomIcon(string filePath, string targetPath)
+        {
+            try
+            {
+                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                dynamic shortcut = shell.CreateShortcut(filePath);
+
+                // Parse "path,index". Split on the LAST comma so icon paths containing commas survive.
+                string iconLocation = (string?)shortcut.IconLocation ?? "";
+                string iconPath = iconLocation;
+                int iconIndex = 0;
+                int commaIdx = iconLocation.LastIndexOf(',');
+                if (commaIdx >= 0)
+                {
+                    iconPath = iconLocation.Substring(0, commaIdx);
+                    int.TryParse(iconLocation.AsSpan(commaIdx + 1).Trim(), out iconIndex);
+                }
+                iconPath = iconPath.Trim().Trim('"');
+
+                // Empty or ",0" means "use the target's icon" - no custom icon to resolve.
+                if (string.IsNullOrEmpty(iconPath) && iconIndex == 0) return null;
+
+                // Explorer expands environment variables and resolves relative icon paths
+                // against the shortcut's own folder - do the same before any File.Exists checks.
+                if (!string.IsNullOrEmpty(iconPath))
+                {
+                    iconPath = Environment.ExpandEnvironmentVariables(iconPath);
+                    if (!Path.IsPathRooted(iconPath))
+                    {
+                        try
+                        {
+                            string shortcutDir = Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? "";
+                            string resolved = Path.GetFullPath(Path.Combine(shortcutDir, iconPath));
+                            if (System.IO.File.Exists(resolved)) iconPath = resolved;
+                        }
+                        catch { /* keep the unresolved path; the shell call below still copes */ }
+                    }
+                }
+
+                // Preserved special case: a folder shortcut whose target is gone but whose icon
+                // is the stock shell32 folder icon gets our themed "missing folder" X icon.
+                bool isTargetMissing = string.IsNullOrEmpty(targetPath) ||
+                                     (!System.IO.File.Exists(targetPath) && !Directory.Exists(targetPath));
+                bool isFolderShortcut = (!string.IsNullOrEmpty(targetPath) && Directory.Exists(targetPath)) ||
+                                      (((string?)shortcut.TargetPath)?.ToLower().Contains("explorer.exe") == true);
+                if (isTargetMissing && isFolderShortcut && iconPath.ToLower().Contains("shell32.dll"))
+                {
+                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
+                        $"Using folder-WhiteX.png for missing Unicode folder shortcut {filePath} instead of system icon");
+                    return new BitmapImage(new Uri("pack://application:,,,/Resources/folder-WhiteX.png"));
+                }
+
+                // PREFERRED: ask the shell for the icon it shows on the desktop for this .lnk.
+                // SHGetFileInfo resolves IconLocation (env vars, relative paths, negative
+                // resource IDs, PIDL icons, MSI shortcuts) exactly like Explorer, so this is
+                // pixel-identical with the desktop by construction.
+                var shellIcon = FreezeIcon(Utility.GetShellIcon(filePath, false));
+                if (shellIcon != null)
+                {
+                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
+                        $"Resolved custom shortcut icon via shell for {filePath} (IconLocation: {iconLocation})");
+                    return shellIcon;
+                }
+
+                // Fallback: manual extraction from the declared icon resource.
+                // ExtractIconEx natively treats a negative index as a resource ID, like Explorer.
+                if (System.IO.File.Exists(iconPath))
+                {
+                    var customIcon = FreezeIcon(ExtractIconFromFile(iconPath, iconIndex));
+                    if (customIcon != null)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
+                            $"Extracted custom icon at index {iconIndex} from {iconPath} for {filePath}");
+                        return customIcon;
+                    }
+                }
+                else if (string.IsNullOrEmpty(iconPath) && !isTargetMissing && System.IO.File.Exists(targetPath))
+                {
+                    // ",N" with an empty path means icon N inside the target file itself.
+                    var customIcon = FreezeIcon(ExtractIconFromFile(targetPath, iconIndex));
+                    if (customIcon != null) return customIcon;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
+                    $"Custom shortcut icon resolution failed for {filePath}: {ex.Message}");
+            }
+            return null;
         }
 
         /// <summary>
