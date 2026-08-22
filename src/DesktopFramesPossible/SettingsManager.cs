@@ -59,6 +59,7 @@ namespace Desktop_Frames
 
         public static bool EnableChameleonMode { get; set; } = false;
         public static bool EnableProfileAutomation { get; set; } = false;
+        public static bool EnableVirtualDesktopAutomation { get; set; } = false;
 
         public static bool EnableAutoOrganize { get; set; } = false;
 
@@ -249,7 +250,8 @@ namespace Desktop_Frames
                 AllowAutoReposition,
                 FramesWithNoRoundCorners,
                 EnableProfileAutomation,
-                EnableChameleonMode, 
+                EnableVirtualDesktopAutomation,
+                EnableChameleonMode,
                 EnableAutoOrganize,
                 EnableAutoOrganizeNotifications,
                 // NEW
@@ -350,6 +352,7 @@ namespace Desktop_Frames
             try { AllowAutoReposition = data.AllowAutoReposition ?? true; } catch { AllowAutoReposition = true; }
             try { FramesWithNoRoundCorners = data.FramesWithNoRoundCorners ?? false; } catch { FramesWithNoRoundCorners = false; }
             try { EnableProfileAutomation = data.EnableProfileAutomation ?? false; } catch { EnableProfileAutomation = false; }
+            try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? false; } catch { EnableVirtualDesktopAutomation = false; }
             try { EnableChameleonMode = data.EnableChameleonMode ?? false; } catch { EnableChameleonMode = false; } // 
             try { EnableAutoOrganize = data.EnableAutoOrganize ?? false; } catch { EnableAutoOrganize = false; }
             try { EnableAutoOrganizeNotifications = data.EnableAutoOrganizeNotifications ?? true; } catch { EnableAutoOrganizeNotifications = true; }

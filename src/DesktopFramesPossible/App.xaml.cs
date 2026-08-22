@@ -136,6 +136,12 @@ namespace Desktop_Frames
                         LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Startup: Profile Automation Engine ignited.");
                     }
 
+                    if (SettingsManager.EnableVirtualDesktopAutomation)
+                    {
+                        VirtualDesktopAutomationManager.Start();
+                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, "Startup: Virtual Desktop Automation Engine ignited.");
+                    }
+
                     // Ensure UI reflects the current state of profiles and automation
                     _trayManager.UpdateProfilesMenu();
                     _trayManager.UpdateTrayIcon();

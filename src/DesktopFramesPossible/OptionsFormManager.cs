@@ -563,6 +563,27 @@ namespace Desktop_Frames
             };
             c.Children.Add(autoCb);
 
+            // Checkbox for Virtual Desktop Automation (Synchronized with Tray)
+            CheckBox vdAutoCb = new CheckBox
+            {
+                Name = "EnableVirtualDesktopAutomation",
+                Content = "Enable Virtual Desktop Automation",
+                IsChecked = SettingsManager.EnableVirtualDesktopAutomation,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 13,
+                Margin = new Thickness(15, 0, 0, 8)
+            };
+            // Use Click event to ensure it only fires on user interaction, then SaveSettings immediately
+            vdAutoCb.Click += (s, e) => {
+                bool isChecked = vdAutoCb.IsChecked == true;
+                SettingsManager.EnableVirtualDesktopAutomation = isChecked;
+                SettingsManager.SaveSettings(); // Force write to JSON immediately
+                TrayManager.Instance?.UpdateVirtualDesktopAutomationMenuCheck(isChecked);
+                if (isChecked) VirtualDesktopAutomationManager.Start();
+                else VirtualDesktopAutomationManager.Stop();
+            };
+            c.Children.Add(vdAutoCb);
+
             t.Content = new ScrollViewer { Content = c, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             _tabControl.Items.Add(t);
         }

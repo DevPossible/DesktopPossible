@@ -21,6 +21,16 @@ namespace Desktop_Frames
         private Slider _delaySlider;
         private TextBlock _delayValText;
 
+        // Trigger type selection (process vs. virtual desktop)
+        private RadioButton _procTrigRadio;
+        private RadioButton _vdTrigRadio;
+        private TextBlock _processLabel;
+        private Grid _procGrid;
+        private TextBlock _desktopLabel;
+        private ComboBox _desktopCombo;
+        // Live desktops snapshot: (Guid string, display name). Empty on unsupported builds.
+        private List<(string Id, string Name)> _desktopCache = new List<(string Id, string Name)>();
+
         // Colors
         private Color _colorPurple = Color.FromRgb(128, 0, 128);
         private Color _colorGreen = Color.FromRgb(34, 139, 34);
@@ -35,9 +45,14 @@ namespace Desktop_Frames
 
         public AutomationRulesForm()
         {
+            // Snapshot desktops first so both the dropdown and the rules list can use it.
+            // GetDesktopsSafe never throws (empty list on unsupported Windows builds).
+            _desktopCache = VirtualDesktopAutomationManager.GetDesktopsSafe();
+
             InitializeComponent();
             LoadRules();
             RefreshProcessList();
+            RefreshDesktopList();
         }
 
         private void InitializeComponent()
@@ -166,9 +181,29 @@ namespace Desktop_Frames
 
             StackPanel ruleStack = new StackPanel();
 
+            // Trigger Type (process vs. virtual desktop)
+            CreateLabel(ruleStack, "Trigger:");
+            StackPanel trigPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            _procTrigRadio = new RadioButton { Content = "When app is running", GroupName = "TriggerType", IsChecked = true, Margin = new Thickness(0, 0, 20, 0), VerticalAlignment = VerticalAlignment.Center };
+            _vdTrigRadio = new RadioButton { Content = "When on virtual desktop", GroupName = "TriggerType", VerticalAlignment = VerticalAlignment.Center };
+            if (_desktopCache.Count == 0)
+            {
+                // Unsupported Windows build (or COM failure): keep the form usable,
+                // just grey out the virtual desktop option with an explanation.
+                _vdTrigRadio.IsEnabled = false;
+                _vdTrigRadio.ToolTip = "Virtual desktops are not supported on this version of Windows.";
+                ToolTipService.SetShowOnDisabled(_vdTrigRadio, true);
+            }
+            _procTrigRadio.Checked += (s, e) => UpdateTriggerUI();
+            _vdTrigRadio.Checked += (s, e) => UpdateTriggerUI();
+            trigPanel.Children.Add(_procTrigRadio);
+            trigPanel.Children.Add(_vdTrigRadio);
+            ruleStack.Children.Add(trigPanel);
+
             // Process Name + Pick Button
-            CreateLabel(ruleStack, "Process Name (Pick or Type):");
+            _processLabel = CreateLabel(ruleStack, "Process Name (Pick or Type):");
             Grid procGrid = new Grid();
+            _procGrid = procGrid;
             procGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             procGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -192,6 +227,13 @@ namespace Desktop_Frames
             procGrid.Children.Add(_processSearchCombo);
             procGrid.Children.Add(btnPick); Grid.SetColumn(btnPick, 1);
             ruleStack.Children.Add(procGrid);
+
+            // Virtual Desktop selector (shown instead of the process input for VD rules)
+            _desktopLabel = CreateLabel(ruleStack, "Virtual Desktop:");
+            _desktopCombo = new ComboBox { Height = 34, Margin = new Thickness(0, 0, 0, 10), VerticalContentAlignment = VerticalAlignment.Center };
+            ruleStack.Children.Add(_desktopCombo);
+            _desktopLabel.Visibility = Visibility.Collapsed;
+            _desktopCombo.Visibility = Visibility.Collapsed;
 
             // Target Profile
             CreateLabel(ruleStack, "Target Profile:");
@@ -288,9 +330,11 @@ namespace Desktop_Frames
             parent.Children.Add(footerBorder);
         }
 
-        private void CreateLabel(StackPanel p, string text)
+        private TextBlock CreateLabel(StackPanel p, string text)
         {
-            p.Children.Add(new TextBlock { Text = text, FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 5) });
+            var label = new TextBlock { Text = text, FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 5) };
+            p.Children.Add(label);
+            return label;
         }
 
         // --- Logic ---
@@ -301,14 +345,39 @@ namespace Desktop_Frames
             foreach (var rule in ProfileManager.AutomationRules)
             {
                 string mode = rule.IsPersisted ? "[P]" : "[D]";
-                _rulesList.Items.Add($"{mode} {rule.ProcessName} → {rule.TargetProfile} ({rule.DelaySeconds}s)");
+                if (rule.TriggerType == AutomationTriggerType.VirtualDesktop)
+                {
+                    // Resolve the live desktop name; refresh the cached name when resolvable,
+                    // otherwise show the stale cached name with a "(missing)" cue.
+                    var live = _desktopCache.FirstOrDefault(d => string.Equals(d.Id, rule.VirtualDesktopId, StringComparison.OrdinalIgnoreCase));
+                    string display;
+                    if (live.Id != null)
+                    {
+                        rule.VirtualDesktopName = live.Name;
+                        display = live.Name;
+                    }
+                    else
+                    {
+                        display = $"{rule.VirtualDesktopName ?? rule.VirtualDesktopId} (missing)";
+                    }
+                    _rulesList.Items.Add($"{mode} [Desktop] {display} → {rule.TargetProfile}");
+                }
+                else
+                {
+                    _rulesList.Items.Add($"{mode} [App] {rule.ProcessName} → {rule.TargetProfile} ({rule.DelaySeconds}s)");
+                }
             }
         }
 
         private void ApplyRule(bool closeAfter)
         {
+            bool isVdRule = _vdTrigRadio.IsChecked == true;
+
             // Silent Validation
-            if (string.IsNullOrWhiteSpace(_processSearchCombo.Text) || _profileCombo.SelectedItem == null)
+            bool triggerMissing = isVdRule
+                ? _desktopCombo.SelectedItem == null
+                : string.IsNullOrWhiteSpace(_processSearchCombo.Text);
+            if (triggerMissing || _profileCombo.SelectedItem == null)
             {
                 // If the user clicked "Save" (closeAfter=true) but fields are empty,
                 // treat it as a "Cancel/Close" action instead of doing nothing.
@@ -316,16 +385,45 @@ namespace Desktop_Frames
                 return;
             }
 
-            var existing = ProfileManager.AutomationRules.FirstOrDefault(r => r.ProcessName.Equals(_processSearchCombo.Text, StringComparison.OrdinalIgnoreCase));
-            if (existing != null) ProfileManager.AutomationRules.Remove(existing);
-
-            ProfileManager.AutomationRules.Add(new AutomationRule
+            if (isVdRule)
             {
-                ProcessName = _processSearchCombo.Text.Trim(),
-                TargetProfile = _profileCombo.SelectedItem.ToString(),
-                IsPersisted = _persistedChk.IsChecked == true,
-                DelaySeconds = (int)_delaySlider.Value
-            });
+                var item = (ComboBoxItem)_desktopCombo.SelectedItem;
+                string desktopId = item.Tag?.ToString();
+
+                var existing = ProfileManager.AutomationRules.FirstOrDefault(r =>
+                    r.TriggerType == AutomationTriggerType.VirtualDesktop &&
+                    string.Equals(r.VirtualDesktopId, desktopId, StringComparison.OrdinalIgnoreCase));
+                if (existing != null) ProfileManager.AutomationRules.Remove(existing);
+
+                ProfileManager.AutomationRules.Add(new AutomationRule
+                {
+                    TriggerType = AutomationTriggerType.VirtualDesktop,
+                    VirtualDesktopId = desktopId,
+                    VirtualDesktopName = item.Content?.ToString(),
+                    TargetProfile = _profileCombo.SelectedItem.ToString(),
+                    IsPersisted = _persistedChk.IsChecked == true,
+                    // A desktop switch is a discrete event; a settle delay adds nothing, so
+                    // the delay field is disabled for VD rules and the value stays 0.
+                    DelaySeconds = 0
+                });
+            }
+            else
+            {
+                var existing = ProfileManager.AutomationRules.FirstOrDefault(r =>
+                    r.TriggerType == AutomationTriggerType.Process &&
+                    r.ProcessName != null &&
+                    r.ProcessName.Equals(_processSearchCombo.Text, StringComparison.OrdinalIgnoreCase));
+                if (existing != null) ProfileManager.AutomationRules.Remove(existing);
+
+                ProfileManager.AutomationRules.Add(new AutomationRule
+                {
+                    TriggerType = AutomationTriggerType.Process,
+                    ProcessName = _processSearchCombo.Text.Trim(),
+                    TargetProfile = _profileCombo.SelectedItem.ToString(),
+                    IsPersisted = _persistedChk.IsChecked == true,
+                    DelaySeconds = (int)_delaySlider.Value
+                });
+            }
 
             ProfileManager.SaveConfigInternal();
             LoadRules();
@@ -337,10 +435,49 @@ namespace Desktop_Frames
         {
             if (_rulesList.SelectedIndex < 0) return;
             var rule = ProfileManager.AutomationRules[_rulesList.SelectedIndex];
-            _processSearchCombo.Text = rule.ProcessName;
+
+            if (rule.TriggerType == AutomationTriggerType.VirtualDesktop)
+            {
+                if (_vdTrigRadio.IsEnabled) _vdTrigRadio.IsChecked = true;
+                _desktopCombo.SelectedItem = _desktopCombo.Items.OfType<ComboBoxItem>()
+                    .FirstOrDefault(i => string.Equals(i.Tag?.ToString(), rule.VirtualDesktopId, StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                _procTrigRadio.IsChecked = true;
+                _processSearchCombo.Text = rule.ProcessName;
+            }
+
             _profileCombo.SelectedItem = rule.TargetProfile;
             _delaySlider.Value = rule.DelaySeconds;
             _persistedChk.IsChecked = rule.IsPersisted;
+        }
+
+        private void UpdateTriggerUI()
+        {
+            // Radios fire Checked during construction ordering edge cases; guard nulls.
+            if (_procGrid == null || _desktopCombo == null) return;
+
+            bool isVdRule = _vdTrigRadio.IsChecked == true;
+
+            _processLabel.Visibility = isVdRule ? Visibility.Collapsed : Visibility.Visible;
+            _procGrid.Visibility = isVdRule ? Visibility.Collapsed : Visibility.Visible;
+            _desktopLabel.Visibility = isVdRule ? Visibility.Visible : Visibility.Collapsed;
+            _desktopCombo.Visibility = isVdRule ? Visibility.Visible : Visibility.Collapsed;
+
+            // Delay is meaningless for VD rules (the event is discrete) — disable, keep 0 on save.
+            _delaySlider.IsEnabled = !isVdRule;
+            _delayValText.Foreground = isVdRule ? Brushes.LightGray : Brushes.Black;
+        }
+
+        private void RefreshDesktopList()
+        {
+            _desktopCombo.Items.Clear();
+            foreach (var (id, name) in _desktopCache)
+            {
+                _desktopCombo.Items.Add(new ComboBoxItem { Content = name, Tag = id });
+            }
+            if (_desktopCombo.Items.Count > 0) _desktopCombo.SelectedIndex = 0;
         }
 
         private void DeleteRule()
