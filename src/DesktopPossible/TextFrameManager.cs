@@ -191,11 +191,55 @@ namespace Desktop_Frames
                 host.Children.Add(BuildText(text, Font(frame), Size(frame), Bold(frame), Italic(frame),
                     ParseColor(ColorHex(frame)), Align(frame), DrawMode(frame)));
                 host.Opacity = Opacity(frame);
+                AutoSize(frame, host);
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Text frame render failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Text frames are never resized by hand: the window always fits the rendered text
+        /// (plus host margin and outline), re-measured after every refresh. Right- and
+        /// centre-aligned frames keep their right/centre edge anchored so a top-right frame
+        /// grows leftward. Persists the new size when it changed.
+        /// </summary>
+        private static void AutoSize(dynamic frame, Grid host)
+        {
+            if (Window.GetWindow(host) is not NonActivatingWindow win) return;
+            if (host.Children.Count == 0) return;
+
+            var content = host.Children[0];
+            content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var desired = content.DesiredSize;
+            double pad = host.Margin.Left + host.Margin.Right + 2; // outline allowance
+            double width = Math.Max(40, Math.Ceiling(desired.Width + pad));
+            double height = Math.Max(20, Math.Ceiling(desired.Height + host.Margin.Top + host.Margin.Bottom + 2));
+
+            if (Math.Abs(win.Width - width) < 0.5 && Math.Abs(win.Height - height) < 0.5) return;
+
+            string align = Align(frame);
+            double delta = width - win.Width;
+            if (align == "Right") win.Left -= delta;
+            else if (align == "Center") win.Left -= delta / 2;
+            win.Width = width;
+            win.Height = height;
+
+            string frameId = win.Tag?.ToString() ?? "";
+            dynamic? live = LiveFrame(frameId);
+            if (live == null) return;
+            SetValue(live, "X", win.Left);
+            SetValue(live, "Width", width);
+            SetValue(live, "Height", height);
+            SetValue(live, "UnrolledHeight", height);
+            FrameDataManager.SaveFrameData();
+        }
+
+        private static void SetValue(dynamic frame, string key, double value)
+        {
+            if (frame is IDictionary<string, object> d) d[key] = value;
+            else if (frame is Newtonsoft.Json.Linq.JObject jo) jo[key] = value;
         }
 
         /// <summary>
@@ -218,7 +262,7 @@ namespace Desktop_Frames
                     FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
                     FontStyle = italic ? FontStyles.Italic : FontStyles.Normal,
                     Foreground = new SolidColorBrush(c),
-                    TextWrapping = TextWrapping.Wrap,
+                    TextWrapping = TextWrapping.NoWrap,
                     TextAlignment = align switch { "Center" => TextAlignment.Center, "Right" => TextAlignment.Right, _ => TextAlignment.Left },
                     HorizontalAlignment = align switch { "Center" => HorizontalAlignment.Center, "Right" => HorizontalAlignment.Right, _ => HorizontalAlignment.Left },
                     VerticalAlignment = VerticalAlignment.Top,
@@ -286,6 +330,7 @@ namespace Desktop_Frames
             if (IsTextFrame(frame))
             {
                 ApplyEditMode(win, frame, SettingsManager.FrameEditMode);
+                Refresh(frame); // first render ran before the window existed: size it to the text now
                 PushToBottom(win);
             }
             else
@@ -318,6 +363,7 @@ namespace Desktop_Frames
                     border.BorderThickness = new Thickness(editMode ? 1 : 0);
                 }
                 if (titleGrid != null) titleGrid.Visibility = Visibility.Collapsed;
+                win.ResizeMode = ResizeMode.NoResize; // sized to the text, never by hand
 
                 var hwnd = new WindowInteropHelper(win).Handle;
                 if (hwnd != IntPtr.Zero)
