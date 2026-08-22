@@ -117,6 +117,9 @@ namespace Desktop_Frames
         public static bool FramesFadeOutFx { get; set; } = false;
         public static double FadeOutFxTargetAlpha { get; set; } = 0.3;
         public static int FadeOutTime { get; set; } = 5;
+        /// <summary>Hover debounce for waking a faded frame (ms): the pointer must rest on the frame
+        /// this long before it returns to full opacity, so a pointer just passing through doesn't wake it.</summary>
+        public static int FadeWakeDelayMs { get; set; } = 250;
 
         // --- NEW: Hidden Auto-Roll Settings ---
         public static int AutoRollTime { get; set; } = 2;
@@ -325,6 +328,7 @@ namespace Desktop_Frames
                 FramesFadeOutFx,
                 FadeOutFxTargetAlpha,
                 FadeOutTime,
+                FadeWakeDelayMs,
 
                 // Global Hotkeys
                 EnableProfileHotkeys,
@@ -434,6 +438,7 @@ namespace Desktop_Frames
             try { FramesFadeOutFx = data.FramesFadeOutFx ?? false; } catch { FramesFadeOutFx = false; }
             try { FadeOutFxTargetAlpha = data.FadeOutFxTargetAlpha ?? 0.3; } catch { FadeOutFxTargetAlpha = 0.3; }
             try { FadeOutTime = data.FadeOutTime ?? 5; } catch { FadeOutTime = 5; }
+            try { FadeWakeDelayMs = data.FadeWakeDelayMs ?? 250; } catch { FadeWakeDelayMs = 250; }
 
             try { SpotSearchKey = ParseKey(data.SpotSearchKey); } catch { SpotSearchKey = 192; }
 
@@ -616,6 +621,7 @@ namespace Desktop_Frames
                             data["FramesFadeOutFx"] = FramesFadeOutFx;
                             data["FadeOutFxTargetAlpha"] = FadeOutFxTargetAlpha;
                             data["FadeOutTime"] = FadeOutTime;
+                            data["FadeWakeDelayMs"] = FadeWakeDelayMs;
 
                             AtomicFile.WriteAllText(optionsFile, JsonConvert.SerializeObject(data, Formatting.Indented));
                         }

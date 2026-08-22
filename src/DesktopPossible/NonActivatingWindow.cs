@@ -218,12 +218,34 @@ public class NonActivatingWindow : Window
             this.MouseEnter += (s, ev) => ResetIdleTimer(true);
             this.MouseLeave += (s, ev) => ResetIdleTimer(false);
             this.MouseMove += (s, ev) => ResetIdleTimer(true);
+            this.PreviewMouseDown += (s, ev) => WakeNow(); // a click always wakes immediately
+
+            _wakeTimer = new System.Windows.Threading.DispatcherTimer();
+            _wakeTimer.Tick += WakeTimer_Tick;
         }
 
         RefreshIdleSettings();
     }
 
     private void IdleTimer_Tick(object sender, EventArgs e) => ExecuteIdleFadeOut();
+
+    // Hover debounce: while the frame is faded, every mouse move re-arms this timer, so a pointer
+    // that keeps moving across the frame never wakes it; once it rests for FadeWakeDelayMs, it does.
+    private System.Windows.Threading.DispatcherTimer _wakeTimer;
+
+    private void WakeTimer_Tick(object sender, EventArgs e)
+    {
+        _wakeTimer?.Stop();
+        if (this.IsMouseOver) WakeNow();
+    }
+
+    private void WakeNow()
+    {
+        _wakeTimer?.Stop();
+        if (_idleTimer == null || !SettingsManager.FramesFadeOutFx) return;
+        _idleTimer.Stop();
+        RestoreOpacity();
+    }
 
     /// <summary>
     /// LEAK FIX: a running DispatcherTimer is rooted by its Dispatcher, and its Tick handler
@@ -237,6 +259,12 @@ public class NonActivatingWindow : Window
             _idleTimer.Stop();
             _idleTimer.Tick -= IdleTimer_Tick;
             _idleTimer = null;
+        }
+        if (_wakeTimer != null)
+        {
+            _wakeTimer.Stop();
+            _wakeTimer.Tick -= WakeTimer_Tick;
+            _wakeTimer = null;
         }
         base.OnClosed(e);
     }
@@ -264,14 +292,23 @@ public class NonActivatingWindow : Window
 
         _idleTimer.Stop();
 
-        if (isMouseInside)
+        if (!isMouseInside)
         {
-            RestoreOpacity();
-        }
-        else
-        {
+            _wakeTimer?.Stop();
             _idleTimer.Start();
+            return;
         }
+
+        // Already at full opacity: nothing to wake, just keep the idle countdown parked.
+        if (!_isIdleFaded) return;
+
+        int delay = SettingsManager.FadeWakeDelayMs;
+        if (delay <= 0 || _wakeTimer == null) { WakeNow(); return; }
+
+        // Faded: (re)start the hover debounce — fires only once the pointer rests on the frame.
+        _wakeTimer.Stop();
+        _wakeTimer.Interval = TimeSpan.FromMilliseconds(delay);
+        _wakeTimer.Start();
     }
 
     private void ExecuteIdleFadeOut()

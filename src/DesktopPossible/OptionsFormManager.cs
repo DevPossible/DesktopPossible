@@ -330,6 +330,7 @@ namespace Desktop_Frames
             CreateCheckBox(c, "Enable Idle Fade-Out", "FramesFadeOutFx", SettingsManager.FramesFadeOutFx);
             CreateSliderControl(c, "Idle Time (sec)", "FadeOutTimeSlider", SettingsManager.FadeOutTime, 300);
             CreateSliderControl(c, "Fade Target Opacity (%)", "FadeOutAlphaSlider", (int)(SettingsManager.FadeOutFxTargetAlpha * 100), 100);
+            CreateSliderControl(c, "Wake-up hover delay (ms)", "FadeWakeDelaySlider", SettingsManager.FadeWakeDelayMs, 2000, min: 0); // 0 = instant (classic)
 
             // --- Moved from General Tab (Idle Auto-Roll Options) ---
             CreateSectionHeader(c, "Idle Auto-Roll", ColorStyle);
@@ -907,7 +908,7 @@ namespace Desktop_Frames
         private static CheckBox CreateCheckBoxReturn(StackPanel p, string t, string n, bool c) { var cb = new CheckBox { Name = n, Content = t, IsChecked = c, FontFamily = new FontFamily("Segoe UI"), FontSize = 13, Margin = new Thickness(15, 8, 0, 8) }; p.Children.Add(cb); return cb; }
 
         // FIX: Added 'max' parameter (defaulting to 100) to fix the Tint sliders while supporting AutoHideTime
-        private static void CreateSliderControl(StackPanel p, string l, string n, int v, int max = 100)
+        private static void CreateSliderControl(StackPanel p, string l, string n, int v, int max = 100, int min = 1)
         {
             Grid g = new Grid { Margin = new Thickness(15, 5, 0, 5) };
 
@@ -919,12 +920,12 @@ namespace Desktop_Frames
 
             // UI FIX: Changed HorizontalAlignment to Left so labels sit flush on the left margin
             TextBlock lbl = new TextBlock { Text = l, FontSize = 13, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 10, 0) };
-            Slider sl = new Slider { Name = n, Minimum = 1, Maximum = max, Value = v, TickFrequency = 1, IsSnapToTickEnabled = true, VerticalAlignment = VerticalAlignment.Center };
+            Slider sl = new Slider { Name = n, Minimum = min, Maximum = max, Value = v, TickFrequency = 1, IsSnapToTickEnabled = true, VerticalAlignment = VerticalAlignment.Center };
 
             // --- TRIAL: Replaced TextBlock with interconnected NumericTextBox for micro-adjustments ---
             NumericTextBox nud = new NumericTextBox
             {
-                Minimum = 1,
+                Minimum = min,
                 Maximum = max,
                 Value = v,
                 Width = 55, // Exactly half of the standard width used in CustomizeFrameForm, plus a tiny bit for 3-digit numbers
@@ -1198,6 +1199,7 @@ namespace Desktop_Frames
                         var autoHideTime = g.Children.OfType<Slider>().FirstOrDefault(s => s.Name == "AutoHideTimeSlider"); if (autoHideTime != null) { SettingsManager.AutoHideTime = (int)autoHideTime.Value; Framemanager.ResetAutoHideTimer(); }
                         var fadeOutTime = g.Children.OfType<Slider>().FirstOrDefault(s => s.Name == "FadeOutTimeSlider"); if (fadeOutTime != null) SettingsManager.FadeOutTime = (int)fadeOutTime.Value;
                         var fadeOutAlpha = g.Children.OfType<Slider>().FirstOrDefault(s => s.Name == "FadeOutAlphaSlider"); if (fadeOutAlpha != null) SettingsManager.FadeOutFxTargetAlpha = fadeOutAlpha.Value / 100.0;
+                        var fadeWake = g.Children.OfType<Slider>().FirstOrDefault(s => s.Name == "FadeWakeDelaySlider"); if (fadeWake != null) SettingsManager.FadeWakeDelayMs = (int)fadeWake.Value;
                         var autoRollTime = g.Children.OfType<Slider>().FirstOrDefault(s => s.Name == "AutoRollTimeSlider"); if (autoRollTime != null) SettingsManager.AutoRollTime = (int)autoRollTime.Value;
 
                         // Parse Icons from the new side-by-side nested Grid layout
