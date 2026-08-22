@@ -1,3 +1,7 @@
+// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -31,6 +35,7 @@ namespace Desktop_Frames
         private static readonly Color ColorProfiles = Color.FromRgb(255, 20, 147); // Deep Pink
         private static readonly Color ColorHotkeys = Color.FromRgb(139, 69, 19); // SaddleBrown
         private static readonly Color ColorSmartDesktop = Color.FromRgb(41, 74, 122); // Semi Dark Blue
+        private static readonly Color ColorTextFrames = Color.FromRgb(0, 131, 143); // Teal
 
         public static void ShowOptionsForm()
         {
@@ -160,6 +165,7 @@ namespace Desktop_Frames
             CreateHotkeysTab();
             CreateSmartDesktopTab();
             CreateLookDeeperTab();
+            CreateTextFramesTab();
 
             _tabControl.SelectedIndex = _lastSelectedTabIndex;
             CreateTabButton(tabPanel, "General", 0, _lastSelectedTabIndex == 0);
@@ -169,6 +175,7 @@ namespace Desktop_Frames
             CreateTabButton(tabPanel, "Hotkeys", 4, _lastSelectedTabIndex == 4);
             CreateTabButton(tabPanel, "Smart Desktop", 5, _lastSelectedTabIndex == 5);
             CreateTabButton(tabPanel, "Look Deeper", 6, _lastSelectedTabIndex == 6);
+            CreateTabButton(tabPanel, "Text Frames", 7, _lastSelectedTabIndex == 7);
 
             contentBorder.Child = _tabControl;
             Grid.SetColumn(tabPanel, 0); contentGrid.Children.Add(tabPanel);
@@ -200,7 +207,7 @@ namespace Desktop_Frames
 
         private static void SetTabButtonColors(Button button, string title, bool isSelected, bool isHover = false)
         {
-            Color activeColor = title switch { "Style & FX" => ColorStyle, "Tools" => ColorTools, "Profiles" => ColorProfiles, "Hotkeys" => ColorHotkeys, "Smart Desktop" => ColorSmartDesktop, "Look Deeper" => ColorLookDeeper, _ => _userAccentColor };
+            Color activeColor = title switch { "Style & FX" => ColorStyle, "Tools" => ColorTools, "Profiles" => ColorProfiles, "Hotkeys" => ColorHotkeys, "Smart Desktop" => ColorSmartDesktop, "Look Deeper" => ColorLookDeeper, "Text Frames" => ColorTextFrames, _ => _userAccentColor };
             if (isSelected) { button.Background = new SolidColorBrush(activeColor); button.Foreground = Brushes.White; }
             else if (isHover) { button.Background = new SolidColorBrush(Color.FromRgb((byte)(activeColor.R + 40), (byte)(activeColor.G + 40), (byte)(activeColor.B + 40))); button.Foreground = Brushes.White; }
             else { button.Background = new SolidColorBrush(Color.FromRgb(200, 200, 200)); button.Foreground = new SolidColorBrush(Color.FromRgb(60, 60, 60)); }
@@ -799,6 +806,75 @@ namespace Desktop_Frames
             _tabControl.Items.Add(t);
         }
 
+        private static void CreateTextFramesTab()
+        {
+            TabItem t = new TabItem();
+            StackPanel c = new StackPanel();
+
+            CreateSectionHeader(c, "Text Frames", ColorTextFrames);
+            c.Children.Add(new TextBlock
+            {
+                Text = "Text frames paint live system information over your wallpaper (like BGInfo): a template with " +
+                       "{tokens}, your choice of font, colour and draw mode, refreshed on a timer. They sit beneath every " +
+                       "other frame and ignore the mouse. To move or resize one, turn on \"Edit Frames Mode\" in the tray menu.",
+                TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray, FontStyle = FontStyles.Italic,
+                Margin = new Thickness(15, 0, 15, 12)
+            });
+
+            ListBox list = new ListBox { Height = 220, Margin = new Thickness(15, 0, 15, 10), FontFamily = new FontFamily("Segoe UI"), FontSize = 13 };
+            void Reload()
+            {
+                list.Items.Clear();
+                foreach (dynamic f in FrameDataManager.FrameData)
+                {
+                    if (!TextFramemanager.IsTextFrame(f)) continue;
+                    list.Items.Add(new ListBoxItem { Content = f.Title?.ToString() ?? "(untitled)", Tag = f.Id?.ToString() });
+                }
+            }
+            Reload();
+            c.Children.Add(list);
+
+            string? SelectedId() => (list.SelectedItem as ListBoxItem)?.Tag?.ToString();
+
+            Grid buttons = new Grid { Margin = new Thickness(15, 0, 15, 10), Height = 34 };
+            for (int i = 0; i < 3; i++) buttons.ColumnDefinitions.Add(new ColumnDefinition());
+            Button bAdd = CreateStyledButton("Add Text Frame", ColorTextFrames); bAdd.Margin = new Thickness(0, 0, 5, 0);
+            Button bEdit = CreateStyledButton("Edit...", Color.FromRgb(0, 123, 191)); bEdit.Margin = new Thickness(5, 0, 5, 0);
+            Button bRemove = CreateStyledButton("Remove", Color.FromRgb(234, 67, 53)); bRemove.Margin = new Thickness(5, 0, 0, 0);
+            Grid.SetColumn(bAdd, 0); Grid.SetColumn(bEdit, 1); Grid.SetColumn(bRemove, 2);
+            buttons.Children.Add(bAdd); buttons.Children.Add(bEdit); buttons.Children.Add(bRemove);
+            c.Children.Add(buttons);
+
+            bAdd.Click += (s, e) =>
+            {
+                var wa = SystemParameters.WorkArea;
+                dynamic frame = Framemanager.CreateTextFrame(wa.Left + 40, wa.Top + 40);
+                Reload();
+                foreach (ListBoxItem item in list.Items) if (item.Tag?.ToString() == frame.Id?.ToString()) list.SelectedItem = item;
+                TextFrameEditorDialog.Show(frame.Id?.ToString());
+                Reload();
+            };
+            bEdit.Click += (s, e) =>
+            {
+                string? id = SelectedId();
+                if (id == null) return;
+                TextFrameEditorDialog.Show(id);
+                Reload();
+            };
+            list.MouseDoubleClick += (s, e) => { string? id = SelectedId(); if (id != null) { TextFrameEditorDialog.Show(id); Reload(); } };
+            bRemove.Click += (s, e) =>
+            {
+                string? id = SelectedId();
+                if (id == null) return;
+                if (!MessageBoxesManager.ShowCustomYesNoMessageBox("Remove this text frame?", "Remove")) return;
+                Framemanager.DetachFrame(id);
+                Reload();
+            };
+
+            t.Content = new ScrollViewer { Content = c, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            _tabControl.Items.Add(t);
+        }
+
         private static void CreateLookDeeperTab()
         {
             TabItem t = new TabItem();
@@ -1272,7 +1348,7 @@ namespace Desktop_Frames
                 SettingsManager.SaveSettings();
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.Settings, "Options applied");
 
-                if (tempPortalImageState != newPortalWatermarkState) TrayManager.reloadallFrames();
+                if (tempPortalImageState != newPortalWatermarkState) _ = TrayManager.reloadallFrames(); // fire-and-forget reload
                 TrayManager.Instance?.UpdateTrayIcon();
                 Utility.UpdateFrameVisuals();
                 Framemanager.RefreshAllPortalDetails(); // apply global striping change to open portals
@@ -1311,7 +1387,7 @@ namespace Desktop_Frames
                     {
                         BackupManager.RestoreFromBackup(d.SelectedPath);
                         _optionsWindow.Close();
-                        TrayManager.reloadallFrames();
+                        _ = TrayManager.reloadallFrames(); // fire-and-forget reload
                     }
                 }
             }

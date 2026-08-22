@@ -1,3 +1,7 @@
+// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -569,6 +573,7 @@ namespace Desktop_Frames
                 _portalFrames.Clear();
                 LazyIconLoader.ClearQueue();  // drop stale icon requests from the closed frames
                 ImageFramemanager.ResetAll(); // forget image hosts + dispose their file watchers
+                TextFramemanager.ResetAll();  // forget text hosts + stop their refresh timers
                 FrameDataManager.FrameData?.Clear();
                 _currentTargetChecker?.Dispose(); // stop AND release the underlying timer
 
@@ -1228,7 +1233,6 @@ namespace Desktop_Frames
 
 
 
-        private static int _registryMonitorTickCount = 0;
 
 
         // Builds the heart ContextMenu for a frame with consistent items and dynamic state
@@ -1308,6 +1312,14 @@ namespace Desktop_Frames
                 CreateNewFrame("", "Image", mousePosition.X, mousePosition.Y);
             };
             menu.Items.Add(newImageFrameItem);
+
+            MenuItem newTextFrameItem = new MenuItem { Header = "New Text Frame" };
+            newTextFrameItem.Click += (s, e) =>
+            {
+                var mousePosition = System.Windows.Forms.Cursor.Position;
+                CreateTextFrame(mousePosition.X, mousePosition.Y);
+            };
+            menu.Items.Add(newTextFrameItem);
 
             menu.Items.Add(new Separator());
 
@@ -4383,6 +4395,9 @@ namespace Desktop_Frames
                 MigrateLegacyJson();
             }
 
+            // Starter System Info text frame (Default profile, once ever) — data only; shown below.
+            TextFramemanager.SeedSystemInfoFrameIfNeeded();
+
             // Portal Frames with missing target folders (offline share, unplugged USB...) are
             // NOT deleted — a transient error must never destroy user data. CreateFrame skips
             // creating their window and the frame comes back on the next reload when the
@@ -4998,6 +5013,14 @@ namespace Desktop_Frames
             CnMnFramemanager.Items.Add(miContentLock);
             CnMnFramemanager.Items.Add(new Separator());
             CnMnFramemanager.Opened += (s, e) => miContentLock.IsChecked = IsContentLocked(LiveMenuFrame());
+
+            // --- Text frame: the editor (template, font, colour, draw mode, refresh). ---
+            if (TextFramemanager.IsTextFrame(frame))
+            {
+                var miEditText = new MenuItem { Header = "Edit Text Frame..." };
+                miEditText.Click += (s, e) => TextFrameEditorDialog.Show(frame.Id?.ToString());
+                CnMnFramemanager.Items.Add(miEditText);
+            }
 
             // --- Image frame controls (set / clear / copy) for the single displayed image. ---
             if (frame.ItemsType?.ToString() == "Image")
@@ -7117,6 +7140,14 @@ namespace Desktop_Frames
                     return;
                 }
 
+                // 1b. Text frames - templated text painted over the wallpaper (bginfo-style).
+                if (TextFramemanager.IsTextFrame(frame))
+                {
+                    dp.Children.Remove(wpcontscr);
+                    TextFramemanager.CreateTextContent(frame, dp);
+                    return;
+                }
+
                 // 2. Handle Data/Portal frames
                 bool isRolled = frame.IsRolled?.ToString().ToLower() == "true";
                 wpcont.Visibility = isRolled ? Visibility.Collapsed : Visibility.Visible;
@@ -7383,6 +7414,9 @@ namespace Desktop_Frames
                     ImageFramemanager.HandleDrop(frame, e);
                     return;
                 }
+
+                // Text frames hold no items.
+                if (TextFramemanager.IsTextFrame(frame)) { e.Effects = DragDropEffects.None; return; }
 
                 // Content-locked Data/Portal frames reject drops (Portal drops copy files into the
                 // folder, Data drops add shortcuts — both are "changes").
@@ -7878,6 +7912,7 @@ namespace Desktop_Frames
             }
             win.Show();
             SendFrameToBottom(win); // desktop furniture: start behind the user's apps
+            TextFramemanager.AfterShown(win, frame); // text frames sink below everything else
 
 
 
@@ -8601,6 +8636,14 @@ namespace Desktop_Frames
 
         #endregion
 
+        /// <summary>Creates and shows a new Text frame at the given screen position.</summary>
+        public static dynamic CreateTextFrame(double x, double y)
+        {
+            dynamic frame = TextFramemanager.CreateNew("Text Frame", x, y);
+            CreateFrame(frame, GetOrCreateTargetChecker());
+            return frame;
+        }
+
         private static void CreateNewFrame(string title, string itemsType, double x = 20, double y = 20, string customColor = null, string customLaunchEffect = null)
         {
             // Generate random name instead of using the passed title
@@ -8896,6 +8939,7 @@ namespace Desktop_Frames
                                 : FrameDataManager.FrameData.FirstOrDefault(x => x.Id?.ToString() == frameId);
                             bool isLocked = f?.IsLocked?.ToString().ToLower() == "true";
                             win.ResizeMode = (isLocked || !SettingsManager.FrameEditMode) ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
+                            TextFramemanager.ApplyEditMode(win, f, SettingsManager.FrameEditMode);
                         }
                         catch { }
                     }
@@ -10237,6 +10281,7 @@ namespace Desktop_Frames
                 }
 
                 if (type == "Image") { ImageFramemanager.Refresh(frame); return; }
+                if (type == "Text") { TextFramemanager.Refresh(frame); return; }
                 if (type == "Note")
                 {
                     // Walk the whole visual tree — the note's Border.Child is swapped to an overlay Grid
@@ -10335,6 +10380,7 @@ namespace Desktop_Frames
             "Note" => "✎",   // ✎ pencil
             "Data" => "↗",   // ↗ shortcut/launch arrow
             "Image" => "\U0001F5BC", // 🖼 monochrome frame-with-picture
+            "Text" => "T",           // text frame
             _ => ""
         };
 

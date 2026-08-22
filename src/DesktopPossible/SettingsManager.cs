@@ -1,4 +1,8 @@
-﻿using System;
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -68,8 +72,13 @@ namespace Desktop_Frames
         // --- NEW: Hidden Option for Manual Repositioning ---
         public static bool AllowAutoReposition { get; set; } = true;
 
-        // --- Global Frame Edit Mode (default ON = fresh installs start with movable/resizable frames) ---
-        public static bool FrameEditMode { get; set; } = true;
+        // --- Global Frame Edit Mode (default OFF: frames and text frames are position/size locked
+        //     until the user turns editing on from the tray menu; app-global, so it survives
+        //     profile / virtual-desktop switches) ---
+        public static bool FrameEditMode { get; set; } = false;
+
+        // --- One-time starter: the System Info text frame seeded on the Default profile ---
+        public static bool SystemInfoFrameCreated { get; set; } = false;
 
         // --- Snap frame position/size to the icon grid (FrameGrid) when moving/resizing ---
         public static bool SnapFramesToGrid { get; set; } = true;
@@ -288,6 +297,7 @@ namespace Desktop_Frames
                 FrameEditMode,
                 SnapFramesToGrid,
                 InstructionalFrameCreated,
+                SystemInfoFrameCreated,
                 FramesWithNoRoundCorners,
                 EnableProfileAutomation,
                 EnableVirtualDesktopAutomation,
@@ -390,9 +400,10 @@ namespace Desktop_Frames
             try { AutoRollTime = data.AutoRollTime ?? 2; } catch { AutoRollTime = 2; }
 
             try { AllowAutoReposition = data.AllowAutoReposition ?? true; } catch { AllowAutoReposition = true; }
-            try { FrameEditMode = data.FrameEditMode ?? true; } catch { FrameEditMode = true; }
+            try { FrameEditMode = data.FrameEditMode ?? false; } catch { FrameEditMode = false; }
             try { SnapFramesToGrid = data.SnapFramesToGrid ?? true; } catch { SnapFramesToGrid = true; }
             try { InstructionalFrameCreated = data.InstructionalFrameCreated ?? false; } catch { InstructionalFrameCreated = false; }
+            try { SystemInfoFrameCreated = data.SystemInfoFrameCreated ?? false; } catch { SystemInfoFrameCreated = false; }
             try { FramesWithNoRoundCorners = data.FramesWithNoRoundCorners ?? false; } catch { FramesWithNoRoundCorners = false; }
             try { EnableProfileAutomation = data.EnableProfileAutomation ?? false; } catch { EnableProfileAutomation = false; }
             try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? false; } catch { EnableVirtualDesktopAutomation = false; }
