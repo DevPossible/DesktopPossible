@@ -7223,10 +7223,21 @@ namespace Desktop_Frames
             {
                 try
                 {
-                    if (wpcont.FreeArrange && e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                    if (e.Data.GetDataPresent(DataFormats.FileDrop) &&
                         !IconDragDropManager.IsOleDragFromFrame(frame.Id?.ToString()))
                     {
-                        IconDragDropManager.ShowExternalDropPreview(wpcont, e.GetPosition(wpcont));
+                        // Explorer-like semantics: default is MOVE (original is removed
+                        // after our copy is created); Ctrl = COPY, and setting Effects
+                        // here is what renders the standard "+" copy overlay.
+                        e.Effects = e.KeyStates.HasFlag(DragDropKeyStates.ControlKey)
+                            ? DragDropEffects.Copy
+                            : DragDropEffects.Move;
+                        e.Handled = true;
+
+                        if (wpcont.FreeArrange)
+                        {
+                            IconDragDropManager.ShowExternalDropPreview(wpcont, e.GetPosition(wpcont));
+                        }
                     }
                 }
                 catch { }
@@ -7236,6 +7247,10 @@ namespace Desktop_Frames
             win.Drop += (sender, e) =>
             {
                 e.Handled = true;
+
+                // Explorer-like drop semantics: Ctrl at release = COPY (original kept);
+                // otherwise MOVE (original shortcut removed after our copy succeeds).
+                bool dropIsCopy = e.KeyStates.HasFlag(DragDropKeyStates.ControlKey);
 
                 // External-drop ghost: capture the landing cell it promised (the first
                 // dropped item goes exactly there via PlaceItemInFreeGrid), then clear it.
@@ -7436,6 +7451,28 @@ namespace Desktop_Frames
                                     else
                                     {
                                         System.IO.File.Copy(droppedFile, shortcutName, true);
+                                    }
+
+                                    // MOVE semantics (Explorer-like): our copy exists now, so
+                                    // remove the original — UNLESS Ctrl is held (copy) or this
+                                    // is one of our own cross-frame OLE drags (the source frame
+                                    // removes its item itself via the returned Move effect).
+                                    // Only ever applies to dropped SHORTCUT files (.lnk/.url):
+                                    // raw files/folders dropped in are merely LINKED TO, and
+                                    // deleting them would break the item we just created.
+                                    if (!dropIsCopy && !IconDragDropManager.IsOleDragInProgress)
+                                    {
+                                        try
+                                        {
+                                            System.IO.File.Delete(droppedFile);
+                                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
+                                                $"Drop move: removed original shortcut '{droppedFile}'");
+                                        }
+                                        catch (Exception moveEx)
+                                        {
+                                            LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
+                                                $"Drop move: could not remove original '{droppedFile}': {moveEx.Message}");
+                                        }
                                     }
                                 }
 
@@ -8396,6 +8433,66 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
                     $"Error placing item in free grid: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Clones an item within a free-arrange frame (Ctrl+drag quick-clone): duplicates
+        /// the JSON item and, when the backing file lives in the profile's Shortcuts store,
+        /// copies the file under a unique name so each item owns its shortcut. The clone
+        /// lands at the requested cell (first free cell when occupied). Items backed by a
+        /// raw external path are NOT cloned — the grid keys items by Filename, and a
+        /// duplicate key would corrupt placement; returns false so the caller falls back
+        /// to a normal move.
+        /// </summary>
+        public static bool CloneItemInFrame(dynamic frame, JObject sourceItem, JArray targetList, int col, int row)
+        {
+            try
+            {
+                if (frame == null || sourceItem == null || targetList == null) return false;
+
+                string filename = sourceItem["Filename"]?.ToString() ?? "";
+                string resolved = System.IO.Path.IsPathRooted(filename)
+                    ? filename
+                    : System.IO.Path.Combine(ProfileManager.CurrentProfileDir, filename);
+                string shortcutsDir = System.IO.Path.Combine(ProfileManager.CurrentProfileDir, "Shortcuts");
+
+                if (!System.IO.File.Exists(resolved) ||
+                    !resolved.StartsWith(shortcutsDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
+                        $"Clone skipped for '{filename}' (not Shortcuts-backed) — falling back to move.");
+                    return false;
+                }
+
+                string ext = System.IO.Path.GetExtension(resolved);
+                string baseName = System.IO.Path.GetFileNameWithoutExtension(resolved);
+                int counter = 1;
+                string newPath;
+                do { newPath = System.IO.Path.Combine(shortcutsDir, $"{baseName} ({counter++}){ext}"); }
+                while (System.IO.File.Exists(newPath));
+                System.IO.File.Copy(resolved, newPath);
+
+                var clone = (JObject)sourceItem.DeepClone();
+                clone["Filename"] = System.IO.Path.Combine("Shortcuts", System.IO.Path.GetFileName(newPath));
+
+                int columns = GetFreeArrangeColumns(frame);
+                if (!GridLayout.TryPlaceAt(targetList, clone, (col, row), columns))
+                {
+                    GridLayout.PlaceInFirstFreeCell(targetList, clone, columns);
+                }
+                targetList.Add(clone);
+                FrameDataManager.SaveFrameData();
+
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
+                    $"Cloned '{filename}' -> '{clone["Filename"]}' at ({col},{row}).");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
+                    $"Error cloning item: {ex.Message}");
+                return false;
             }
         }
 

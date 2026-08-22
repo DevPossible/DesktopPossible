@@ -56,6 +56,9 @@ namespace Desktop_Frames
 
         // OLE drag-out state: set while a shell drag (DoDragDrop) started from a frame is running.
         private static string _oleDragSourceFrameId = null;
+
+        // "+" copy badge on the drag preview — visible while Ctrl is held (clone drop).
+        private static Border _dragCopyBadge = null;
         #endregion
 
         #region Public Properties
@@ -227,6 +230,7 @@ namespace Desktop_Frames
                     _lastPreviewCell = (-1, -1);
                     _ghostPreview = null;
                     _dragSnapshot = null;
+                    _dragCopyBadge = null;
                     _draggedIconOpacity = 1.0;
                 }
             }
@@ -248,6 +252,15 @@ namespace Desktop_Frames
             try
             {
                 UpdateDragPreviewPosition(screenPosition);
+
+                // Live "+" badge: Ctrl held = this drop will CLONE the icon.
+                if (_dragCopyBadge != null)
+                {
+                    _dragCopyBadge.Visibility =
+                        System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control)
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                }
 
                 // OLE ESCALATION: once the cursor leaves the source frame's bounds the
                 // internal move becomes a real shell drag (Explorer handles desktop drops
@@ -570,6 +583,23 @@ namespace Desktop_Frames
 
                 int columns = Math.Max(1, panel.Columns);
                 var hover = GridLayout.CellFromPoint(dropPosition.X, dropPosition.Y, cellWidth, cellHeight, columns);
+
+                // Ctrl at release = QUICK CLONE: the original stays at its cell and an
+                // independent copy (own shortcut file) lands at the hover cell. Falls
+                // back to a normal move when the item can't be cloned (raw-path items).
+                if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control))
+                {
+                    RestoreAttachedCellsFromData(panel); // revert the displacement preview
+                    if (Framemanager.CloneItemInFrame(_sourceFrame, _draggedItem as JObject, _sourceItemsList, hover.Col, hover.Row))
+                    {
+                        RefreshFrameUI();
+                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
+                            $"Ctrl-drop clone at cell ({hover.Col},{hover.Row})");
+                        return;
+                    }
+                    // clone refused -> fall through to the normal move commit
+                }
+
                 var map = GridLayout.PreviewDisplacement(CollectOtherPlacements(), DraggedKey(), hover, columns);
 
                 foreach (var token in _sourceItemsList)
@@ -982,14 +1012,41 @@ namespace Desktop_Frames
                 _dragSnapshot = SnapshotIcon(originalIcon);
                 if (_dragSnapshot != null)
                 {
-                    _dragPreviewWindow.Content = new System.Windows.Controls.Image
+                    // Snapshot + a "+" copy badge (shown while Ctrl is held = clone drop).
+                    var previewGrid = new Grid();
+                    previewGrid.Children.Add(new System.Windows.Controls.Image
                     {
                         Source = _dragSnapshot,
                         Width = _dragPreviewWindow.Width,
                         Height = _dragPreviewWindow.Height,
                         Opacity = 0.75,
                         Stretch = Stretch.Fill
+                    });
+                    _dragCopyBadge = new Border
+                    {
+                        Width = 16,
+                        Height = 16,
+                        CornerRadius = new CornerRadius(3),
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 120, 215)),
+                        BorderBrush = System.Windows.Media.Brushes.White,
+                        BorderThickness = new Thickness(1),
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        VerticalAlignment = VerticalAlignment.Bottom,
+                        Margin = new Thickness(2),
+                        Visibility = Visibility.Collapsed,
+                        Child = new TextBlock
+                        {
+                            Text = "+",
+                            Foreground = System.Windows.Media.Brushes.White,
+                            FontWeight = FontWeights.Bold,
+                            FontSize = 12,
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Margin = new Thickness(0, -2, 0, 0)
+                        }
                     };
+                    previewGrid.Children.Add(_dragCopyBadge);
+                    _dragPreviewWindow.Content = previewGrid;
                     System.Windows.Point cursor = GetCursorPosition();
                     _dragPreviewWindow.Left = (cursor.X / dpiScale) + 10;
                     _dragPreviewWindow.Top = (cursor.Y / dpiScale) - 10;
