@@ -68,8 +68,14 @@ namespace Desktop_Frames
         // --- NEW: Hidden Option for Manual Repositioning ---
         public static bool AllowAutoReposition { get; set; } = true;
 
-        // --- NEW: Global Frame Edit Mode (default OFF = frames are not movable/resizable) ---
-        public static bool FrameEditMode { get; set; } = false;
+        // --- Global Frame Edit Mode (default ON = fresh installs start with movable/resizable frames) ---
+        public static bool FrameEditMode { get; set; } = true;
+
+        // --- Snap frame position/size to the icon grid (FrameGrid) when moving/resizing ---
+        public static bool SnapFramesToGrid { get; set; } = true;
+
+        // --- App-level, once-ever flag: the instructional "Startup Tips" frame has been seeded ---
+        public static bool InstructionalFrameCreated { get; set; } = false;
 
         // --- NEW: Hidden Option for Square Corners ---
         public static bool FramesWithNoRoundCorners { get; set; } = false;
@@ -280,6 +286,8 @@ namespace Desktop_Frames
 
                 AllowAutoReposition,
                 FrameEditMode,
+                SnapFramesToGrid,
+                InstructionalFrameCreated,
                 FramesWithNoRoundCorners,
                 EnableProfileAutomation,
                 EnableVirtualDesktopAutomation,
@@ -382,7 +390,9 @@ namespace Desktop_Frames
             try { AutoRollTime = data.AutoRollTime ?? 2; } catch { AutoRollTime = 2; }
 
             try { AllowAutoReposition = data.AllowAutoReposition ?? true; } catch { AllowAutoReposition = true; }
-            try { FrameEditMode = data.FrameEditMode ?? false; } catch { FrameEditMode = false; }
+            try { FrameEditMode = data.FrameEditMode ?? true; } catch { FrameEditMode = true; }
+            try { SnapFramesToGrid = data.SnapFramesToGrid ?? true; } catch { SnapFramesToGrid = true; }
+            try { InstructionalFrameCreated = data.InstructionalFrameCreated ?? false; } catch { InstructionalFrameCreated = false; }
             try { FramesWithNoRoundCorners = data.FramesWithNoRoundCorners ?? false; } catch { FramesWithNoRoundCorners = false; }
             try { EnableProfileAutomation = data.EnableProfileAutomation ?? false; } catch { EnableProfileAutomation = false; }
             try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? false; } catch { EnableVirtualDesktopAutomation = false; }

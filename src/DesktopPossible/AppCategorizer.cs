@@ -859,49 +859,53 @@ namespace Desktop_Frames
 
         #region Frame sizing + free-space placement (pure, testable)
 
-        /// <summary>Grid cell width for default icon spacing (60 + 5*4), see GetFreeArrangeCellWidth.</summary>
-        private const double CellWidth = 80;
-        private const double CellHeight = 80;
-        private const double FrameChromeWidth = 30;   // borders + scrollbar allowance
-        private const double FrameTitleBarHeight = 40;
         private const int TargetColumns = 4;
 
         /// <summary>
-        /// Sizes a new category frame from its content: width for ~4 icon columns,
-        /// height for ceil(count/4) rows plus the title bar, clamped to ~60% of the
-        /// work-area height (leftover icons still land in the grid; the frame scrolls
-        /// and stays user-resizable).
+        /// Sizes a new category frame from its content using the shared FrameGrid: width
+        /// for 4 icon columns, height for ceil(count/4) rows plus chrome, clamped to
+        /// ~60% of the work-area height but always chrome + whole rows (leftover icons
+        /// still land in the grid; the frame scrolls and stays user-resizable).
         /// </summary>
         public static (double Width, double Height) ComputeFrameSize(int itemCount, double workAreaHeight)
         {
-            double width = TargetColumns * CellWidth + FrameChromeWidth;
+            double width = FrameGrid.ChromeWidth + TargetColumns * FrameGrid.UnitWidth;
             int rows = Math.Max(1, (int)Math.Ceiling(itemCount / (double)TargetColumns));
-            double height = rows * CellHeight + FrameTitleBarHeight;
-            double maxHeight = Math.Max(CellHeight + FrameTitleBarHeight, workAreaHeight * 0.6);
-            return (width, Math.Min(height, maxHeight));
+            int maxRows = Math.Max(1, (int)Math.Floor((workAreaHeight * 0.6 - FrameGrid.ChromeHeight) / FrameGrid.UnitHeight));
+            double height = FrameGrid.ChromeHeight + Math.Min(rows, maxRows) * FrameGrid.UnitHeight;
+            return (width, height);
         }
 
         /// <summary>
-        /// Finds the first position (row-major, coarse step, from the work area's
-        /// top-left) where a rect of the given size fits entirely inside the work area
-        /// and intersects none of the occupied rects. Null when nothing fits — callers
-        /// fall back to a small cascade (overlap allowed only as the last resort).
+        /// Finds the first position (row-major from the work area's top-left) where a rect
+        /// of the given size fits entirely inside the work area and keeps at least
+        /// <paramref name="gap"/> clear of every occupied rect (each occupied rect is
+        /// inflated by the gap before the intersection test, so adjacent placements are
+        /// rejected). Candidates step by the grid unit (<paramref name="gridW"/>/<paramref name="gridH"/>)
+        /// when given — so auto-placed frames sit on the same grid users drag to — else by
+        /// <paramref name="step"/>. Null when nothing fits — callers fall back to a small
+        /// cascade (overlap allowed only as the last resort).
         /// </summary>
         public static (double X, double Y)? FindFreePosition(double width, double height,
             IReadOnlyCollection<(double X, double Y, double W, double H)> occupied,
-            (double X, double Y, double W, double H) workArea, double step = 24)
+            (double X, double Y, double W, double H) workArea, double step = 24,
+            double gap = FrameGrid.FallbackGap, double gridW = 0, double gridH = 0)
         {
             if (step <= 0) step = 24;
+            if (gap < 0) gap = 0;
+            double stepX = gridW > 0 ? gridW : step;
+            double stepY = gridH > 0 ? gridH : step;
             occupied ??= Array.Empty<(double, double, double, double)>();
 
-            for (double y = workArea.Y; y + height <= workArea.Y + workArea.H; y += step)
+            for (double y = workArea.Y; y + height <= workArea.Y + workArea.H; y += stepY)
             {
-                for (double x = workArea.X; x + width <= workArea.X + workArea.W; x += step)
+                for (double x = workArea.X; x + width <= workArea.X + workArea.W; x += stepX)
                 {
                     bool clash = false;
                     foreach (var r in occupied)
                     {
-                        if (x < r.X + r.W && r.X < x + width && y < r.Y + r.H && r.Y < y + height)
+                        double rx = r.X - gap, ry = r.Y - gap, rw = r.W + 2 * gap, rh = r.H + 2 * gap;
+                        if (x < rx + rw && rx < x + width && y < ry + rh && ry < y + height)
                         {
                             clash = true;
                             break;
@@ -1302,7 +1306,9 @@ namespace Desktop_Frames
                     catch { }
                 }
 
-                var position = FindFreePosition(width, height, occupied, (wa.X, wa.Y, wa.Width, wa.Height));
+                // Gap = one grid unit so neighbours never touch; candidates walk the frame grid.
+                var position = FindFreePosition(width, height, occupied, (wa.X, wa.Y, wa.Width, wa.Height),
+                    gap: FrameGrid.UnitWidth, gridW: FrameGrid.UnitWidth, gridH: FrameGrid.UnitHeight);
                 double x, y;
                 if (position.HasValue)
                 {

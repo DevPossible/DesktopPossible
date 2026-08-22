@@ -301,9 +301,11 @@ public class CategorizerTests : IDisposable
         var (_, h2) = AppCategorizer.ComputeFrameSize(5, 1000);   // 2 rows
         var (_, hBig) = AppCategorizer.ComputeFrameSize(100, 1000); // clamped
 
-        w1.ShouldBe(350);           // 4 * 80 + 30 chrome
+        w1.ShouldBe(FrameGrid.ChromeWidth + 4 * FrameGrid.UnitWidth); // 30 + 4 * 80 = 350
+        h1.ShouldBe(FrameGrid.ChromeHeight + FrameGrid.UnitHeight);    // one whole row
         h2.ShouldBeGreaterThan(h1); // more rows -> taller
-        hBig.ShouldBe(600);         // clamped to 60% of the 1000px work area
+        hBig.ShouldBeLessThanOrEqualTo(600); // clamped to 60% of the 1000px work area...
+        ((hBig - FrameGrid.ChromeHeight) % FrameGrid.UnitHeight).ShouldBe(0); // ...but still whole rows
     }
 
     [Fact]

@@ -220,6 +220,7 @@ namespace Desktop_Frames
             CreateCheckBox(c, "Single Click to Launch", "SingleClickToLaunch", SettingsManager.SingleClickToLaunch);
             CreateCheckBox(c, "Enable Snap Near Frames", "EnableSnapNearFrames", SettingsManager.IsSnapEnabled);
             CreateCheckBox(c, "Enable Dimension Snap", "EnableDimensionSnap", SettingsManager.EnableDimensionSnap);
+            CreateCheckBox(c, "Snap frames to grid when moving and resizing", "SnapFramesToGrid", SettingsManager.SnapFramesToGrid);
             CreateCheckBox(c, "Enable Tray Icon", "EnableTrayIcon", SettingsManager.ShowInTray);
             CreateCheckBox(c, "Use Recycle Bin on Portal Frames 'Delete item' command", "UseRecycleBin", SettingsManager.UseRecycleBin);
 
@@ -953,6 +954,7 @@ namespace Desktop_Frames
                         if (cb.Name == "SingleClickToLaunch") SettingsManager.SingleClickToLaunch = cb.IsChecked == true;
                         if (cb.Name == "EnableSnapNearFrames") SettingsManager.IsSnapEnabled = cb.IsChecked == true;
                         if (cb.Name == "EnableDimensionSnap") SettingsManager.EnableDimensionSnap = cb.IsChecked == true;
+                        if (cb.Name == "SnapFramesToGrid") SettingsManager.SnapFramesToGrid = cb.IsChecked == true;
                         if (cb.Name == "UseRecycleBin") SettingsManager.UseRecycleBin = cb.IsChecked == true;
                         if (cb.Name == "EnableTrayIcon")
                         {

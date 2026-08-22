@@ -4314,10 +4314,24 @@ namespace Desktop_Frames
                 jsonLoadSuccessful = LoadFrameDataFromJson();
             }
 
-            // If JSON loading failed or file doesn't exist, initialize with defaults
+            // Empty profile (fresh install, new profile, or unreadable frames.json): profiles start
+            // with NO starter content. The only exception is the instructional "Startup Tips"
+            // frame, seeded once ever — on the Default profile, guarded by an app-level flag in
+            // MasterOptions — so it never comes back in any profile once created (or deleted).
             if (!jsonLoadSuccessful || FrameDataManager.FrameData == null || FrameDataManager.FrameData.Count == 0)
             {
-                InitializeDefaultFrame();
+                bool seedInstructional = !SettingsManager.InstructionalFrameCreated &&
+                    string.Equals(ProfileManager.CurrentProfileName, "Default", StringComparison.OrdinalIgnoreCase);
+                if (seedInstructional)
+                {
+                    InitializeDefaultFrame();
+                    SettingsManager.InstructionalFrameCreated = true;
+                    SettingsManager.SaveSettings();
+                }
+                else
+                {
+                    FrameDataManager.FrameData = new List<dynamic>();
+                }
             }
             else
             {
@@ -4407,8 +4421,19 @@ namespace Desktop_Frames
             var frameDict = frame as System.Collections.Generic.IDictionary<string, object>;
             if (frameDict != null)
             {
-                frameDict["Width"] = r.Width;
-                frameDict["Height"] = r.Height;
+                // Drawn frames start on whole icon rows/columns (and on the grid) when enabled.
+                double w = r.Width, h = r.Height, x = r.X, y = r.Y;
+                if (SettingsManager.SnapFramesToGrid)
+                {
+                    (w, h) = FrameGrid.SnapSize(w, h);
+                    var wa = SystemParameters.WorkArea;
+                    (x, y) = FrameGrid.SnapPosition(x, y, wa.Left, wa.Top);
+                }
+                frameDict["X"] = x;
+                frameDict["Y"] = y;
+                frameDict["Width"] = w;
+                frameDict["Height"] = h;
+                frameDict["UnrolledHeight"] = h;
 
                 // FIX: Force set the title to what the user actually typed
                 frameDict["Title"] = name;
@@ -4514,48 +4539,33 @@ namespace Desktop_Frames
 
 
 
+        /// <summary>
+        /// Seeds the one-time instructional "Startup Tips" Note frame at the bottom-right of the
+        /// primary work area. Caller gates this (Default profile + InstructionalFrameCreated flag).
+        /// </summary>
         private static void InitializeDefaultFrame()
         {
             try
             {
-                // 1. Create the Standard Data Frames (For user icons)
-                var dataFrame = new
+                const double tipsWidth = 555.0, tipsHeight = 318.0, margin = 20.0;
+                double tipsX = 20.0, tipsY = 20.0;
+                try
                 {
-                    Id = Guid.NewGuid().ToString(),
-                    Title = "New Frame - Drop your shortcuts here",
-                    X = 20.0,
-                    Y = 20.0,
-                    Width = 360.0,
-                    Height = 180.0,
-                    ItemsType = "Data",
-                    Items = new JArray(),
+                    var wa = SystemParameters.WorkArea;
+                    tipsX = Math.Max(wa.Left, wa.Right - tipsWidth - margin);
+                    tipsY = Math.Max(wa.Top, wa.Bottom - tipsHeight - margin);
+                }
+                catch { }
 
-                    // Defaults
-                    IsLocked = "false",
-                    IsHidden = "false",
-                    IsRolled = "false",
-                    AutoRoll = "false", // --- NEW: Auto Roll ---
-                    AlwaysOnTop = "false", // --- NEW ---
-                    UnrolledHeight = 130.0,
-                    TabsEnabled = "false",
-                    CurrentTab = 0,
-                    Tabs = new JArray(),
-
-                    // Visual Defaults
-                    CustomColor = (string)null,
-                    FrameBorderThickness = 2
-                };
-
-
-                // 2. Create the "Startup Tips" Note Frame
+                // The "Startup Tips" Note Frame
                 var noteFrame = new
                 {
                     Id = Guid.NewGuid().ToString(), // Unique ID
                     Title = "DesktopPossible Startup Tips", // Explicit Name
-                    X = 20.0,   // Positioned below the data frame
-                    Y = 200.0,  // Data frame ends then this frame begins
-                    Width = 555.0,
-                    Height = 318.0,
+                    X = tipsX,   // Bottom-right of the primary work area
+                    Y = tipsY,
+                    Width = tipsWidth,
+                    Height = tipsHeight,
                     ItemsType = "Note",
                     Items = new JArray(),
 
@@ -4595,8 +4605,8 @@ namespace Desktop_Frames
                     FrameBorderThickness = 2
                 };
 
-                // 3. Combine and Save
-                var frames = new List<object> { dataFrame, noteFrame };
+                // Save
+                var frames = new List<object> { noteFrame };
                 string defaultJson = JsonConvert.SerializeObject(frames, Formatting.Indented);
 
                 System.IO.File.WriteAllText(FrameDataManager.JsonFilePath, defaultJson);
@@ -4605,7 +4615,7 @@ namespace Desktop_Frames
                 FrameDataManager.FrameData = JsonConvert.DeserializeObject<List<dynamic>>(defaultJson);
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameCreation,
-                    "Initialized default configuration with Data Frame and Startup Tips");
+                    $"Seeded the one-time Startup Tips frame at {tipsX},{tipsY}");
             }
             catch (Exception ex)
             {
@@ -6824,7 +6834,12 @@ namespace Desktop_Frames
                         else if (!isLocked)
                         {
                             win.DragMove();
+                            // Grid first, then edge snap: SnapManager only moves the window when a
+                            // neighbour/screen edge is within its threshold, so edge alignment (the
+                            // stronger intent) overrides the grid point when both apply.
+                            SnapWindowToGrid(win);
                             SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
+                            FlushPendingFrameSave();
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Dragging frame '{currentFrame.Title}'");
                         }
                         else
@@ -11174,8 +11189,13 @@ namespace Desktop_Frames
             }
         }
 
+        // Size when the current move/resize gesture began (WM_ENTERSIZEMOVE), so the grid
+        // size-snap only runs after an actual resize — a plain drag never re-sizes the frame.
+        private static readonly Dictionary<NonActivatingWindow, (double W, double H)> _sizeAtGestureStart = new();
+
         public static void OnResizingStarted(NonActivatingWindow frame)
         {
+            try { _sizeAtGestureStart[frame] = (frame.Width, frame.Height); } catch { }
             if (SettingsManager.EnableDimensionSnap)
             {
                 frame.SizeChanged += UpdateSizeFeedback;
@@ -11183,14 +11203,71 @@ namespace Desktop_Frames
             }
         }
 
+        /// <summary>
+        /// Moves the window's top-left to the nearest FrameGrid point (multiples of the icon
+        /// cell size from the work-area origin of the monitor the window is on). No-op when
+        /// "Snap frames to grid" is off. The window's LocationChanged handler persists X/Y.
+        /// </summary>
+        public static void SnapWindowToGrid(NonActivatingWindow win)
+        {
+            if (win == null || !SettingsManager.SnapFramesToGrid) return;
+            try
+            {
+                var (ox, oy) = WorkAreaOriginFor(win);
+                var (x, y) = FrameGrid.SnapPosition(win.Left, win.Top, ox, oy);
+                if (Math.Abs(win.Left - x) > 0.1 || Math.Abs(win.Top - y) > 0.1)
+                {
+                    win.Left = x;
+                    win.Top = y;
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Work-area origin (DIPs) of the monitor containing the window; primary work area as fallback.</summary>
+        private static (double X, double Y) WorkAreaOriginFor(NonActivatingWindow win)
+        {
+            try
+            {
+                var hwnd = new WindowInteropHelper(win).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
+                    double scale = 1.0;
+                    var source = PresentationSource.FromVisual(win);
+                    if (source?.CompositionTarget != null) scale = source.CompositionTarget.TransformToDevice.M11;
+                    if (scale <= 0) scale = 1.0;
+                    return (screen.WorkingArea.Left / scale, screen.WorkingArea.Top / scale);
+                }
+            }
+            catch { }
+            var wa = SystemParameters.WorkArea;
+            return (wa.Left, wa.Top);
+        }
+
         public static void OnResizingEnded(NonActivatingWindow frame)
         {
+            bool sizeChanged = false;
+            try
+            {
+                if (_sizeAtGestureStart.TryGetValue(frame, out var start))
+                {
+                    sizeChanged = Math.Abs(start.W - frame.Width) > 0.5 || Math.Abs(start.H - frame.Height) > 0.5;
+                    _sizeAtGestureStart.Remove(frame);
+                }
+            }
+            catch { }
+
             if (SettingsManager.EnableDimensionSnap)
             {
                 frame.SizeChanged -= UpdateSizeFeedback;
 
                 double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
                 double snappedHeight = Math.Round(frame.Height / 10.0) * 10;
+
+                // Grid snap wins over the coarse 10px snap: whole icon rows/columns.
+                if (SettingsManager.SnapFramesToGrid && sizeChanged)
+                    (snappedWidth, snappedHeight) = SnapSizeToGrid(frame, snappedWidth, snappedHeight);
 
                 frame.Width = snappedWidth;
                 frame.Height = snappedHeight;
@@ -11210,10 +11287,35 @@ namespace Desktop_Frames
                 // Show one last time. The unified timer in ShowSizeFeedback will clean it up automatically.
                 ShowSizeFeedback(snappedWidth, snappedHeight);
             }
+            else if (SettingsManager.SnapFramesToGrid && sizeChanged)
+            {
+                // Grid size-snap: chrome + whole icon rows/columns. The window's SizeChanged
+                // handler writes Width/Height/UnrolledHeight into FrameData (debounced save).
+                var (w, h) = SnapSizeToGrid(frame, frame.Width, frame.Height);
+                if (Math.Abs(frame.Width - w) > 0.1) frame.Width = w;
+                if (Math.Abs(frame.Height - h) > 0.1) frame.Height = h;
+            }
 
             // WM_EXITSIZEMOVE fires when a drag OR resize gesture ends: flush the debounced
             // geometry save immediately so the final position/size is on disk right away.
             FlushPendingFrameSave();
+        }
+
+        /// <summary>
+        /// FrameGrid.SnapSize for a live window; a rolled-up frame keeps its rolled height
+        /// (only the width snaps) so snapping never silently unrolls it.
+        /// </summary>
+        private static (double W, double H) SnapSizeToGrid(NonActivatingWindow frame, double width, double height)
+        {
+            var (w, h) = FrameGrid.SnapSize(width, height);
+            try
+            {
+                string frameId = frame.Tag?.ToString();
+                dynamic data = string.IsNullOrEmpty(frameId) ? null : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == frameId);
+                if (data != null && data.IsRolled?.ToString().ToLower() == "true") h = height;
+            }
+            catch { }
+            return (w, h);
         }
 
 
