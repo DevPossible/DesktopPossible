@@ -162,8 +162,8 @@ public class CategorizerTests : IDisposable
         string path = Path.Combine(_tempDir, "category_cache.json");
         var cache = new Dictionary<string, CategoryCacheEntry>(StringComparer.OrdinalIgnoreCase)
         {
-            ["chrome"] = new CategoryCacheEntry { Category = "Productivity", Timestamp = DateTime.UtcNow },
-            ["mystery"] = new CategoryCacheEntry { Category = "none", Timestamp = DateTime.UtcNow }
+            ["chrome"] = new CategoryCacheEntry { Version = AppCategorizer.CacheVersion, Category = "Productivity", Timestamp = DateTime.UtcNow },
+            ["mystery"] = new CategoryCacheEntry { Version = AppCategorizer.CacheVersion, Category = "none", Timestamp = DateTime.UtcNow }
         };
 
         AppCategorizer.SaveCategoryCache(path, cache);
@@ -191,7 +191,7 @@ public class CategorizerTests : IDisposable
         var now = DateTime.UtcNow;
         var cache = new Dictionary<string, CategoryCacheEntry>(StringComparer.OrdinalIgnoreCase)
         {
-            ["vlc"] = new CategoryCacheEntry { Category = "Media", Timestamp = now.AddDays(-100) }
+            ["vlc"] = new CategoryCacheEntry { Version = AppCategorizer.CacheVersion, Category = "Media", Timestamp = now.AddDays(-100) }
         };
 
         // Positive entries never go stale.
@@ -209,7 +209,7 @@ public class CategorizerTests : IDisposable
         var now = DateTime.UtcNow;
         var cache = new Dictionary<string, CategoryCacheEntry>(StringComparer.OrdinalIgnoreCase)
         {
-            ["mystery"] = new CategoryCacheEntry { Category = "none", Timestamp = now.AddDays(-5) }
+            ["mystery"] = new CategoryCacheEntry { Version = AppCategorizer.CacheVersion, Category = "none", Timestamp = now.AddDays(-5) }
         };
 
         // Fresh "none": the cache answers (no lookup needed) and the item stays unclassified.
@@ -223,7 +223,7 @@ public class CategorizerTests : IDisposable
         var now = DateTime.UtcNow;
         var cache = new Dictionary<string, CategoryCacheEntry>(StringComparer.OrdinalIgnoreCase)
         {
-            ["mystery"] = new CategoryCacheEntry { Category = "none", Timestamp = now.AddDays(-35) }
+            ["mystery"] = new CategoryCacheEntry { Version = AppCategorizer.CacheVersion, Category = "none", Timestamp = now.AddDays(-35) }
         };
 
         // Negative older than 30 days: retry the lookup.

@@ -19,6 +19,9 @@ namespace Desktop_Frames
     {
         public string? Category { get; set; }
         public DateTime Timestamp { get; set; }
+        /// <summary>Classifier generation that produced this verdict; entries from
+        /// older generations are ignored so classifier improvements re-evaluate them.</summary>
+        public int Version { get; set; }
     }
 
     /// <summary>
@@ -105,6 +108,10 @@ namespace Desktop_Frames
 
         /// <summary>Negative ("none") cache entries expire after this many days.</summary>
         public const int NegativeCacheDays = 30;
+
+        /// <summary>Bump when classification logic improves: stale cached verdicts
+        /// (especially negatives) are then re-resolved instead of trusted.</summary>
+        public const int CacheVersion = 2;
 
         #endregion
 
@@ -379,6 +386,25 @@ namespace Desktop_Frames
             ["pimaxclient"] = VR,
             ["varjobase"] = VR,
             ["mixedrealityportal"] = VR,
+            // --- Added from real-desktop misses (2026-08-22) ---
+            ["cursor"] = DeveloperTools, ["tabby"] = DeveloperTools, ["bcompare"] = DeveloperTools,
+            ["opencode"] = DeveloperTools, ["beyond compare"] = DeveloperTools,
+            ["peggle"] = Games, ["hytale-launcher"] = Games, ["hytale launcher"] = Games,
+            ["lunar client"] = Games, ["ftb app"] = Games, ["overwolflauncher"] = Games, ["overwolf"] = Games,
+            ["immersed"] = VR, ["immersed agent"] = VR,
+            ["kindle"] = Media, ["openmpt"] = Media, ["gimp-3"] = Media,
+            ["nvidia app"] = Utilities, ["logioptionsplus"] = Utilities, ["logi options+"] = Utilities,
+            ["unigetui"] = Utilities, ["diskinfo64a"] = Utilities, ["crystaldiskinfo"] = Utilities,
+            ["advanced_port_scanner"] = Utilities, ["advanced port scanner"] = Utilities,
+            ["nextgenlenovodiagnostics"] = Utilities, ["lenovo diagnostics"] = Utilities,
+            ["eppcchkr"] = Utilities, ["epplusg"] = Utilities, ["epson photo+"] = Utilities,
+            ["brother utilities"] = Utilities, ["brlauncher"] = Utilities,
+            ["v2v_converter"] = Utilities, ["starwind v2v converter"] = Utilities,
+            ["vspemulator"] = Utilities, ["vspe"] = Utilities, ["aurgaviewer"] = Utilities, ["aurga viewer"] = Utilities,
+            ["playstationaccessories"] = Games, ["playstation accessories"] = Games,
+            ["openscad"] = Productivity, ["meshmixer"] = Productivity, ["crealityprint"] = Productivity,
+            ["creality print"] = Productivity, ["flashprint"] = Productivity, ["falcondesignspace"] = Productivity,
+            ["falcon design space"] = Productivity, ["perplexity ai"] = Productivity, ["perplexity"] = Productivity,
         };
 
         /// <summary>
@@ -424,6 +450,31 @@ namespace Desktop_Frames
         };
 
         /// <summary>
+        /// Normalizes "gimp-3.0.6" / "Creality Print 7.2" / "openSCAD Nightly" to a
+        /// base token and looks for a known key it starts with (longest key wins).
+        /// </summary>
+        internal static string? MatchKnownNormalized(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            string norm = raw.ToLowerInvariant();
+            norm = Regex.Replace(norm, @"\s*(nightly|beta|alpha|preview|portable|x64|x86|64|32)\b", "");
+            norm = Regex.Replace(norm, @"[\s_\-]*v?\d+(\.\d+)*\s*$", "");   // trailing version
+            norm = Regex.Replace(norm, @"[\s_\-]+", "");                      // "creality print" -> "crealityprint"
+            if (norm.Length < 4) return null;
+
+            string? best = null; int bestLen = 0;
+            foreach (var kv in KnownApps)
+            {
+                string key = Regex.Replace(kv.Key.ToLowerInvariant(), @"[\s_\-]+", "");
+                if (key.Length >= 4 && norm.StartsWith(key, StringComparison.Ordinal) && key.Length > bestLen)
+                {
+                    best = kv.Value; bestLen = key.Length;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
         /// Tier 1a: classify by the curated known-app list. Matches the target's exe
         /// name (without extension), then the display name — exact first, then the
         /// multi-word product-name substrings. Case-insensitive. Null = no answer.
@@ -445,6 +496,13 @@ namespace Desktop_Frames
                 string name = (displayName ?? "").Trim();
                 if (name.Length > 0 && KnownApps.TryGetValue(name, out var byName))
                     return byName;
+
+                // Version-tolerant matching: "gimp-3", "gimp-3.0.6", "Creality Print 7.2",
+                // "openSCAD Nightly" must still hit their known entry. Strip trailing
+                // version/edition tokens, then accept a known key that the normalized
+                // exe/display name starts with (keys of 4+ chars only, to avoid noise).
+                string? byNormalized = MatchKnownNormalized(exeName) ?? MatchKnownNormalized(name);
+                if (byNormalized != null) return byNormalized;
 
                 string nameLower = name.ToLowerInvariant();
                 if (nameLower.Length > 0)
@@ -496,6 +554,43 @@ namespace Desktop_Frames
             (@"\ubisoft\", Games),
             ("uplay://", Games),
         };
+
+        /// <summary>
+        /// Tier 1c: generic keyword heuristics over the display name and exe name,
+        /// consulted only after the known list and path hints miss. Ordered so the
+        /// more specific signals (security, VR, developer) win over broad ones.
+        /// </summary>
+        internal static readonly (string Category, string[] Keywords)[] NameKeywordRules =
+        {
+            (SecurityApps,   new[] { "antivirus", "anti-virus", "vpn", "password", "firewall", "security", "malware", "defender" }),
+            (VR,             new[] { " vr", "vr ", "oculus", "quest link", "immersed", "steamvr", "virtual desktop" }),
+            (DeveloperTools, new[] { "terminal", "console", "ide", "compiler", "sdk", "devtools", "developer", "debugger", "git ", "docker", "postman", "code editor", "opencode" }),
+            (Games,          new[] { "launcher", "minecraft", " game", "games", "emulator", "steam", "epic games", "gog ", "xbox", "playstation" }),
+            (Media,          new[] { "player", "music", "video", "reader", "kindle", "photo", "image editor", "camera", " tv", "podcast", "audio", "spotify" }),
+            (Productivity,   new[] { "print", "slicer", "cad", "scad", "mesh", "design space", "office", "notes", "mail", "browser", "docs", "calendar", "chat", "ai" }),
+            (Utilities,      new[] { "viewer", "diagnostic", "utilit", "toolbox", "converter", "scanner", "driver", "options", "checker", "control center", "cleaner", "monitor", "setup", "update", "printer", "connection", "manager", "config", "settings", "tool" }),
+        };
+
+        public static string? ClassifyByNameKeywords(string? displayName, string? targetPath)
+        {
+            try
+            {
+                string exe = "";
+                if (!string.IsNullOrWhiteSpace(targetPath) && !LooksLikeUrl(targetPath))
+                {
+                    try { exe = Path.GetFileNameWithoutExtension(targetPath) ?? ""; } catch { }
+                }
+                string hay = (" " + (displayName ?? "") + " " + exe + " ").ToLowerInvariant()
+                    .Replace("_", " ").Replace("-", " ");
+                if (hay.Trim().Length == 0) return null;
+
+                foreach (var (category, keywords) in NameKeywordRules)
+                    foreach (string kw in keywords)
+                        if (hay.Contains(kw)) return category;
+            }
+            catch { }
+            return null;
+        }
 
         /// <summary>
         /// Tier 1b: classify by install-path / URL heuristics. Both the resolved target
@@ -620,6 +715,7 @@ namespace Desktop_Frames
             category = null;
             if (cache == null || string.IsNullOrWhiteSpace(key)) return false;
             if (!cache.TryGetValue(key, out var entry) || entry == null) return false;
+            if (entry.Version != CacheVersion) return false; // older classifier generation
 
             if (string.Equals(entry.Category, NoneCategory, StringComparison.OrdinalIgnoreCase))
             {
@@ -671,9 +767,8 @@ namespace Desktop_Frames
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
-            string? category = await TryWingetAsync(name);
-            if (category != null) return category;
-
+            // winget.run's community index has gone empty (every query returns zero
+            // packages), so Chocolatey's documented Search() endpoint is the sole source.
             return await TryChocolateyAsync(name);
         }
 
@@ -692,9 +787,10 @@ namespace Desktop_Frames
         {
             try
             {
-                string lower = name.ToLowerInvariant();
-                string url = "https://community.chocolatey.org/api/v2/Packages()?$filter=IsLatestVersion%20and%20substringof('"
-                             + Uri.EscapeDataString(lower) + "',tolower(Id))&$top=3";
+                // Search() is the endpoint the choco CLI itself uses; the
+                // Packages()/substringof filter form returns no entries on this feed.
+                string url = "https://community.chocolatey.org/api/v2/Search()?$filter=IsLatestVersion&searchTerm='"
+                             + Uri.EscapeDataString(name.ToLowerInvariant()) + "'&targetFramework=''&includePrerelease=false&$top=3";
                 string xml = await _http.Value.GetStringAsync(url);
                 return CategoryFromChocolateyXml(xml);
             }
@@ -930,7 +1026,8 @@ namespace Desktop_Frames
                 // Documents/images are classified by extension in ResolveEntry and never
                 // go through the app tiers (a "chrome.pdf" is a document, not a browser).
                 entry.Category ??= ClassifyKnown(entry.Target, entry.DisplayName)
-                                   ?? ClassifyByPath(entry.Target, entry.Arguments);
+                                   ?? ClassifyByPath(entry.Target, entry.Arguments)
+                                   ?? ClassifyByNameKeywords(entry.DisplayName, entry.Target);
                 entries.Add(entry);
             }
 
@@ -1076,7 +1173,8 @@ namespace Desktop_Frames
                             cache[key] = new CategoryCacheEntry
                             {
                                 Category = category ?? NoneCategory,
-                                Timestamp = DateTime.UtcNow
+                                Timestamp = DateTime.UtcNow,
+                                Version = CacheVersion
                             };
                             cacheDirty = true;
                         }
