@@ -210,8 +210,9 @@ version:
 # -----------------------------------------------------------------------------
 # package: cross-publish the win-x64 zip with the plain .NET SDK (Linux, main
 # only). Tests cannot execute on Linux, hence -SkipTests (they ran locally via
-# create-release.ps1 before the promotion to main). VERSION arrives via the
-# version job's dotenv report.
+# create-release.ps1 before the promotion to main). WiX only runs on Windows,
+# hence -NoMsi: the MSI is built locally and attached with upload-msi.ps1 after
+# the release exists. VERSION arrives via the version job's dotenv report.
 # -----------------------------------------------------------------------------
 package:
   stage: package
@@ -228,7 +229,7 @@ package:
         echo "No release needed for v${VERSION}. Skipping package."
         exit 0
       fi
-      pwsh ./package.ps1 -Version "$VERSION" -NonInteractive -SkipTests
+      pwsh ./package.ps1 -Version "$VERSION" -NonInteractive -SkipTests -NoMsi
   artifacts:
     paths:
       - .dist/*.zip
@@ -350,7 +351,8 @@ github_release:
         exit 1
       fi
 
-      # 2) Upload the packaged zip and MSI as release assets.
+      # 2) Upload the packaged zip (and the MSI when a Windows runner produced one;
+      #    otherwise upload-msi.ps1 attaches it after this pipeline) as release assets.
       release_id="$(curl -s -H "$auth" -H "$accept" "${api}/releases/tags/v${VERSION}" | jq -r '.id')"
       if [ -z "$release_id" ] || [ "$release_id" = "null" ]; then
         echo "Could not resolve the release id for tag v${VERSION}."
@@ -359,6 +361,9 @@ github_release:
 
       for asset_path in ".dist/DesktopPossible-${VERSION}-win-x64.zip" ".dist/DesktopPossible-${VERSION}-win-x64.msi"; do
       if [ ! -f "$asset_path" ]; then
+        case "$asset_path" in
+          *.msi) echo "No MSI in this pipeline (built on Windows via upload-msi.ps1). Skipping."; continue ;;
+        esac
         echo "Package artifact not found: ${asset_path}"
         ls -la .dist || true
         exit 1

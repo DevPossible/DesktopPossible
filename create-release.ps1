@@ -13,6 +13,9 @@
     The GitLab pipeline handles version calculation and tagging automatically.
     Releases are published to the GitHub mirror at: https://github.com/DevPossible/DesktopPossible
 
+    The pipeline publishes the portable zip. Once the GitHub release exists, run
+    ./upload-msi.ps1 (Windows only - WiX) to build and attach the MSI installer.
+
 .PARAMETER SkipTests
     Skip building and running tests before release.
 
