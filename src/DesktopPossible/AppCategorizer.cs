@@ -28,9 +28,10 @@ namespace Desktop_Frames
     /// The app-categorization engine that replaced the old rules-based auto-organize.
     ///
     /// Classifies desktop items (shortcuts and executables) into a FIXED set of
-    /// category frames using three tiers — plus real files (documents, images)
-    /// classified purely by extension into the "Documents" / "Images" frames, and
-    /// real desktop folders (plus shortcuts pointing at folders) into "Documents":
+    /// category frames using three tiers — plus real files classified purely by
+    /// extension into the "Documents" / "Images" frames (anything else that is not
+    /// an app or an in-progress download goes to "Other"), and real desktop folders
+    /// (plus shortcuts pointing at folders) into "Documents":
     ///   Tier 1a — curated known-app list (instant, offline),
     ///   Tier 1b — install-path / URL heuristics (instant, offline),
     ///   Tier 2  — package-manager metadata (winget.run, then Chocolatey OData;
@@ -55,11 +56,12 @@ namespace Desktop_Frames
         public const string Media = "Media";
         public const string Documents = "Documents";
         public const string Images = "Images";
+        public const string Other = "Other";
 
         /// <summary>The fixed categories in display order. Not user-editable.</summary>
         public static readonly string[] Categories =
         {
-            Productivity, Utilities, Games, VR, DeveloperTools, SecurityApps, Media, Documents, Images
+            Productivity, Utilities, Games, VR, DeveloperTools, SecurityApps, Media, Documents, Images, Other
         };
 
         /// <summary>Top-level desktop FILES with these extensions are Documents (lowercase, no dot).</summary>
@@ -75,25 +77,42 @@ namespace Desktop_Frames
             "png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "heic", "svg", "psd"
         };
 
+        /// <summary>App-like extensions the three classifier tiers handle (lowercase, no dot).</summary>
+        private static readonly HashSet<string> AppExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "lnk", "url", "exe"
+        };
+
+        /// <summary>In-progress download / scratch files the sort must never move (lowercase, no dot).</summary>
+        private static readonly HashSet<string> TempExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "part", "crdownload", "partial", "download", "tmp", "temp"
+        };
+
         /// <summary>
-        /// Classifies a real file purely by extension: Documents, Images, or null.
-        /// Case-insensitive; shortcuts/executables/folders never match.
+        /// Classifies a real file purely by its name: Documents, Images, Other, or null.
+        /// Case-insensitive. Shortcuts/executables (handled by the app tiers), shell
+        /// metadata (desktop.ini) and in-progress downloads never match; every other
+        /// file is "Other" so a sorted desktop ends up empty.
         /// </summary>
         public static string? ClassifyByExtension(string? path)
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
-            string ext;
-            try { ext = Path.GetExtension(path).TrimStart('.'); }
+            string name, ext;
+            try { name = Path.GetFileName(path); ext = Path.GetExtension(path).TrimStart('.'); }
             catch { return null; }
-            if (ext.Length == 0) return null;
+            if (name.Length == 0) return null;
+            if (name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) return null;
+            if (AppExtensions.Contains(ext) || TempExtensions.Contains(ext)) return null;
             if (DocumentExtensions.Contains(ext)) return Documents;
             if (ImageExtensions.Contains(ext)) return Images;
-            return null;
+            return Other;
         }
 
         /// <summary>
         /// True for a desktop file the sort considers at all: app-like items
-        /// (.lnk/.url/.exe) and files classifiable by extension (documents, images).
+        /// (.lnk/.url/.exe) and any classifiable real file (documents, images, other).
+        /// Hidden/system files on disk are left alone.
         /// </summary>
         public static bool IsCandidateFile(string? path)
         {
@@ -101,7 +120,14 @@ namespace Desktop_Frames
             string ext;
             try { ext = Path.GetExtension(path).ToLowerInvariant(); }
             catch { return false; }
-            return ext == ".lnk" || ext == ".url" || ext == ".exe" || ClassifyByExtension(path) != null;
+            if (ext != ".lnk" && ext != ".url" && ext != ".exe" && ClassifyByExtension(path) == null) return false;
+            try
+            {
+                if (File.Exists(path) && (File.GetAttributes(path) & (FileAttributes.Hidden | FileAttributes.System)) != 0)
+                    return false;
+            }
+            catch { return false; }
+            return true;
         }
 
         /// <summary>
@@ -1155,8 +1181,8 @@ namespace Desktop_Frames
                 }
                 else
                 {
-                    // Real file (document / image): it is its own target, classified by
-                    // extension only. Anything else is not a candidate.
+                    // Real file (document / image / other): it is its own target,
+                    // classified by name only. Temp downloads etc. are not candidates.
                     entry.Category = ClassifyByExtension(path);
                     if (entry.Category == null) return null;
                     entry.Target = path;

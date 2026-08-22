@@ -93,9 +93,9 @@ namespace Desktop_Frames
         }
 
         /// <summary>
-        /// Handles one new desktop arrival: only app-like items (.lnk/.url/.exe) are
-        /// considered; the classifier decides the category, and unclassified items are
-        /// left alone. Active temp downloads never match the extension filter.
+        /// Handles one new desktop arrival: app-like items (.lnk/.url/.exe) go through
+        /// the classifier (unclassified apps are left alone); real files land in
+        /// Documents / Images / Other. Active temp downloads never match the filter.
         /// </summary>
         private static async Task ProcessFileAsync(string filePath)
         {
@@ -103,7 +103,7 @@ namespace Desktop_Frames
             {
                 if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize) return;
 
-                // App-like items (.lnk/.url/.exe) plus documents and images by extension.
+                // App-like items (.lnk/.url/.exe) plus real files (documents/images/other).
                 if (!AppCategorizer.IsCandidateFile(filePath)) return;
 
                 // --- THE DOWNLOAD WAITER ---

@@ -32,12 +32,12 @@ public class CategorizerTests : IDisposable
     // ---------------------------------------------------------------
 
     [Fact]
-    public void Categories_AreTheNineFixedOnes_InDisplayOrder()
+    public void Categories_AreTheTenFixedOnes_InDisplayOrder()
     {
         AppCategorizer.Categories.ShouldBe(new[]
         {
             "Productivity", "Utilities", "Games", "VR", "Developer Tools", "Security Apps", "Media",
-            "Documents", "Images"
+            "Documents", "Images", "Other"
         });
     }
 
@@ -394,16 +394,30 @@ public class CategorizerTests : IDisposable
     }
 
     [Theory]
+    [InlineData(@"C:\Users\u\Desktop\archive.zip")]
+    [InlineData(@"C:\Users\u\Desktop\video.mp4")]
+    [InlineData(@"C:\Users\u\Desktop\Daxko.rdp")]
+    [InlineData(@"C:\Users\u\Desktop\gravity.db")]
+    [InlineData(@"C:\Users\u\Desktop\Tablet Bracket.stl")]
+    [InlineData(@"C:\Users\u\Desktop\core.code-workspace")]
+    [InlineData(@"C:\Users\u\Desktop\hosts")]
+    public void ClassifyByExtension_ReturnsOther_ForAnyOtherRealFile(string path)
+    {
+        AppCategorizer.ClassifyByExtension(path).ShouldBe("Other");
+    }
+
+    [Theory]
     [InlineData(@"C:\Users\u\Desktop\app.lnk")]
     [InlineData(@"C:\Users\u\Desktop\site.url")]
     [InlineData(@"C:\Users\u\Desktop\setup.exe")]
-    [InlineData(@"C:\Users\u\Desktop\archive.zip")]
-    [InlineData(@"C:\Users\u\Desktop\video.mp4")]
     [InlineData(@"C:\Users\u\Desktop\download.crdownload")]
-    [InlineData(@"C:\Users\u\Desktop\noextension")]
+    [InlineData(@"C:\Users\u\Desktop\partial.part")]
+    [InlineData(@"C:\Users\u\Desktop\scratch.tmp")]
+    [InlineData(@"C:\Users\u\Desktop\desktop.ini")]
+    [InlineData(@"C:\Users\u\Desktop\")]
     [InlineData("")]
     [InlineData(null)]
-    public void ClassifyByExtension_ReturnsNull_ForNonDocumentNonImage(string? path)
+    public void ClassifyByExtension_ReturnsNull_ForAppsTempFilesAndShellMetadata(string? path)
     {
         AppCategorizer.ClassifyByExtension(path).ShouldBeNull();
     }
@@ -414,10 +428,10 @@ public class CategorizerTests : IDisposable
     [InlineData(@"C:\d\tool.exe", true)]
     [InlineData(@"C:\d\paper.pdf", true)]
     [InlineData(@"C:\d\cat.webp", true)]
-    [InlineData(@"C:\d\movie.mkv", false)]
+    [InlineData(@"C:\d\movie.mkv", true)]
     [InlineData(@"C:\d\desktop.ini", false)]
     [InlineData(@"C:\d\partial.part", false)]
-    public void IsCandidateFile_AcceptsAppsDocumentsAndImagesOnly(string path, bool expected)
+    public void IsCandidateFile_RejectsOnlyTempFilesAndShellMetadata(string path, bool expected)
     {
         AppCategorizer.IsCandidateFile(path).ShouldBe(expected);
     }
