@@ -9,9 +9,9 @@
 #     the GitHub release with the zip attached.
 #
 # All jobs run on ordinary Linux shared runners. COM interop is late-bound
-# (no COMReference items), so the net8.0-windows app compiles and cross-
+# (no COMReference items), so the net10.0-windows app compiles and cross-
 # publishes with the plain .NET SDK (EnableWindowsTargeting in
-# Directory.Build.props). Tests target net8.0-windows and can only EXECUTE on
+# Directory.Build.props). Tests target net10.0-windows and can only EXECUTE on
 # Windows: they run locally via create-release.ps1 before every release
 # promotion, and an optional manual `test-windows` job exists for a Windows
 # runner (tag `windows`) if one is ever registered.
@@ -86,12 +86,12 @@ validate_github:
 # -----------------------------------------------------------------------------
 # build: compile verification with the plain .NET SDK (Linux).
 # Runs for merge requests and pushes to develop/main. Test EXECUTION requires
-# Windows (net8.0-windows) and happens locally via create-release.ps1 before
+# Windows (net10.0-windows) and happens locally via create-release.ps1 before
 # every release promotion; see also the manual test-windows job below.
 # -----------------------------------------------------------------------------
 build:
   stage: test
-  image: mcr.microsoft.com/dotnet/sdk:8.0
+  image: mcr.microsoft.com/dotnet/sdk:10.0
   script:
     - pwsh ./build.ps1
 
@@ -216,7 +216,7 @@ version:
 package:
   stage: package
   extends: .main_only
-  image: mcr.microsoft.com/dotnet/sdk:8.0
+  image: mcr.microsoft.com/dotnet/sdk:10.0
   needs:
     - job: version
       artifacts: true

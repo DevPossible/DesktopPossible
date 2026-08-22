@@ -5,8 +5,8 @@
 
 .DESCRIPTION
     Builds src/DesktopFramesPossible.sln with the dotnet CLI. The project targets
-    net8.0-windows (WPF + WinForms) but COM interop is late-bound, so it compiles
-    on any OS with the .NET 8+ SDK (EnableWindowsTargeting is set in
+    net10.0-windows (WPF + WinForms) but COM interop is late-bound, so it compiles
+    on any OS with the .NET 10+ SDK (EnableWindowsTargeting is set in
     Directory.Build.props). The app itself runs on Windows only.
 
 .PARAMETER Configuration
@@ -36,7 +36,7 @@ try {
 
     $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
     if (-not $dotnet) {
-        throw ".NET SDK not found. Install the .NET 8+ SDK: https://dotnet.microsoft.com/download"
+        throw ".NET SDK not found. Install the .NET 10+ SDK: https://dotnet.microsoft.com/download"
     }
     Write-Host "  [OK] dotnet SDK: $(dotnet --version)" -ForegroundColor Green
 
@@ -70,7 +70,7 @@ try {
     dotnet build src/DesktopFramesPossible.sln --configuration $Configuration
     if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 
-    $exePath = Join-Path $BuildDir $ProjectName 'bin' $Configuration 'net8.0-windows10.0.19041.0' "$ProjectName.exe"
+    $exePath = Join-Path $BuildDir $ProjectName 'bin' $Configuration 'net10.0-windows10.0.19041.0' "$ProjectName.exe"
     Write-Host "`n=== Build Complete ===" -ForegroundColor Green
     Write-Host "  Configuration: $Configuration" -ForegroundColor Gray
     Write-Host "  Build outputs: $BuildDir" -ForegroundColor Gray

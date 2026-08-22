@@ -32,7 +32,7 @@ and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
 `Type.GetTypeFromProgID(...)` + `dynamic`. There are NO `<COMReference>` items.
 
 - Build via `./build.ps1` (or `dotnet build src/DesktopFramesPossible.sln`).
-- The app **runs on Windows only** (`net8.0-windows10.0.19041.0`, WPF + WinForms), and
+- The app **runs on Windows only** (`net10.0-windows10.0.19041.0`, WPF + WinForms), and
   tests also **execute** on Windows only — Linux can compile and cross-publish
   but not run them.
 - Never reintroduce `<COMReference>` items or compile-time interop assemblies —
@@ -237,7 +237,7 @@ they must NOT:
 Test pure logic (parsing, sorting, version calc, path/utility helpers), not
 window plumbing.
 
-Run a subset (Windows only — the tests target `net8.0-windows`):
+Run a subset (Windows only — the tests target `net10.0-windows`):
 
 ```powershell
 ./build.ps1; dotnet test tests/DesktopFramesPossible.Tests --no-build --filter "FullyQualifiedName~PortalSort"
