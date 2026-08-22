@@ -397,6 +397,52 @@ namespace Desktop_Frames
         }
 
         /// <summary>
+        /// Removes a frame from the current profile's data and screen — the record, its
+        /// window, portal manager and every cached reference — and saves. Files on disk
+        /// are NOT touched: delete handles them first; "Send to Profile" has already
+        /// carried them to the other profile.
+        /// </summary>
+        public static void DetachFrame(string frameId)
+        {
+            if (string.IsNullOrEmpty(frameId)) return;
+            try
+            {
+                int index = FrameDataManager.FrameData.FindIndex(f => f.Id?.ToString() == frameId);
+                string title = index >= 0 ? FrameDataManager.FrameData[index].Title?.ToString() : null;
+                if (index >= 0) FrameDataManager.FrameData.RemoveAt(index);
+
+                // --- BUG FIX: Avoid JObject HashCode Mutation ---
+                var targetPortal = _portalFrames.FirstOrDefault(kvp => kvp.Key?.Id?.ToString() == frameId);
+                if (targetPortal.Value != null)
+                {
+                    targetPortal.Value.Dispose();
+                    _portalFrames.Remove(targetPortal.Key);
+                }
+
+                // Stop the auto-roll timer and drop every cached reference to this frame
+                // (heart TextBlock, title label, portal navigation state).
+                EvictFrameCaches(frameId);
+
+                FrameDataManager.SaveFrameData();
+
+                var windows = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>();
+                var win = windows.FirstOrDefault(w => w.Tag?.ToString() == frameId);
+
+                // Drop it from the "Show Hidden Frames" list before closing, so a removed-while-
+                // hidden frame can't linger there and throw when unhidden.
+                TrayManager.RemoveHiddenFrame(win, title);
+
+                if (win != null) win.Close();
+
+                UpdateAllHeartContextMenus();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"DetachFrame '{frameId}' failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Drops every per-frame cache/timer entry for a frame whose window is going away
         /// (delete or partial reload). Without this the static dictionaries rooted the closed
         /// window (title label, heart TextBlock) and the auto-roll timer kept ticking forever.
@@ -1323,34 +1369,9 @@ namespace Desktop_Frames
                     // Image frames: remove their copied-image asset folder.
                     if (liveFrame.ItemsType?.ToString() == "Image") ImageFramemanager.DeleteAssetDir(deleteId);
 
-                    if (deleteIndex >= 0) FrameDataManager.FrameData.RemoveAt(deleteIndex);
-                    else FrameDataManager.FrameData.Remove(frame); // last-resort fallback (no Id)
-
-                    // --- BUG FIX: Avoid JObject HashCode Mutation ---
-                    var targetPortal = _portalFrames.FirstOrDefault(kvp => kvp.Key?.Id?.ToString() == deleteId);
-                    if (targetPortal.Value != null)
-                    {
-                        targetPortal.Value.Dispose();
-                        _portalFrames.Remove(targetPortal.Key);
-                    }
-
-                    // Stop the auto-roll timer and drop every cached reference to this frame
-                    // (heart TextBlock, title label, portal navigation state).
-                    EvictFrameCaches(deleteId);
+                    if (deleteIndex < 0) FrameDataManager.FrameData.Remove(frame); // last-resort fallback (no Id)
                     _heartTextBlocks.Remove(frame);
-
-                    FrameDataManager.SaveFrameData();
-
-                    var windows = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>();
-                    var win = windows.FirstOrDefault(w => w.Tag?.ToString() == deleteId);
-
-                    // Drop it from the "Show Hidden Frames" list before closing, so a deleted-while-
-                    // hidden frame can't linger there and throw when unhidden.
-                    TrayManager.RemoveHiddenFrame(win, liveFrame.Title?.ToString());
-
-                    if (win != null) win.Close();
-
-                    UpdateAllHeartContextMenus();
+                    DetachFrame(deleteId);
                 }
             };
             menu.Items.Add(deleteThisFrame);
@@ -1365,6 +1386,10 @@ namespace Desktop_Frames
             var importItem = new MenuItem { Header = "Import a Frame..." };
             importItem.Click += (s, e) => BackupManager.ImportFrame();
             menu.Items.Add(importItem);
+
+            var sendToProfileItem = new MenuItem { Header = "Send to Profile..." };
+            sendToProfileItem.Click += (s, e) => SendToProfileManager.Show(frame);
+            menu.Items.Add(sendToProfileItem);
 
             // Restore frame item
             var restoreItem = new MenuItem
