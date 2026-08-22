@@ -243,9 +243,13 @@ namespace Desktop_Frames
             }
             catch (Exception ex)
             {
+                // Do NOT rethrow: a transient IO failure (file briefly locked by backup/AV)
+                // must never crash the app from a background save path — the atomic write
+                // guarantees the previous file is intact, and the next save retries.
+                // (A rethrow here once escaped all the way to WndProc via the
+                // resize-end flush.)
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Settings,
-                    $"Error saving frame data: {ex.Message}");
-                throw;
+                    $"Error saving frame data (previous file intact, will retry on next save): {ex.Message}");
             }
         }
         #endregion

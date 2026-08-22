@@ -243,6 +243,10 @@ namespace Desktop_Frames
 
         protected override void OnExit(ExitEventArgs e)
         {
+            // Frame position/size saves are debounced (500ms) — flush any pending save
+            // so the last move/resize before exit is never lost.
+            try { Framemanager.FlushPendingFrameSave(); } catch { }
+
             _triggerPollTimer?.Stop();
             InterCore.Cleanup();
             try
