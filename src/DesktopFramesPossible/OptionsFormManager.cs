@@ -690,14 +690,55 @@ namespace Desktop_Frames
             cbNotif.Margin = new Thickness(35, 0, 0, 8); // Indent it!
             cbNotif.IsEnabled = cbMain.IsChecked == true;
 
+            // "Arrange Now": sort everything currently on the desktop into category
+            // frames. Deliberately independent of the Enable Auto-Organize toggle
+            // (that toggle only governs NEW arrivals) - always clickable.
+            Button btnArrangeNow = new Button
+            {
+                Content = "Arrange Now",
+                Height = 32,
+                Padding = new Thickness(14, 0, 14, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(15, 6, 0, 10),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 13,
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                ToolTip = "Sort all apps, documents and images currently on the Desktop into their category frames now."
+            };
+            btnArrangeNow.Click += async (s, e) =>
+            {
+                btnArrangeNow.IsEnabled = false;
+                btnArrangeNow.Content = "Arranging...";
+                try
+                {
+                    var (items, categories) = await AppCategorizer.SortDesktopAsync();
+                    SmartToast.Show("Desktop sorted", $"Sorted {items} items into {categories} categories");
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                        $"Arrange Now failed: {ex.Message}");
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Arrange failed: {ex.Message}", "Error");
+                }
+                finally
+                {
+                    btnArrangeNow.Content = "Arrange Now";
+                    btnArrangeNow.IsEnabled = true;
+                }
+            };
+            c.Children.Add(btnArrangeNow);
+
             TextBlock infoText = new TextBlock
             {
                 Text = "Note: Auto-Organize monitors your Desktop for new app shortcuts and programs. " +
                        "Each new arrival is automatically categorized (Productivity, Utilities, Games, VR, " +
                        "Developer Tools, Security Apps, Media) and moved into its category frame — the frame " +
                        "is created automatically when needed. Items that cannot be categorized are left alone. " +
-                       "You can also sort the whole desktop at any time via the tray menu's " +
-                       "\"Sort Desktop into Categories\" command.",
+                       "Use \"Arrange Now\" (or the tray menu's \"Sort Desktop into Categories\") to sort " +
+                       "everything already on the Desktop at any time, whether or not Auto-Organize is enabled.",
                 FontStyle = FontStyles.Italic,
                 Foreground = Brushes.Gray,
                 Margin = new Thickness(15, 20, 0, 0),
