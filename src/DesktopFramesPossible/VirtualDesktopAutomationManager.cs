@@ -134,20 +134,28 @@ namespace Desktop_Frames
         /// The current desktop's Guid, found by probing visible top-level windows with
         /// the documented IVirtualDesktopManager API: the first window that is both
         /// tracked (non-empty desktop id) and on the current desktop reveals the
-        /// current desktop's id. Returns Guid.Empty when undeterminable this tick
-        /// (e.g. only pinned/shell windows visible) — callers keep the last known id.
+        /// current desktop's id. Our OWN windows are excluded — the app's frames are
+        /// visible on every desktop but report the desktop they were created on,
+        /// which would freeze the probe on that desktop forever. Returns Guid.Empty
+        /// when undeterminable this tick (e.g. a desktop with no windows on it) —
+        /// callers keep the last known id.
         /// </summary>
         private static Guid GetCurrentDesktopId()
         {
             var mgr = _manager;
             if (mgr == null) return Guid.Empty;
 
+            uint ownPid = (uint)Environment.ProcessId;
             Guid found = Guid.Empty;
             NativeMethods.EnumWindows((hwnd, lparam) =>
             {
                 try
                 {
                     if (!NativeMethods.IsWindowVisible(hwnd)) return true;
+
+                    NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+                    if (pid == ownPid) return true; // skip our own frames (see summary)
+
                     if (mgr.GetWindowDesktopId(hwnd, out Guid id) == 0 && id != Guid.Empty &&
                         mgr.IsWindowOnCurrentVirtualDesktop(hwnd, out int onCurrent) == 0 && onCurrent == 1)
                     {
@@ -244,6 +252,9 @@ namespace Desktop_Frames
 
             [DllImport("user32.dll")]
             public static extern bool IsWindowVisible(IntPtr hwnd);
+
+            [DllImport("user32.dll")]
+            public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
         }
     }
 }
