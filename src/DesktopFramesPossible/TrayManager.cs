@@ -318,6 +318,9 @@ namespace Desktop_Frames
 
             trayMenu.Items.Add("Reload All Frames", null, async (s, e) => { await reloadallFrames(); });
 
+            // Moves the files stored inside selected frames (any profile) back to the Desktop.
+            trayMenu.Items.Add("Empty Frames to Desktop...", null, (s, e) => EmptyFramesDialog.ShowDialogOnUiThread());
+
             trayMenu.Items.Add(new ToolStripSeparator());
 
             _showHiddenFramesItem = new ToolStripMenuItem("Show Hidden Frames") { Enabled = false };

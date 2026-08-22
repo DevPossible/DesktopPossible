@@ -241,6 +241,21 @@ namespace Desktop_Frames
                         e.Handled = true; // Prevent card click
                         if (MessageBoxesManager.ShowCustomYesNoMessageBox($"Are you sure you want to delete profile '{p.Name}'?\nThis cannot be undone.", "Delete Profile"))
                         {
+                            // File safety: files stored inside the profile's frame folders are
+                            // moved to the Desktop or deleted (typed confirmation) BEFORE the
+                            // profile goes; Cancel aborts the whole deletion.
+                            int storedFiles = FrameFileOperations.CountProfileFiles(p.Name);
+                            if (storedFiles > 0)
+                            {
+                                var choice = FrameFilesDecisionDialog.Show(Window.GetWindow(this), $"profile '{p.Name}'", storedFiles);
+                                if (choice == FrameFilesDecision.Cancel) return;
+                                int handled = choice == FrameFilesDecision.DeleteFiles
+                                    ? FrameFileOperations.DeleteProfileFiles(p.Name)
+                                    : FrameFileOperations.MoveProfileFilesToDesktop(p.Name);
+                                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
+                                    $"Delete profile '{p.Name}': {choice} handled {handled}/{storedFiles} stored files");
+                            }
+
                             if (ProfileManager.DeleteProfile(p.Name))
                             {
                                 RefreshList();

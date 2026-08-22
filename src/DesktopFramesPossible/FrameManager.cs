@@ -1286,12 +1286,39 @@ namespace Desktop_Frames
                         : FrameDataManager.FrameData.FindIndex(f => f.Id?.ToString() == deleteId);
                     dynamic liveFrame = deleteIndex >= 0 ? FrameDataManager.FrameData[deleteIndex] : frame;
 
-                    if (SettingsManager.ExportShortcutsOnFrameDeletion && liveFrame.ItemsType?.ToString() == "Data")
+                    // --- FILE SAFETY: files physically stored in the frame's folder ---
+                    // The user decides (move to Desktop / delete with typed confirmation /
+                    // cancel) BEFORE anything destructive happens. Cancel aborts the whole
+                    // deletion. Frames without stored files keep the unprompted flow.
+                    string deleteProfile = ProfileManager.CurrentProfileName;
+                    int storedFileCount = FrameFileOperations.EnumerateFrameFiles(deleteProfile, deleteId).Count;
+                    var fileChoice = FrameFilesDecision.MoveToDesktop;
+                    if (storedFileCount > 0)
+                    {
+                        fileChoice = FrameFilesDecisionDialog.Show(null,
+                            $"frame '{liveFrame.Title?.ToString() ?? ""}'", storedFileCount);
+                        if (fileChoice == FrameFilesDecision.Cancel) return;
+                    }
+
+                    // The legacy "export shortcuts" copy is skipped when the files prompt
+                    // ran: the user's choice already moved (or deliberately deleted) them.
+                    if (storedFileCount == 0 && SettingsManager.ExportShortcutsOnFrameDeletion && liveFrame.ItemsType?.ToString() == "Data")
                     {
                         ExportAllIconsToDesktop(liveFrame, false);
                     }
 
                     BackupManager.BackupDeletedFrame(liveFrame);
+
+                    if (storedFileCount > 0)
+                    {
+                        int handled = fileChoice == FrameFilesDecision.DeleteFiles
+                            ? FrameFileOperations.DeleteFrameFiles(deleteProfile, deleteId)
+                            : FrameFileOperations.MoveFrameFilesToDesktop(deleteProfile, deleteId);
+                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
+                            $"Delete frame '{deleteId}': {fileChoice} handled {handled}/{storedFileCount} stored files");
+                    }
+                    // Drop the (now empty) frame folder; a folder still holding files is kept.
+                    FrameFileOperations.RemoveFrameFolder(deleteProfile, deleteId);
 
                     // Image frames: remove their copied-image asset folder.
                     if (liveFrame.ItemsType?.ToString() == "Image") ImageFramemanager.DeleteAssetDir(deleteId);
@@ -10350,6 +10377,29 @@ namespace Desktop_Frames
         private static string GetTitleSuffix(dynamic frame) => GetFrameHotkeyDisplay(frame);
 
         /// <summary>Re-renders a frame's title (e.g. after its hotkey changes) so the suffix updates live.</summary>
+        /// <summary>
+        /// Re-renders the icon content of an open Data frame window from its live data
+        /// (main Items or the current tab). No-op when the frame has no open window.
+        /// Used after FrameFileOperations.ClearFrameItems edits the active profile's frame.
+        /// </summary>
+        public static void RefreshFrameById(string frameId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(frameId)) return;
+                dynamic live = FrameDataManager.FindFrameById(frameId);
+                if (live == null) return;
+                var win = System.Windows.Application.Current?.Windows.OfType<NonActivatingWindow>()
+                    .FirstOrDefault(w => w.Tag?.ToString() == frameId);
+                if (win == null) return;
+                RefreshFrameUsingFormApproach(win, live);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"RefreshFrameById failed: {ex.Message}");
+            }
+        }
+
         public static void RefreshFrameTitle(string frameId)
         {
             try

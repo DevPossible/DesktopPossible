@@ -377,6 +377,23 @@ namespace Desktop_Frames
 
                 Directory.Delete(targetDir, true);
 
+                // Frame store: the caller (ProfileManagerPanel) has already moved or deleted
+                // the profile's frame files via FrameFileOperations. Only an EMPTY store dir
+                // is cleaned up here — any file still inside is never deleted silently.
+                try
+                {
+                    string storeDir = Path.Combine(FrameStore.RootDir, FrameStore.SanitizeProfileName(profileName));
+                    if (Directory.Exists(storeDir) &&
+                        !Directory.EnumerateFiles(storeDir, "*", SearchOption.AllDirectories).Any())
+                    {
+                        Directory.Delete(storeDir, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, $"Frame store cleanup for '{profileName}': {ex.Message}");
+                }
+
                 var profile = _profileCache.FirstOrDefault(p => p.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase));
                 if (profile != null)
                 {
@@ -769,6 +786,13 @@ namespace Desktop_Frames
         public static string GetProfileFilePath(string filename)
         {
             return Path.Combine(CurrentProfileDir, filename);
+        }
+
+        /// <summary>Directory of ANY profile by name (no creation). Lets callers read or
+        /// rewrite a non-active profile's frames.json without switching profiles.</summary>
+        public static string GetProfileDir(string profileName)
+        {
+            return Path.Combine(_profilesRootDir, profileName);
         }
 
         public static string GetMasterOptionsJson()

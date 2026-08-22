@@ -552,6 +552,26 @@ namespace Desktop_Frames
 
             StackPanel headerPanel = new StackPanel();
             CreateSectionHeader(headerPanel, "Profile Management", ColorProfiles);
+
+            // File safety: move the files stored inside frames (any profile) back to the Desktop.
+            Button btnEmptyFrames = new Button
+            {
+                Content = "Empty Frames to Desktop...",
+                Height = 32,
+                Padding = new Thickness(14, 0, 14, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(15, 0, 0, 10),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 13,
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                ToolTip = "Move the files stored inside selected frames to your Desktop. The frames are kept."
+            };
+            btnEmptyFrames.Click += (s, e) => EmptyFramesDialog.ShowDialogOnUiThread();
+            headerPanel.Children.Add(btnEmptyFrames);
+
             Grid.SetRow(headerPanel, 0);
             c.Children.Add(headerPanel);
 
