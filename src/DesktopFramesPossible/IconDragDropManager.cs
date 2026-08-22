@@ -329,8 +329,10 @@ namespace Desktop_Frames
         /// <summary>
         /// Escalates the internal in-frame drag into a real OLE drag-drop so the item can
         /// leave the frame: cancels the internal preview (reverting any displaced icons),
-        /// then hands the item's backing file (the .lnk/.url in the Shortcuts folder, or
-        /// the raw path) to the shell via DoDragDrop with FileDrop data.
+        /// then hands the item's backing file (the .lnk/.url or real file in the frame's
+        /// store folder, or a legacy path) to the shell via DoDragDrop with FileDrop data.
+        /// On Move the drop target (Explorer or another frame) has already taken the file,
+        /// so the source only removes its item entry — it never deletes the file itself.
         ///
         /// Effect semantics: Move (default) = the drop target took the item (Explorer moved
         /// the file to the desktop, or another frame added it) -> the source frame removes

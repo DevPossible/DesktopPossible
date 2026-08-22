@@ -573,6 +573,18 @@ namespace Desktop_Frames
                     return;
                 }
 
+                // Folder-backed frames: when the item changes frame, its backing file moves
+                // from the source frame's folder into the target frame's folder. Legacy
+                // items (relative / outside the store) keep their path untouched.
+                bool crossFrame = !string.Equals(sourceFrame.Id?.ToString(), targetFrame.Id?.ToString(), StringComparison.Ordinal);
+                if (crossFrame && FrameStore.IsInsideAnyFrameFolder(filename) && System.IO.File.Exists(filename))
+                {
+                    string movedPath = FrameStore.MoveIntoFrame(targetFrame, filename, copy: false);
+                    itemToMove["Filename"] = movedPath;
+                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
+                        $"Moved backing file '{filename}' -> '{movedPath}'");
+                }
+
                 // Perform the move
                 sourceItems.Remove(itemToMove);
                 destItems.Add(itemToMove);

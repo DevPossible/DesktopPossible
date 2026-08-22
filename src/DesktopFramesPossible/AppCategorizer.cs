@@ -25,7 +25,8 @@ namespace Desktop_Frames
     /// The app-categorization engine that replaced the old rules-based auto-organize.
     ///
     /// Classifies desktop items (shortcuts and executables) into a FIXED set of
-    /// category frames using three tiers:
+    /// category frames using three tiers — plus real files (documents, images)
+    /// classified purely by extension into the "Documents" / "Images" frames:
     ///   Tier 1a — curated known-app list (instant, offline),
     ///   Tier 1b — install-path / URL heuristics (instant, offline),
     ///   Tier 2  — package-manager metadata (winget.run, then Chocolatey OData;
@@ -48,12 +49,56 @@ namespace Desktop_Frames
         public const string DeveloperTools = "Developer Tools";
         public const string SecurityApps = "Security Apps";
         public const string Media = "Media";
+        public const string Documents = "Documents";
+        public const string Images = "Images";
 
         /// <summary>The fixed categories in display order. Not user-editable.</summary>
         public static readonly string[] Categories =
         {
-            Productivity, Utilities, Games, VR, DeveloperTools, SecurityApps, Media
+            Productivity, Utilities, Games, VR, DeveloperTools, SecurityApps, Media, Documents, Images
         };
+
+        /// <summary>Top-level desktop FILES with these extensions are Documents (lowercase, no dot).</summary>
+        internal static readonly HashSet<string> DocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md", "rtf",
+            "odt", "ods", "odp", "csv", "xps", "epub", "one"
+        };
+
+        /// <summary>Top-level desktop FILES with these extensions are Images (lowercase, no dot).</summary>
+        internal static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "png", "jpg", "jpeg", "gif", "bmp", "webp", "tif", "tiff", "heic", "svg", "psd"
+        };
+
+        /// <summary>
+        /// Classifies a real file purely by extension: Documents, Images, or null.
+        /// Case-insensitive; shortcuts/executables/folders never match.
+        /// </summary>
+        public static string? ClassifyByExtension(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            string ext;
+            try { ext = Path.GetExtension(path).TrimStart('.'); }
+            catch { return null; }
+            if (ext.Length == 0) return null;
+            if (DocumentExtensions.Contains(ext)) return Documents;
+            if (ImageExtensions.Contains(ext)) return Images;
+            return null;
+        }
+
+        /// <summary>
+        /// True for a desktop file the sort considers at all: app-like items
+        /// (.lnk/.url/.exe) and files classifiable by extension (documents, images).
+        /// </summary>
+        public static bool IsCandidateFile(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            string ext;
+            try { ext = Path.GetExtension(path).ToLowerInvariant(); }
+            catch { return false; }
+            return ext == ".lnk" || ext == ".url" || ext == ".exe" || ClassifyByExtension(path) != null;
+        }
 
         /// <summary>Sentinel stored in the cache for a confirmed "could not classify".</summary>
         public const string NoneCategory = "none";
@@ -793,6 +838,7 @@ namespace Desktop_Frames
             public string? Arguments;          // shortcut arguments / .url URL
             public string DisplayName = "";
             public bool IsWebLink;
+            public bool IsRawFile;            // document/image: the file itself is the item
             public string? Category;
         }
 
@@ -835,7 +881,6 @@ namespace Desktop_Frames
         {
             // ---- 1. Enumerate candidates: user + common desktop, top level only ----
             var candidatePaths = new List<string>();
-            var allowedExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".lnk", ".url", ".exe" };
 
             if (limitToPaths != null)
             {
@@ -860,7 +905,7 @@ namespace Desktop_Frames
             }
 
             candidatePaths = candidatePaths
-                .Where(p => allowedExts.Contains(Path.GetExtension(p)))
+                .Where(IsCandidateFile)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -882,8 +927,10 @@ namespace Desktop_Frames
                 var entry = ResolveEntry(path);
                 if (entry == null) continue;
 
-                entry.Category = ClassifyKnown(entry.Target, entry.DisplayName)
-                                 ?? ClassifyByPath(entry.Target, entry.Arguments);
+                // Documents/images are classified by extension in ResolveEntry and never
+                // go through the app tiers (a "chrome.pdf" is a document, not a browser).
+                entry.Category ??= ClassifyKnown(entry.Target, entry.DisplayName)
+                                   ?? ClassifyByPath(entry.Target, entry.Arguments);
                 entries.Add(entry);
             }
 
@@ -965,9 +1012,18 @@ namespace Desktop_Frames
                     try { entry.Arguments = CoreUtilities.ExtractWebUrlFromFile(path); } catch { }
                     entry.Target = entry.Arguments; // classify by the URL (steam:// etc.)
                 }
-                else // .exe
+                else if (entry.Ext == ".exe")
                 {
                     entry.Target = path;
+                }
+                else
+                {
+                    // Real file (document / image): it is its own target, classified by
+                    // extension only. Anything else is not a candidate.
+                    entry.Category = ClassifyByExtension(path);
+                    if (entry.Category == null) return null;
+                    entry.Target = path;
+                    entry.IsRawFile = true;
                 }
 
                 return entry;
@@ -1186,45 +1242,37 @@ namespace Desktop_Frames
 
         /// <summary>
         /// Adds one classified desktop item to a category frame with the SAME
-        /// mechanics as a desktop drop:
-        ///   CASE A — raw .exe: a new .lnk wrapping it is created in the profile's
-        ///            Shortcuts store (the exe itself is NEVER deleted);
-        ///   CASE B — existing .lnk/.url: copied into the Shortcuts store under a
-        ///            unique name, then the desktop original is removed (move semantics).
-        /// Placement goes through the shared free-grid routine (first free cell).
+        /// mechanics as a desktop drop into a folder-backed frame:
+        ///   CASE A — raw .exe: a new .lnk wrapping it is created in the frame's folder
+        ///            (the exe itself is NEVER moved or deleted);
+        ///   CASE B — existing .lnk/.url: MOVED verbatim into the frame's folder
+        ///            (custom icons survive; nothing is left on the desktop);
+        ///   CASE C — document/image: MOVED into the frame's folder; the item IS the file.
+        /// Items store the absolute path of their backing file. Placement goes through
+        /// the shared free-grid routine (first free cell).
         /// Runs on the UI thread; caller persists via SaveFrameData + reload.
         /// </summary>
         private static bool AddItemToFrame(dynamic frame, DesktopEntry item)
         {
             try
             {
-                string shortcutsDir = Path.Combine(ProfileManager.CurrentProfileDir, "Shortcuts");
-                Directory.CreateDirectory(shortcutsDir);
-
+                string frameFolder = FrameStore.GetFrameFolder(frame);
                 bool isShortcut = item.Ext == ".lnk" || item.Ext == ".url";
-                string baseName = Path.GetFileNameWithoutExtension(item.Path);
-                string ext = isShortcut ? (item.IsWebLink && item.Ext == ".url" ? ".url" : ".lnk") : ".lnk";
 
-                string fileName = baseName + ext;
-                string fullTarget = Path.Combine(shortcutsDir, fileName);
-                int counter = 1;
-                while (File.Exists(fullTarget))
-                {
-                    fileName = $"{baseName} ({counter++}){ext}";
-                    fullTarget = Path.Combine(shortcutsDir, fileName);
-                }
-
+                string fullTarget;
                 bool isFolder = false;
-                if (isShortcut)
+                if (isShortcut || item.IsRawFile)
                 {
-                    // CASE B: copy the original exactly as-is (preserves .url icons).
-                    File.Copy(item.Path, fullTarget, true);
-                    if (!item.IsWebLink && !string.IsNullOrEmpty(item.Target))
+                    // CASE B / CASE C: move the original exactly as-is.
+                    fullTarget = FrameStore.MoveIntoFolder(frameFolder, item.Path, copy: false);
+                    if (isShortcut && !item.IsWebLink && !string.IsNullOrEmpty(item.Target))
                         isFolder = Directory.Exists(item.Target);
                 }
                 else
                 {
                     // CASE A: wrap the raw executable in a new shortcut (late-bound COM).
+                    fullTarget = FrameStore.UniqueDestinationPath(frameFolder,
+                        Path.GetFileNameWithoutExtension(item.Path) + ".lnk");
                     try
                     {
                         dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
@@ -1241,14 +1289,13 @@ namespace Desktop_Frames
                     }
                 }
 
-                // Item JSON: relative Shortcuts path, matching the desktop-drop convention.
-                string relPath = Path.Combine("Shortcuts", fileName);
+                // Item JSON: absolute path of the backing file in the frame folder.
                 var newItem = new Dictionary<string, object?>
                 {
-                    ["Filename"] = relPath,
+                    ["Filename"] = fullTarget,
                     ["IsFolder"] = isFolder,
                     ["IsLink"] = item.IsWebLink,
-                    ["IsNetwork"] = Framemanager.IsNetworkPath(relPath),
+                    ["IsNetwork"] = Framemanager.IsNetworkPath(fullTarget),
                     ["DisplayName"] = item.DisplayName,
                     ["AlwaysRunAsAdmin"] = false
                 };
@@ -1283,18 +1330,6 @@ namespace Desktop_Frames
                 // Tab0 and the main list mirror each other (see SynchronizeTab0Content).
                 if (tabsEnabled && currentTab == 0)
                     frame.Items = JArray.FromObject(items.ToArray());
-
-                // Move semantics: our copy exists — remove the desktop original for
-                // shortcut-backed items only. Raw exe files are never deleted.
-                if (isShortcut)
-                {
-                    try { File.Delete(item.Path); }
-                    catch (Exception delEx)
-                    {
-                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
-                            $"App-Categorize: could not remove desktop original '{item.Path}': {delEx.Message}");
-                    }
-                }
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
                     $"App-Categorize: '{item.DisplayName}' -> {item.Category}");

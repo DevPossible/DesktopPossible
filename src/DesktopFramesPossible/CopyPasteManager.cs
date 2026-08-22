@@ -242,43 +242,21 @@ namespace Desktop_Frames
                 string displayName = pastedItem["DisplayName"]?.ToString() ??
                     Path.GetFileNameWithoutExtension(originalFileName);
 
-                // Generate unique filename for the new shortcut (per-profile Shortcuts folder,
-                // matching the relative "Shortcuts\..." Filename convention below)
-                string shortcutsDir = Path.Combine(ProfileManager.CurrentProfileDir, "Shortcuts");
-
-                if (!Directory.Exists(shortcutsDir))
-                {
-                    Directory.CreateDirectory(shortcutsDir);
-                }
-
-                string newFileName = originalFileName;
-                string newFilePath = Path.Combine(shortcutsDir, newFileName);
-
-                // Handle duplicate filenames
-                int counter = 1;
-                while (File.Exists(newFilePath))
-                {
-                    string nameWithoutExt = Path.GetFileNameWithoutExtension(originalFileName);
-                    string extension = Path.GetExtension(originalFileName);
-                    newFileName = $"{nameWithoutExt} ({counter++}){extension}";
-                    newFilePath = Path.Combine(shortcutsDir, newFileName);
-                }
-
-                // Copy shortcut from temp folder to Shortcuts folder
+                // Folder-backed frames: the pasted copy lives in the TARGET frame's own
+                // folder (collision-safe name) and the item stores its absolute path.
                 string sourceFilePath = Path.Combine(_copiedItemFolderPath, originalFileName);
-                if (File.Exists(sourceFilePath))
-                {
-                    File.Copy(sourceFilePath, newFilePath, true);
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate,
-                        $"Copied shortcut file: {newFileName}");
-                }
-                else
+                if (!File.Exists(sourceFilePath))
                 {
                     throw new FileNotFoundException($"Source shortcut file not found: {sourceFilePath}");
                 }
 
+                string newFilePath = FrameStore.MoveIntoFrame(targetFrame, sourceFilePath, copy: true);
+                string newFileName = Path.GetFileName(newFilePath);
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate,
+                    $"Copied item file into frame folder: {newFileName}");
+
                 // Update item data for the new location
-                pastedItem["Filename"] = Path.Combine("Shortcuts", newFileName);
+                pastedItem["Filename"] = newFilePath;
 
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate,
                     $"Pasted item - Filename: '{newFileName}', DisplayName: '{displayName}'");

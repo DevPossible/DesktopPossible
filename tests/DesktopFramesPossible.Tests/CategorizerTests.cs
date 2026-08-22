@@ -32,11 +32,12 @@ public class CategorizerTests : IDisposable
     // ---------------------------------------------------------------
 
     [Fact]
-    public void Categories_AreTheSevenFixedOnes_InDisplayOrder()
+    public void Categories_AreTheNineFixedOnes_InDisplayOrder()
     {
         AppCategorizer.Categories.ShouldBe(new[]
         {
-            "Productivity", "Utilities", "Games", "VR", "Developer Tools", "Security Apps", "Media"
+            "Productivity", "Utilities", "Games", "VR", "Developer Tools", "Security Apps", "Media",
+            "Documents", "Images"
         });
     }
 
@@ -354,5 +355,68 @@ public class CategorizerTests : IDisposable
 
         pos.ShouldNotBeNull();
         pos!.Value.X.ShouldBe(64);
+    }
+
+    // ---------------------------------------------------------------
+    // Documents / Images — extension classification
+    // ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData(@"C:\Users\u\Desktop\report.pdf", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\notes.docx", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\budget.xlsx", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\deck.pptx", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\readme.md", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\data.csv", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\book.epub", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\notebook.one", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\photo.png", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\photo.jpg", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\photo.jpeg", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\scan.tiff", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\pic.heic", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\logo.svg", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\comp.psd", "Images")]
+    public void ClassifyByExtension_MapsDocumentAndImageExtensions(string path, string expected)
+    {
+        AppCategorizer.ClassifyByExtension(path).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\u\Desktop\REPORT.PDF", "Documents")]
+    [InlineData(@"C:\Users\u\Desktop\Photo.JPG", "Images")]
+    [InlineData(@"C:\Users\u\Desktop\mixed.DocX", "Documents")]
+    public void ClassifyByExtension_IsCaseInsensitive(string path, string expected)
+    {
+        AppCategorizer.ClassifyByExtension(path).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\u\Desktop\app.lnk")]
+    [InlineData(@"C:\Users\u\Desktop\site.url")]
+    [InlineData(@"C:\Users\u\Desktop\setup.exe")]
+    [InlineData(@"C:\Users\u\Desktop\archive.zip")]
+    [InlineData(@"C:\Users\u\Desktop\video.mp4")]
+    [InlineData(@"C:\Users\u\Desktop\download.crdownload")]
+    [InlineData(@"C:\Users\u\Desktop\noextension")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void ClassifyByExtension_ReturnsNull_ForNonDocumentNonImage(string? path)
+    {
+        AppCategorizer.ClassifyByExtension(path).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(@"C:\d\app.lnk", true)]
+    [InlineData(@"C:\d\site.url", true)]
+    [InlineData(@"C:\d\tool.exe", true)]
+    [InlineData(@"C:\d\paper.pdf", true)]
+    [InlineData(@"C:\d\cat.webp", true)]
+    [InlineData(@"C:\d\movie.mkv", false)]
+    [InlineData(@"C:\d\desktop.ini", false)]
+    [InlineData(@"C:\d\partial.part", false)]
+    public void IsCandidateFile_AcceptsAppsDocumentsAndImagesOnly(string path, bool expected)
+    {
+        AppCategorizer.IsCandidateFile(path).ShouldBe(expected);
     }
 }

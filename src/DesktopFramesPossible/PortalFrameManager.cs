@@ -842,17 +842,10 @@ namespace Desktop_Frames
                         return;
                     }
 
-                    // Use SHFileOperation to move to recycle bin
-                    SHFILEOPSTRUCT shf = new SHFILEOPSTRUCT();
-                    shf.wFunc = FO_DELETE;
-                    shf.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
-                    shf.pFrom = path + '\0' + '\0'; // Double null-terminated string
-
-                    int result = SHFileOperation(ref shf);
-
-                    if (result != 0)
+                    // Shared SHFileOperation + FOF_ALLOWUNDO helper (also used by FrameStore)
+                    if (!RecycleBin.TryMoveToRecycleBin(path, out string recycleError))
                     {
-                        throw new Exception($"Failed to move to recycle bin (error code: {result})");
+                        throw new Exception($"Failed to move to recycle bin ({recycleError})");
                     }
 
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, $"Moved to recycle bin: {path}");
@@ -902,31 +895,6 @@ namespace Desktop_Frames
                 }
             }
         }
-
-        // Corrected Win32 API declarations
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        public struct SHFILEOPSTRUCT
-        {
-            public IntPtr hwnd;
-            public uint wFunc;
-            [MarshalAs(UnmanagedType.LPWStr)]
-            public string pFrom;
-            [MarshalAs(UnmanagedType.LPWStr)]
-            public string pTo;
-            public ushort fFlags;
-            [MarshalAs(UnmanagedType.Bool)]
-            public bool fAnyOperationsAborted;
-            public IntPtr hNameMappings;
-            [MarshalAs(UnmanagedType.LPWStr)]
-            public string lpszProgressTitle;
-        }
-
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        static extern int SHFileOperation([In] ref SHFILEOPSTRUCT lpFileOp);
-
-        const uint FO_DELETE = 0x0003;
-        const ushort FOF_ALLOWUNDO = 0x0040;
-        const ushort FOF_NOCONFIRMATION = 0x0010;
 
         private void RemoveIcon(string path)
         {

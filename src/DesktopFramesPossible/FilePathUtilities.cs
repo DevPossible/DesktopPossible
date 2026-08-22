@@ -432,6 +432,14 @@ namespace Desktop_Frames
         {
             try
             {
+                // Folder-backed frames: a dead shortcut inside a frame folder is deleted
+                // there (real files are their own target, so they are never "dead").
+                if (FrameStore.IsInsideAnyFrameFolder(filename))
+                {
+                    FrameStore.RemoveBackingFile(filename);
+                    return;
+                }
+
                 // Delete main shortcut file from the ACTIVE PROFILE's Shortcuts folder —
                 // the pre-profile-era app root would never contain the actual file.
                 string profileDir = ProfileManager.CurrentProfileDir;

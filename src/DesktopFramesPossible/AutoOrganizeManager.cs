@@ -6,8 +6,8 @@ namespace Desktop_Frames
 {
     /// <summary>
     /// Watches the desktop and, when Auto-Organize is enabled, automatically
-    /// categorizes NEW desktop arrivals (app shortcuts and executables) into their
-    /// fixed category frame via AppCategorizer. The old user-defined rules engine
+    /// categorizes NEW desktop arrivals (app shortcuts, executables, documents and
+    /// images) into their fixed category frame via AppCategorizer. The old user-defined rules engine
     /// (auto_organize.json + Smart Desktop Rules dialog) was replaced by the fixed
     /// app-categorization engine; unclassifiable items are left alone.
     /// </summary>
@@ -103,8 +103,8 @@ namespace Desktop_Frames
             {
                 if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize) return;
 
-                string ext = Path.GetExtension(filePath).ToLowerInvariant();
-                if (ext != ".lnk" && ext != ".url" && ext != ".exe") return;
+                // App-like items (.lnk/.url/.exe) plus documents and images by extension.
+                if (!AppCategorizer.IsCandidateFile(filePath)) return;
 
                 // --- THE DOWNLOAD WAITER ---
                 // Wait up to 60 seconds for the writer to release the file lock.

@@ -1566,10 +1566,15 @@ namespace Desktop_Frames
 
                             if (targetArray != null)
                             {
+                                string backingFile = liveItem["Filename"]?.ToString();
                                 targetArray.Remove(liveItem);
                                 FrameDataManager.SaveFrameData();
                                 var wp = VisualTreeHelper.GetParent(sp) as WrapPanel;
                                 if (wp != null) wp.Children.Remove(sp);
+
+                                // Folder-backed frames: shortcuts in the frame folder are deleted,
+                                // real files go to the Recycle Bin; legacy files are left alone.
+                                FrameStore.RemoveBackingFile(backingFile);
                             }
                         }
                     }
@@ -2130,6 +2135,8 @@ namespace Desktop_Frames
 
                                     WrapPanel wrapPanel = FindVisualParent<WrapPanel>(sp);
                                     wrapPanel?.Children.Remove(sp);
+
+                                    FrameStore.RemoveBackingFile(filePath);
                                 }
                             }
                         }
@@ -7354,10 +7361,17 @@ namespace Desktop_Frames
                             // --- DATA FRAME LOGIC ---
                             if (frame.ItemsType?.ToString() == "Data")
                             {
-                                if (!System.IO.Directory.Exists("Shortcuts")) System.IO.Directory.CreateDirectory("Shortcuts");
-                                string baseShortcutName = System.IO.Path.Combine("Shortcuts", System.IO.Path.GetFileName(droppedFile));
-                                string shortcutName = baseShortcutName;
-                                int counter = 1;
+                                // Every Data frame is folder-backed: the item's backing file lives
+                                // in the frame's own store folder and Filename is its ABSOLUTE path.
+                                string frameFolder;
+                                try { frameFolder = FrameStore.GetFrameFolder(frame); }
+                                catch (Exception storeEx)
+                                {
+                                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
+                                        $"Cannot create frame store folder: {storeEx.Message}");
+                                    continue;
+                                }
+                                string shortcutName;
 
                                 bool isDroppedShortcut = System.IO.Path.GetExtension(droppedFile).ToLower() == ".lnk";
                                 bool isDroppedUrlFile = System.IO.Path.GetExtension(droppedFile).ToLower() == ".url";
@@ -7403,14 +7417,14 @@ namespace Desktop_Frames
                                     }
                                 }
 
-                                if (!isDroppedShortcut && !isDroppedUrlFile)
+                                bool isDroppedExe = System.IO.Path.GetExtension(droppedFile).ToLower() == ".exe";
+
+                                if (isFolderFlag || isDroppedExe)
                                 {
-                                    // CASE A: Creating new shortcut from raw file/folder
-                                    shortcutName = baseShortcutName + ".lnk";
-                                    while (System.IO.File.Exists(shortcutName))
-                                    {
-                                        shortcutName = System.IO.Path.Combine("Shortcuts", $"{System.IO.Path.GetFileNameWithoutExtension(droppedFile)} ({counter++}).lnk");
-                                    }
+                                    // CASE A: folders and executables stay IN PLACE — a new .lnk
+                                    // pointing at them is created in the frame folder.
+                                    shortcutName = FrameStore.UniqueDestinationPath(frameFolder,
+                                        System.IO.Path.GetFileName(droppedFile) + ".lnk");
 
                                     try
                                     {
@@ -7424,55 +7438,30 @@ namespace Desktop_Frames
                                 }
                                 else
                                 {
-                                    // CASE B: Copying existing shortcut (LNK or URL)
-                                    // FIX: Determine correct extension based on type
-                                    // If it's a Web Link, MUST remain .url. If it's a Shortcut, MUST remain .lnk.
-                                    string ext = isWebLink ? ".url" : ".lnk";
-
-                                    // Ensure base name has correct extension
-                                    if (!baseShortcutName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
-                                        baseShortcutName = System.IO.Path.ChangeExtension(baseShortcutName, ext);
-
-                                    shortcutName = baseShortcutName;
-
-                                    // Handle Duplicates while preserving extension
-                                    while (System.IO.File.Exists(shortcutName))
+                                    // CASE B: existing shortcuts (.lnk/.url — copied verbatim, so
+                                    // custom icons survive) and CASE C: real files (pdf/docx/jpg…)
+                                    // are MOVED into the frame folder; the item IS that file.
+                                    // Ctrl at release = COPY (original kept). For one of our own
+                                    // cross-frame OLE drags the file leaves the source frame's
+                                    // folder and the source removes its item via the Move effect.
+                                    try
                                     {
-                                        string nameNoExt = System.IO.Path.GetFileNameWithoutExtension(droppedFile);
-                                        shortcutName = System.IO.Path.Combine("Shortcuts", $"{nameNoExt} ({counter++}){ext}");
+                                        shortcutName = FrameStore.MoveIntoFolder(frameFolder, droppedFile, dropIsCopy);
+                                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
+                                            $"Drop {(dropIsCopy ? "copy" : "move")}: '{droppedFile}' -> '{shortcutName}'");
+                                    }
+                                    catch (Exception moveEx)
+                                    {
+                                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
+                                            $"Drop: could not {(dropIsCopy ? "copy" : "move")} '{droppedFile}' into the frame folder: {moveEx.Message}");
+                                        continue;
                                     }
 
-                                    if (isWebLink)
+                                    if (!isDroppedShortcut && !isDroppedUrlFile)
                                     {
-                                        // FIX: Never rewrite .url files on drop. This destroys custom game/app icons (Steam/Spotify).
-                                        // ALWAYS copy the original file exactly as-is to preserve IconFile and IconIndex properties.
-                                        System.IO.File.Copy(droppedFile, shortcutName, true);
-                                    }
-                                    else
-                                    {
-                                        System.IO.File.Copy(droppedFile, shortcutName, true);
-                                    }
-
-                                    // MOVE semantics (Explorer-like): our copy exists now, so
-                                    // remove the original — UNLESS Ctrl is held (copy) or this
-                                    // is one of our own cross-frame OLE drags (the source frame
-                                    // removes its item itself via the returned Move effect).
-                                    // Only ever applies to dropped SHORTCUT files (.lnk/.url):
-                                    // raw files/folders dropped in are merely LINKED TO, and
-                                    // deleting them would break the item we just created.
-                                    if (!dropIsCopy && !IconDragDropManager.IsOleDragInProgress)
-                                    {
-                                        try
-                                        {
-                                            System.IO.File.Delete(droppedFile);
-                                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,
-                                                $"Drop move: removed original shortcut '{droppedFile}'");
-                                        }
-                                        catch (Exception moveEx)
-                                        {
-                                            LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
-                                                $"Drop move: could not remove original '{droppedFile}': {moveEx.Message}");
-                                        }
+                                        // Raw file: its own target, never a folder.
+                                        targetPath = shortcutName;
+                                        isFolder = false;
                                     }
                                 }
 
@@ -7534,10 +7523,11 @@ namespace Desktop_Frames
                                 items.Add(JObject.FromObject(newItem));
 
                                 // Cross-frame OLE drag: the item is now ours — report Move so
-                                // the source frame removes its copy (no duplicates).
+                                // the source frame removes its entry (its backing file already
+                                // moved into our folder); Ctrl = Copy, the source keeps its item.
                                 if (IconDragDropManager.IsOleDragInProgress)
                                 {
-                                    e.Effects = DragDropEffects.Move;
+                                    e.Effects = dropIsCopy ? DragDropEffects.Copy : DragDropEffects.Move;
                                 }
 
                                 if (!string.IsNullOrEmpty(frameId))
