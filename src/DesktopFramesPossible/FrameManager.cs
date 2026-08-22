@@ -4941,6 +4941,18 @@ namespace Desktop_Frames
                 miAlwaysOnTop.IsChecked = lfTop?.AlwaysOnTop?.ToString().ToLower() == "true";
             };
 
+            // --- GLOBAL: Frame Edit Mode (frames only movable/resizable while checked). ---
+            // Mirrors the tray menu item; state is re-resolved live on menu open (like Free arrange).
+            MenuItem miFrameEditMode = new MenuItem
+            {
+                Header = "Edit Frames Mode",
+                IsCheckable = true,
+                IsChecked = SettingsManager.FrameEditMode
+            };
+            miFrameEditMode.Click += (s, e) => SetFrameEditMode(miFrameEditMode.IsChecked);
+            CnMnFramemanager.Items.Add(miFrameEditMode);
+            CnMnFramemanager.Opened += (s, e) => miFrameEditMode.IsChecked = SettingsManager.FrameEditMode;
+
             CnMnFramemanager.Items.Add(new Separator());
             // --------------------------------
 
@@ -4969,7 +4981,8 @@ namespace Desktop_Frames
                 // to all descendants, so it applies to every frame type.
                 UseLayoutRounding = true,
                 Content = cborder,
-                ResizeMode = frame.IsLocked?.ToString().ToLower() == "true" ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip,
+                // Resizable only when the global Frame Edit Mode is on AND the frame isn't individually locked.
+                ResizeMode = (frame.IsLocked?.ToString().ToLower() == "true" || !SettingsManager.FrameEditMode) ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip,
                 Topmost = frame.AlwaysOnTop?.ToString().ToLower() == "true", // --- NEW: Apply Always On Top ---
                 // ResizeMode = ResizeMode.CanResizeWithGrip,
                 Width = (double)frame.Width,
@@ -6741,7 +6754,13 @@ namespace Desktop_Frames
                             return;
                         }
                         bool isLocked = currentFrame.IsLocked?.ToString().ToLower() == "true";
-                        if (!isLocked)
+                        // Read the global Frame Edit Mode LIVE at gesture time (never cached):
+                        // frames are only movable while the user has explicitly enabled editing.
+                        if (!SettingsManager.FrameEditMode)
+                        {
+                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"DragMove blocked for frame '{currentFrame.Title}' (Frame Edit Mode is off)");
+                        }
+                        else if (!isLocked)
                         {
                             win.DragMove();
                             SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
@@ -8609,12 +8628,61 @@ namespace Desktop_Frames
                     return;
                 }
 
-                // Update ResizeMode
-                win.ResizeMode = isLocked ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
+                // Update ResizeMode (global Frame Edit Mode off forces NoResize regardless of the per-frame lock)
+                win.ResizeMode = (isLocked || !SettingsManager.FrameEditMode) ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameUpdate, $"Set ResizeMode to {win.ResizeMode} for frame '{actualFrame.Title}'");
             });
 
             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Updated lock state for frame '{actualFrame.Title}': IsLocked={isLocked}");
+        }
+
+        /// <summary>
+        /// Toggles the global Frame Edit Mode: persists the setting, applies it live to every
+        /// open frame window and keeps the tray menu check in sync. Shared by the tray menu
+        /// and the frame context menu items.
+        /// </summary>
+        public static void SetFrameEditMode(bool enabled)
+        {
+            SettingsManager.FrameEditMode = enabled;
+            try { SettingsManager.SaveSettings(); } catch { }
+
+            ApplyFrameEditModeToOpenFrames();
+            TrayManager.Instance?.UpdateFrameEditModeMenuCheck(enabled);
+
+            try { SmartToast.Show("Frame Edit Mode", enabled ? "Frame editing enabled" : "Frame editing disabled"); } catch { }
+            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.Settings, $"Frame Edit Mode set to {enabled}");
+        }
+
+        /// <summary>
+        /// Re-applies the ResizeMode of every open frame window from the current global
+        /// Frame Edit Mode and each frame's individual IsLocked state. Dragging needs no
+        /// re-apply — the title-bar handler reads SettingsManager.FrameEditMode live.
+        /// </summary>
+        public static void ApplyFrameEditModeToOpenFrames()
+        {
+            try
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    foreach (var win in System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>())
+                    {
+                        try
+                        {
+                            string frameId = win.Tag?.ToString();
+                            dynamic f = string.IsNullOrEmpty(frameId)
+                                ? null
+                                : FrameDataManager.FrameData.FirstOrDefault(x => x.Id?.ToString() == frameId);
+                            bool isLocked = f?.IsLocked?.ToString().ToLower() == "true";
+                            win.ResizeMode = (isLocked || !SettingsManager.FrameEditMode) ? ResizeMode.NoResize : ResizeMode.CanResizeWithGrip;
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Failed to apply Frame Edit Mode to open frames: {ex.Message}");
+            }
         }
 
 

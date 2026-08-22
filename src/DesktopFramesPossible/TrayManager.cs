@@ -50,6 +50,8 @@ namespace Desktop_Frames
 
         private ToolStripMenuItem _autoOrganizeMenuItem; // NEW
 
+        private ToolStripMenuItem _frameEditModeItem; // Global "Edit Frames Mode" toggle
+
         private class HiddenFrame
         {
             public string Title { get; set; }
@@ -63,6 +65,17 @@ namespace Desktop_Frames
                 if (_autoOrganizeMenuItem.Checked != isChecked)
                 {
                     _autoOrganizeMenuItem.Checked = isChecked;
+                }
+            }
+        }
+
+        public void UpdateFrameEditModeMenuCheck(bool isChecked)
+        {
+            if (_frameEditModeItem != null)
+            {
+                if (_frameEditModeItem.Checked != isChecked)
+                {
+                    _frameEditModeItem.Checked = isChecked;
                 }
             }
         }
@@ -267,6 +280,18 @@ namespace Desktop_Frames
             trayMenu.Items.Add(new ToolStripSeparator());
             // --- END SMART DESKTOP OPTIONS ---
 
+            // Global Frame Edit Mode toggle: frames only become movable/resizable while checked.
+            _frameEditModeItem = new ToolStripMenuItem("Edit Frames Mode") { CheckOnClick = true };
+            _frameEditModeItem.Checked = SettingsManager.FrameEditMode;
+            _frameEditModeItem.Click += (s, e) =>
+            {
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    Framemanager.SetFrameEditMode(_frameEditModeItem.Checked);
+                }));
+            };
+            trayMenu.Items.Add(_frameEditModeItem);
+
             trayMenu.Items.Add("Reload All Frames", null, async (s, e) => { await reloadallFrames(); });
 
             trayMenu.Items.Add(new ToolStripSeparator());
@@ -292,6 +317,9 @@ namespace Desktop_Frames
             {
                 focusFrameItem.Visible = SettingsManager.EnableFocusFrameHotkey;
                 if (focusFrameItem.Visible) focusFrameItem.Text = $"Focus Frame... ({GetFocusFrameHotkeyString()})";
+
+                // Re-resolve live so a toggle made from the frame context menu is reflected here.
+                _frameEditModeItem.Checked = SettingsManager.FrameEditMode;
 
                 bool autoOrg = SettingsManager.EnableAutoOrganize;
                 smartRulesItem.Visible = autoOrg;
