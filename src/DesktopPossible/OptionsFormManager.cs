@@ -737,6 +737,49 @@ namespace Desktop_Frames
             };
             c.Children.Add(btnArrangeNow);
 
+            // "Arrange Frames": size every frame to its content and tile them all on the
+            // primary work area. Independent of Auto-Organize, always clickable.
+            Button btnArrangeFrames = new Button
+            {
+                Content = "Arrange Frames",
+                Height = 32,
+                Padding = new Thickness(14, 0, 14, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(15, 0, 0, 10),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 13,
+                Background = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                ToolTip = "Resize every frame to fit its icons and tile all frames neatly on the primary monitor."
+            };
+            btnArrangeFrames.Click += (s, e) =>
+            {
+                if (!MessageBoxesManager.ShowCustomYesNoMessageBox(
+                        "Resize every visible frame to fit its content and re-tile all frames on the primary monitor?\n\nFrame positions and sizes will be replaced.",
+                        "Arrange Frames")) return;
+                btnArrangeFrames.IsEnabled = false;
+                btnArrangeFrames.Content = "Arranging...";
+                try
+                {
+                    int count = FrameArranger.ArrangeAllFrames();
+                    SmartToast.Show("Frames arranged", $"Arranged {count} frame(s) on the primary monitor");
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                        $"Arrange Frames failed: {ex.Message}");
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Arrange Frames failed: {ex.Message}", "Error");
+                }
+                finally
+                {
+                    btnArrangeFrames.Content = "Arrange Frames";
+                    btnArrangeFrames.IsEnabled = true;
+                }
+            };
+            c.Children.Add(btnArrangeFrames);
+
             TextBlock infoText = new TextBlock
             {
                 Text = "Note: Auto-Organize monitors your Desktop for new app shortcuts and programs. " +
