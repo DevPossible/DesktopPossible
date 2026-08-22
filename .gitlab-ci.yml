@@ -329,7 +329,7 @@ github_release:
         --arg tag "v${VERSION}" \
         --arg name "DesktopPossible v${VERSION}" \
         --argjson body "${body}" \
-        --argjson pre "$( [ "${version%%.*}" = "0" ] && echo true || echo false )" \
+        --argjson pre "$( [ "${VERSION%%.*}" = "0" ] && echo true || echo false )" \
         '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre }')"
 
       status="$(curl -s -o response.json -w "%{http_code}" \
