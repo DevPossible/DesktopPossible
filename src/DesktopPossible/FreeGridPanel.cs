@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace Desktop_Frames
 {
@@ -17,9 +18,11 @@ namespace Desktop_Frames
     /// properties (mirrors of the per-item persisted GridCol/GridRow JSON values).
     /// Cell width comes from the frame's icon spacing settings (identical to the slot a
     /// WrapPanel cell occupies); cell height is the tallest child, matching WrapPanel's
-    /// uniform row height. Out-of-range columns are clamped at render time only.
-    /// The panel reports an extent height of (max occupied row + 1) * cell height so the
-    /// surrounding ScrollViewer scrolls exactly as before.
+    /// uniform row height. Resizing the frame NEVER moves an icon: the panel reports its
+    /// true extent — (max occupied column + 1) × cell width by (max occupied row + 1) ×
+    /// cell height — so icons outside the viewport are clipped and reachable by scrolling
+    /// (or by the hidden-scrollbar pan in <see cref="GridOverflowNavigator"/>), never
+    /// folded onto the last visible column.
     /// </summary>
     public class FreeGridPanel : WrapPanel
     {
@@ -74,8 +77,46 @@ namespace Desktop_Frames
         /// <summary>Pixel height of one grid cell (tallest child; computed during measure).</summary>
         public double CellHeight { get; private set; } = 80;
 
-        /// <summary>Visible column count from the last layout pass (min 1).</summary>
+        /// <summary>Column count that fits the VISIBLE viewport (min 1) — where new items are placed.</summary>
         public int Columns { get; private set; } = 1;
+
+        /// <summary>Column count of the occupied grid: max occupied column + 1 (min 1).</summary>
+        public int ExtentColumns { get; private set; } = 1;
+
+        /// <summary>Columns reachable by a drop: the larger of the viewport and the occupied grid.</summary>
+        public int DropColumns => Math.Max(Columns, ExtentColumns);
+
+        private ScrollViewer? _scrollViewer;
+
+        /// <summary>
+        /// Width the panel is shown in. The hosting ScrollViewer measures us with infinite
+        /// width once horizontal scrolling is allowed (free-arrange frames), so the
+        /// visible column count has to come from its viewport rather than the constraint.
+        /// </summary>
+        private double VisibleWidth(Size constraint)
+        {
+            if (!double.IsInfinity(constraint.Width) && !double.IsNaN(constraint.Width) && constraint.Width > 0)
+                return constraint.Width;
+
+            _scrollViewer ??= FindScrollViewer();
+            if (_scrollViewer != null)
+            {
+                if (_scrollViewer.ViewportWidth > 0) return _scrollViewer.ViewportWidth;
+                if (_scrollViewer.ActualWidth > 0) return _scrollViewer.ActualWidth;
+            }
+            return 0;
+        }
+
+        private ScrollViewer? FindScrollViewer()
+        {
+            DependencyObject? node = this;
+            while (node != null)
+            {
+                if (node is ScrollViewer sv) return sv;
+                node = VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node);
+            }
+            return null;
+        }
 
         protected override Size MeasureOverride(Size constraint)
         {
@@ -83,7 +124,7 @@ namespace Desktop_Frames
 
             double cw = _cellWidth > 0 ? _cellWidth : 80;
             double maxChildHeight = 0;
-            int maxRow = -1;
+            int maxRow = -1, maxCol = -1;
 
             foreach (UIElement child in InternalChildren)
             {
@@ -96,22 +137,22 @@ namespace Desktop_Frames
                 if (child is StackPanel && child.DesiredSize.Height > maxChildHeight)
                     maxChildHeight = child.DesiredSize.Height;
                 int row = Math.Max(0, GetGridRow(child));
+                int col = Math.Max(0, GetGridCol(child));
                 if (row > maxRow) maxRow = row;
+                if (col > maxCol) maxCol = col;
             }
 
             CellHeight = maxChildHeight > 0 ? maxChildHeight : cw;
+            ExtentColumns = Math.Max(1, maxCol + 1);
 
-            double width = double.IsInfinity(constraint.Width) || double.IsNaN(constraint.Width)
-                ? cw
-                : constraint.Width;
-            Columns = GridLayout.ColumnsForWidth(width, cw);
+            double visibleWidth = VisibleWidth(constraint);
+            Columns = visibleWidth > 0 ? GridLayout.ColumnsForWidth(visibleWidth, cw) : 1;
 
+            // True extent: the occupied grid, never smaller than what is visible so the
+            // panel keeps filling the frame (drops on empty space still hit us).
+            double extentWidth = Math.Max(visibleWidth, ExtentColumns * cw);
             double extentHeight = GridLayout.ExtentHeight(maxRow, CellHeight);
-            double desiredWidth = double.IsInfinity(constraint.Width) || double.IsNaN(constraint.Width)
-                ? Columns * cw
-                : constraint.Width;
-
-            return new Size(desiredWidth, extentHeight);
+            return new Size(extentWidth, extentHeight);
         }
 
         protected override Size ArrangeOverride(Size finalSize)
@@ -120,13 +161,12 @@ namespace Desktop_Frames
 
             double cw = _cellWidth > 0 ? _cellWidth : 80;
             double ch = CellHeight > 0 ? CellHeight : cw;
-            Columns = GridLayout.ColumnsForWidth(finalSize.Width, cw);
 
             foreach (UIElement child in InternalChildren)
             {
                 if (child == null) continue;
-                // Clamp out-of-range columns at render only — the persisted value is untouched.
-                int col = GridLayout.ClampColumn(Math.Max(0, GetGridCol(child)), Columns);
+                // Persisted cell, verbatim: a frame too narrow for it clips, never reflows.
+                int col = Math.Max(0, GetGridCol(child));
                 int row = Math.Max(0, GetGridRow(child));
                 child.Arrange(new Rect(col * cw, row * ch, cw, ch));
             }

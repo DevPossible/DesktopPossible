@@ -490,8 +490,27 @@ namespace Desktop_Frames
                 if (scrollViewer != null)
                 {
                     scrollViewer.VerticalScrollBarVisibility = SettingsManager.DisableFrameScrollbars ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Auto;
+                    scrollViewer.HorizontalScrollBarVisibility = GridScrollPolicy((scrollViewer.Content as FreeGridPanel)?.FreeArrange == true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Horizontal scrolling policy of a frame's icon ScrollViewer. Flow layout must stay
+        /// Disabled (the WrapPanel wraps to the viewport width); a free-arrange grid keeps its
+        /// icons where they are and scrolls instead — bars shown, or hidden when the user
+        /// turned frame scrollbars off (GridOverflowNavigator then shows arrows + pans).
+        /// </summary>
+        private static ScrollBarVisibility GridScrollPolicy(bool freeArrange)
+        {
+            if (!freeArrange) return ScrollBarVisibility.Disabled;
+            return SettingsManager.DisableFrameScrollbars ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Auto;
+        }
+
+        /// <summary>Re-applies <see cref="GridScrollPolicy"/> after a panel's FreeArrange mode changed.</summary>
+        private static void SyncGridScrollPolicy(FreeGridPanel panel)
+        {
+            if (panel?.Parent is ScrollViewer sv) sv.HorizontalScrollBarVisibility = GridScrollPolicy(panel.FreeArrange);
         }
 
         public static void RefreshAutoRollSettings()
@@ -7001,8 +7020,10 @@ namespace Desktop_Frames
             {
                 Content = wpcont,
                 VerticalScrollBarVisibility = SettingsManager.DisableFrameScrollbars ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Auto,
-                
+                HorizontalScrollBarVisibility = GridScrollPolicy(wpcont.FreeArrange),
             };
+            // Free-arrange frames with hidden scrollbars: edge arrows + drag-to-pan for clipped content.
+            GridOverflowNavigator.Attach(wpcontscr);
 
             // --- PERFORMANCE TWEAK: Hardware Acceleration & Safe UI Culling ---
             IconManager.OptimizeFramePanel(wpcont, wpcontscr);
@@ -7986,6 +8007,7 @@ namespace Desktop_Frames
                     {
                         freeGridPanel.FreeArrange = IsFreeArrange(settings);
                         freeGridPanel.CellWidth = GetFreeArrangeCellWidth(settings);
+                        SyncGridScrollPolicy(freeGridPanel);
                     }
                 }
                 catch { }
@@ -9264,6 +9286,7 @@ namespace Desktop_Frames
                     {
                         freeGridPanel.FreeArrange = IsFreeArrange(frame);
                         freeGridPanel.CellWidth = GetFreeArrangeCellWidth(frame);
+                        SyncGridScrollPolicy(freeGridPanel);
                     }
                     if (EnsureFreeGridCells(frame, items)) FrameDataManager.SaveFrameData();
 

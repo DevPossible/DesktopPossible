@@ -492,7 +492,7 @@ namespace Desktop_Frames
                 double cellHeight = panel.CellHeight;
                 if (cellWidth <= 0 || cellHeight <= 0) return;
 
-                int columns = Math.Max(1, panel.Columns);
+                int columns = Math.Max(1, panel.DropColumns);
                 var hover = GridLayout.CellFromPoint(mousePosition.X, mousePosition.Y, cellWidth, cellHeight, columns);
                 if (hover == _lastPreviewCell) return; // same cell — preview already applied
                 _lastPreviewCell = hover;
@@ -583,7 +583,7 @@ namespace Desktop_Frames
                     return;
                 }
 
-                int columns = Math.Max(1, panel.Columns);
+                int columns = Math.Max(1, panel.DropColumns);
                 var hover = GridLayout.CellFromPoint(dropPosition.X, dropPosition.Y, cellWidth, cellHeight, columns);
 
                 // Ctrl at release = QUICK CLONE: the original stays at its cell and an
@@ -915,7 +915,7 @@ namespace Desktop_Frames
                 }
             }
 
-            int columns = Math.Max(1, panel.Columns);
+            int columns = Math.Max(1, panel.DropColumns);
             // Defensive cell height: never trust a degenerate measured value (an empty
             // frame's metrics) — a tiny divisor turns a top-of-frame drop into row 40.
             double cellHeight = panel.CellHeight > 8 ? panel.CellHeight : panel.CellWidth;
