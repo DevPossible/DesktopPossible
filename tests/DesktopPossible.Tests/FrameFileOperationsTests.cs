@@ -42,6 +42,7 @@ public class FrameFileOperationsTests : IDisposable
         string folder = FrameFolder(frameId);
         Directory.CreateDirectory(folder);
         string path = Path.Combine(folder, name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         return path;
     }
@@ -120,6 +121,33 @@ public class FrameFileOperationsTests : IDisposable
         File.ReadAllText(Path.Combine(_desktop, "notes.txt")).ShouldBe("desktop-original");
         File.ReadAllText(Path.Combine(_desktop, "notes (1).txt")).ShouldBe("desktop-second");
         File.ReadAllText(Path.Combine(_desktop, "notes (2).txt")).ShouldBe("from-frame");
+    }
+
+    [Fact]
+    public void MoveFrameFilesToDesktop_MovesStoredFolderAsOneUnit()
+    {
+        CreateFrameFile("f1", Path.Combine("Projects", "notes.txt"), "N");
+        CreateFrameFile("f1", Path.Combine("Projects", "sub", "deep.txt"), "D");
+        Directory.CreateDirectory(Path.Combine(_desktop, "Projects"));
+
+        int moved = FrameFileOperations.MoveFrameFilesToDesktop(_root, _desktop, Profile, "f1");
+
+        moved.ShouldBe(1);
+        File.ReadAllText(Path.Combine(_desktop, "Projects (1)", "notes.txt")).ShouldBe("N");
+        File.ReadAllText(Path.Combine(_desktop, "Projects (1)", "sub", "deep.txt")).ShouldBe("D");
+        Directory.Exists(FrameFolder("f1")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void DeleteFrameFiles_RemovesStoredFolders()
+    {
+        CreateFrameFile("f1", Path.Combine("Projects", "notes.txt"), "N");
+        CreateFrameFile("f1", "loose.txt", "L");
+
+        int deleted = FrameFileOperations.DeleteFrameFiles(_root, Profile, "f1");
+
+        deleted.ShouldBe(2);
+        Directory.Exists(FrameFolder("f1")).ShouldBeFalse();
     }
 
     [Fact]
@@ -277,6 +305,45 @@ public class FrameFileOperationsTests : IDisposable
         ((JArray)f2["Items"]!).Count.ShouldBe(1);
 
         File.Exists(json + ".tmp").ShouldBeFalse(); // atomic write left no temp file behind
+    }
+
+    [Fact]
+    public void RenameProfileStore_MovesFolder_AndRewritesItemPaths_MainAndTabs()
+    {
+        string stored = CreateFrameFile("f1", "a.lnk");
+        string json = Path.Combine(_root, "frames-rename.json");
+        File.WriteAllText(json, (new JArray
+        {
+            new JObject
+            {
+                ["Id"] = "f1",
+                ["Items"] = new JArray(new JObject { ["Filename"] = stored }),
+                ["Tabs"] = new JArray(new JObject
+                {
+                    ["Items"] = new JArray(
+                        new JObject { ["Filename"] = stored },
+                        new JObject { ["Filename"] = @"C:\Elsewhere\keep.lnk" })
+                })
+            }
+        }).ToString());
+
+        int rewritten = FrameFileOperations.RenameProfileStore(_root, Profile, "Renamed", json);
+
+        rewritten.ShouldBe(2);
+        Directory.Exists(Path.Combine(_root, Profile)).ShouldBeFalse();
+        string expected = Path.Combine(_root, "Renamed", "Frames", "f1", "a.lnk");
+        File.Exists(expected).ShouldBeTrue();
+        var frames = JArray.Parse(File.ReadAllText(json));
+        frames[0]!["Items"]![0]!["Filename"]!.ToString().ShouldBe(expected);
+        frames[0]!["Tabs"]![0]!["Items"]![0]!["Filename"]!.ToString().ShouldBe(expected);
+        frames[0]!["Tabs"]![0]!["Items"]![1]!["Filename"]!.ToString().ShouldBe(@"C:\Elsewhere\keep.lnk");
+    }
+
+    [Fact]
+    public void RenameProfileStore_NoStoreFolder_IsNoOp()
+    {
+        FrameFileOperations.RenameProfileStore(_root, "Ghost", "Renamed", Path.Combine(_root, "missing.json")).ShouldBe(0);
+        Directory.Exists(Path.Combine(_root, "Renamed")).ShouldBeFalse();
     }
 
     [Fact]

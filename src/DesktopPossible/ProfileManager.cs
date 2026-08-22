@@ -336,6 +336,19 @@ namespace Desktop_Frames
 
                 Directory.Move(oldDir, newDir);
 
+                // The AppData store folder and the absolute item paths inside frames.json
+                // are keyed by profile name too — carry them across with the rename.
+                try
+                {
+                    FrameFileOperations.RenameProfileStore(FrameStore.RootDir, oldName, newName,
+                        Path.Combine(newDir, "frames.json"));
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Settings,
+                        $"ProfileManager: renamed '{oldName}' but could not migrate its file store: {ex.Message}");
+                }
+
                 var pInfo = _profileCache.FirstOrDefault(p => p.Name.Equals(oldName, StringComparison.OrdinalIgnoreCase));
                 if (pInfo != null) pInfo.Name = newName;
 

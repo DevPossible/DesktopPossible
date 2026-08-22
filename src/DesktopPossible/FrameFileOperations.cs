@@ -40,7 +40,7 @@ namespace Desktop_Frames
         }
 
         /// <summary>
-        /// Moves every file in the frame's folder to the Desktop with " (n)" collision
+        /// Moves every top-level file and folder in the frame's folder to the Desktop with " (n)" collision
         /// suffixing (Copy+Delete fallback across volumes). A file that fails to move is
         /// left in place and logged; nothing is ever deleted on failure. The frame folder
         /// is removed afterwards only if it is completely empty. Returns the moved count.
@@ -54,7 +54,7 @@ namespace Desktop_Frames
             string folder = FrameStore.BuildFrameFolderPath(root, profileName, frameId);
             int moved = 0;
 
-            foreach (string file in EnumerateFilesIn(folder))
+            foreach (string file in EnumerateTopLevelIn(folder))
             {
                 try
                 {
@@ -88,11 +88,12 @@ namespace Desktop_Frames
             string folder = FrameStore.BuildFrameFolderPath(root, profileName, frameId);
             int deleted = 0;
 
-            foreach (string file in EnumerateFilesIn(folder))
+            foreach (string file in EnumerateTopLevelIn(folder))
             {
                 try
                 {
-                    File.Delete(file);
+                    if (Directory.Exists(file)) Directory.Delete(file, recursive: true);
+                    else File.Delete(file);
                     deleted++;
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.IconHandling,
                         $"FrameFileOperations: deleted '{file}'");
@@ -247,6 +248,85 @@ namespace Desktop_Frames
         }
 
         /// <summary>
+        /// Profile rename: moves the profile's store folder (root/old -> root/new) and rewrites
+        /// every absolute item Filename in <paramref name="framesJsonPath"/> from the old store
+        /// folder to the new one, so items keep resolving after the rename. Safe when the old
+        /// store folder does not exist (profile never stored anything). Returns the number of
+        /// item paths rewritten.
+        /// </summary>
+        public static int RenameProfileStore(string root, string oldProfileName, string newProfileName, string framesJsonPath)
+        {
+            string oldStore = Path.Combine(root, FrameStore.SanitizeProfileName(oldProfileName));
+            string newStore = Path.Combine(root, FrameStore.SanitizeProfileName(newProfileName));
+            if (string.Equals(oldStore, newStore, StringComparison.OrdinalIgnoreCase)) return 0;
+
+            if (Directory.Exists(oldStore))
+            {
+                if (Directory.Exists(newStore))
+                {
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
+                        $"FrameFileOperations: store folder '{newStore}' already exists; leaving '{oldStore}' in place");
+                    return 0;
+                }
+                Directory.Move(oldStore, newStore);
+            }
+
+            return RewriteItemPathsInJson(framesJsonPath, oldStore, newStore);
+        }
+
+        /// <summary>
+        /// Rewrites every item Filename (main list and tabs) under <paramref name="oldFolder"/>
+        /// to the same relative location under <paramref name="newFolder"/>; writes back
+        /// atomically when anything changed. Returns the number of paths rewritten.
+        /// </summary>
+        public static int RewriteItemPathsInJson(string framesJsonPath, string oldFolder, string newFolder)
+        {
+            if (!File.Exists(framesJsonPath)) return 0;
+
+            JArray frames;
+            try
+            {
+                var token = JToken.Parse(File.ReadAllText(framesJsonPath));
+                frames = token as JArray ?? new JArray(token);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.Settings,
+                    $"FrameFileOperations: could not parse '{framesJsonPath}': {ex.Message}");
+                return 0;
+            }
+
+            int rewritten = 0;
+            foreach (var frame in frames.OfType<JObject>())
+            {
+                rewritten += RewriteArray(frame["Items"] as JArray, oldFolder, newFolder);
+                if (frame["Tabs"] is JArray tabs)
+                    foreach (var tab in tabs.OfType<JObject>())
+                        rewritten += RewriteArray(tab["Items"] as JArray, oldFolder, newFolder);
+            }
+
+            if (rewritten > 0)
+                AtomicFile.WriteAllText(framesJsonPath, JsonConvert.SerializeObject(frames, Formatting.Indented));
+            return rewritten;
+        }
+
+        private static int RewriteArray(JArray? items, string oldFolder, string newFolder)
+        {
+            if (items == null) return 0;
+            int n = 0;
+            string oldFull = Path.GetFullPath(oldFolder).TrimEnd(Path.DirectorySeparatorChar);
+            foreach (var item in items.OfType<JObject>())
+            {
+                string? filename = item["Filename"]?.ToString();
+                if (!IsInsideFolder(oldFull, filename)) continue;
+                string relative = Path.GetRelativePath(oldFull, Path.GetFullPath(filename!));
+                item["Filename"] = Path.Combine(newFolder, relative);
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>
         /// Removes from <paramref name="items"/> and from every tab's Items the entries whose
         /// Filename lies inside <paramref name="frameFolder"/>. Pure (no IO).
         /// </summary>
@@ -304,6 +384,27 @@ namespace Desktop_Frames
         }
 
         /// <summary>Deletes <paramref name="folder"/> (including empty sub-folders) only when it contains no files.</summary>
+        /// <summary>
+        /// Top-level files and directories of a frame folder — each is one frame item and
+        /// is moved/deleted as a unit (a stored folder keeps its contents together).
+        /// </summary>
+        private static IReadOnlyList<string> EnumerateTopLevelIn(string folder)
+        {
+            if (!Directory.Exists(folder)) return Array.Empty<string>();
+            try
+            {
+                return Directory.GetFileSystemEntries(folder)
+                    .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
+                    $"FrameFileOperations: could not enumerate '{folder}': {ex.Message}");
+                return Array.Empty<string>();
+            }
+        }
+
         private static void RemoveFolderIfEmpty(string folder)
         {
             try

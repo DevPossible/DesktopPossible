@@ -159,17 +159,35 @@ namespace Desktop_Frames
         }
 
         /// <summary>
-        /// Moves (or copies) sourcePath into destFolder with " (n)" collision suffixing.
-        /// Cross-volume moves (File.Move IOException) fall back to Copy + Delete; the
-        /// source survives any failure. Returns the new absolute path.
+        /// Moves (or copies) sourcePath — a file OR a whole directory — into destFolder
+        /// with " (n)" collision suffixing. Cross-volume moves (IOException) fall back
+        /// to Copy + Delete; the source survives any failure. Returns the new absolute path.
         /// </summary>
         public static string MoveIntoFolder(string destFolder, string sourcePath, bool copy)
         {
-            if (!File.Exists(sourcePath)) throw new FileNotFoundException("Source file not found.", sourcePath);
+            bool isDirectory = Directory.Exists(sourcePath);
+            if (!isDirectory && !File.Exists(sourcePath)) throw new FileNotFoundException("Source file not found.", sourcePath);
             Directory.CreateDirectory(destFolder);
 
-            string sourceFull = Path.GetFullPath(sourcePath);
+            string sourceFull = Path.GetFullPath(sourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             string dest = UniqueDestinationPath(destFolder, Path.GetFileName(sourceFull));
+
+            if (isDirectory)
+            {
+                if (copy) { CopyDirectory(sourceFull, dest); return dest; }
+                try { Directory.Move(sourceFull, dest); }
+                catch (IOException)
+                {
+                    CopyDirectory(sourceFull, dest);
+                    try { Directory.Delete(sourceFull, recursive: true); }
+                    catch (Exception ex)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling,
+                            $"FrameStore: copied folder '{sourceFull}' but could not remove the original: {ex.Message}");
+                    }
+                }
+                return dest;
+            }
 
             if (copy)
             {
@@ -196,8 +214,17 @@ namespace Desktop_Frames
             return dest;
         }
 
+        private static void CopyDirectory(string source, string dest)
+        {
+            Directory.CreateDirectory(dest);
+            foreach (string file in Directory.GetFiles(source))
+                File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
+            foreach (string dir in Directory.GetDirectories(source))
+                CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+        }
+
         /// <summary>
-        /// Disposes of an item's backing file when the item is removed from a frame —
+        /// Disposes of an item's backing file (or folder) when the item is removed from a frame —
         /// ONLY when it lives inside a frame folder: shortcuts (.lnk/.url) are deleted,
         /// real files go to the Recycle Bin. Files outside the store (legacy links,
         /// desktop files) are never touched.
@@ -208,10 +235,11 @@ namespace Desktop_Frames
             {
                 if (!IsInsideAnyFrameFolder(filename)) return;
                 string path = Path.GetFullPath(filename!);
-                if (!File.Exists(path)) return;
+                bool isDirectory = Directory.Exists(path);
+                if (!isDirectory && !File.Exists(path)) return;
 
                 string ext = Path.GetExtension(path).ToLowerInvariant();
-                if (ext == ".lnk" || ext == ".url")
+                if (!isDirectory && (ext == ".lnk" || ext == ".url"))
                 {
                     File.Delete(path);
                     LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.IconHandling,

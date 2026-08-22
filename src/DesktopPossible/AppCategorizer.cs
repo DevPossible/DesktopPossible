@@ -29,7 +29,8 @@ namespace Desktop_Frames
     ///
     /// Classifies desktop items (shortcuts and executables) into a FIXED set of
     /// category frames using three tiers — plus real files (documents, images)
-    /// classified purely by extension into the "Documents" / "Images" frames:
+    /// classified purely by extension into the "Documents" / "Images" frames, and
+    /// real desktop folders (plus shortcuts pointing at folders) into "Documents":
     ///   Tier 1a — curated known-app list (instant, offline),
     ///   Tier 1b — install-path / URL heuristics (instant, offline),
     ///   Tier 2  — package-manager metadata (winget.run, then Chocolatey OData;
@@ -101,6 +102,22 @@ namespace Desktop_Frames
             try { ext = Path.GetExtension(path).ToLowerInvariant(); }
             catch { return false; }
             return ext == ".lnk" || ext == ".url" || ext == ".exe" || ClassifyByExtension(path) != null;
+        }
+
+        /// <summary>
+        /// True for a real desktop folder the sort files under Documents: an existing,
+        /// visible directory (hidden/system folders and reparse points are left alone).
+        /// </summary>
+        public static bool IsCandidateFolder(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            try
+            {
+                if (!Directory.Exists(path)) return false;
+                var attr = File.GetAttributes(path);
+                return (attr & (FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint)) == 0;
+            }
+            catch { return false; }
         }
 
         /// <summary>Sentinel stored in the cache for a confirmed "could not classify".</summary>
@@ -938,7 +955,8 @@ namespace Desktop_Frames
             public string? Arguments;          // shortcut arguments / .url URL
             public string DisplayName = "";
             public bool IsWebLink;
-            public bool IsRawFile;            // document/image: the file itself is the item
+            public bool IsRawFile;            // document/image/folder: the item itself is moved
+            public bool IsRawFolder;          // a real desktop directory (moved whole, IsFolder item)
             public string? Category;
         }
 
@@ -984,7 +1002,7 @@ namespace Desktop_Frames
 
             if (limitToPaths != null)
             {
-                candidatePaths.AddRange(limitToPaths.Where(File.Exists));
+                candidatePaths.AddRange(limitToPaths.Where(p => File.Exists(p) || IsCandidateFolder(p)));
             }
             else
             {
@@ -995,7 +1013,11 @@ namespace Desktop_Frames
                 };
                 foreach (string root in roots.Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r)))
                 {
-                    try { candidatePaths.AddRange(Directory.GetFiles(root)); }
+                    try
+                    {
+                        candidatePaths.AddRange(Directory.GetFiles(root));
+                        candidatePaths.AddRange(Directory.GetDirectories(root).Where(IsCandidateFolder));
+                    }
                     catch (Exception ex)
                     {
                         LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
@@ -1005,7 +1027,7 @@ namespace Desktop_Frames
             }
 
             candidatePaths = candidatePaths
-                .Where(IsCandidateFile)
+                .Where(p => IsCandidateFile(p) || Directory.Exists(p))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -1087,6 +1109,22 @@ namespace Desktop_Frames
         {
             try
             {
+                // A real desktop folder is a Documents item: the directory itself is
+                // moved (whole) into the frame folder and shown as a folder icon.
+                if (Directory.Exists(path))
+                {
+                    return new DesktopEntry
+                    {
+                        Path = path,
+                        Ext = "",
+                        DisplayName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)),
+                        Target = path,
+                        IsRawFile = true,
+                        IsRawFolder = true,
+                        Category = Documents
+                    };
+                }
+
                 var entry = new DesktopEntry
                 {
                     Path = path,
@@ -1100,12 +1138,10 @@ namespace Desktop_Frames
                     entry.Arguments = Utility.GetShortcutArguments(path);
                     entry.IsWebLink = entry.Target != null && LooksLikeUrl(entry.Target);
 
-                    // Folder-target shortcuts are skipped UNLESS the folder is a
+                    // Folder-target shortcuts are Documents, UNLESS the folder is a
                     // game-store path (e.g. a shortcut to a Steam library folder).
                     if (!entry.IsWebLink && !string.IsNullOrEmpty(entry.Target) && Directory.Exists(entry.Target))
-                    {
-                        if (ClassifyByPath(entry.Target, entry.Arguments) == null) return null;
-                    }
+                        entry.Category = ClassifyByPath(entry.Target, entry.Arguments) ?? Documents;
                 }
                 else if (entry.Ext == ".url")
                 {
@@ -1369,8 +1405,9 @@ namespace Desktop_Frames
                 {
                     // CASE B / CASE C: move the original exactly as-is.
                     fullTarget = FrameStore.MoveIntoFolder(frameFolder, item.Path, copy: false);
-                    if (isShortcut && !item.IsWebLink && !string.IsNullOrEmpty(item.Target))
-                        isFolder = Directory.Exists(item.Target);
+                    isFolder = item.IsRawFolder ||
+                               (isShortcut && !item.IsWebLink && !string.IsNullOrEmpty(item.Target) &&
+                                Directory.Exists(item.Target));
                 }
                 else
                 {
