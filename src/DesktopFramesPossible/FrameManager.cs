@@ -214,8 +214,24 @@ namespace Desktop_Frames
 
         private static async void ExecuteAutoHideSequence()
         {
+            // async void: an unhandled exception here would crash the process, and
+            // Application.Current can go null mid-sequence during shutdown — guard both.
+            try
+            {
+                await ExecuteAutoHideSequenceCore();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
+                    $"Auto-Hide sequence failed: {ex.Message}");
+            }
+        }
+
+        private static async Task ExecuteAutoHideSequenceCore()
+        {
             _masterAutoHideTimer.Stop();
             if (_areFramesAutoHidden) return;
+            if (System.Windows.Application.Current == null) return;
 
             int currentSequence = ++_hideSequenceId;
 
@@ -255,11 +271,11 @@ namespace Desktop_Frames
                 {
                     foreach (var win in visibleFrames) win.Opacity = 0.3;
                     await Task.Delay(30);
-                    if (currentSequence != _hideSequenceId) return;
+                    if (currentSequence != _hideSequenceId || System.Windows.Application.Current == null) return;
 
                     foreach (var win in visibleFrames) win.Opacity = 1.0;
                     await Task.Delay(30);
-                    if (currentSequence != _hideSequenceId) return;
+                    if (currentSequence != _hideSequenceId || System.Windows.Application.Current == null) return;
                 }
             }
 
@@ -277,7 +293,7 @@ namespace Desktop_Frames
 
             await Task.Delay(200);
 
-            if (currentSequence != _hideSequenceId) return;
+            if (currentSequence != _hideSequenceId || System.Windows.Application.Current == null) return;
 
             foreach (var win in visibleFrames)
             {
@@ -307,6 +323,114 @@ namespace Desktop_Frames
         private static readonly HashSet<string> _autoRolledFrames = new HashSet<string>();
         private static readonly Dictionary<string, DispatcherTimer> _autoRollTimers = new Dictionary<string, DispatcherTimer>();
         // --------------------------------------
+
+        /// <summary>
+        /// Culture-safe numeric parse for persisted frame values (Height, UnrolledHeight, Width...).
+        /// frames.json numbers must round-trip identically on every locale: invariant culture is
+        /// tried first; the current culture is a compatibility fallback for legacy files written
+        /// by older builds on comma-decimal locales.
+        /// </summary>
+        public static double ToDoubleInvariant(object value, double fallback)
+        {
+            switch (value)
+            {
+                case null: return fallback;
+                case double d: return d;
+                case float f: return f;
+                case int i: return i;
+                case long l: return l;
+                case decimal m: return (double)m;
+            }
+            string text = value.ToString();
+            if (string.IsNullOrWhiteSpace(text)) return fallback;
+            if (double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double invariant))
+                return invariant;
+            if (double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.CurrentCulture, out double localized))
+                return localized;
+            return fallback;
+        }
+
+        // --- Debounced frames.json persistence for high-frequency geometry events ---
+        // LocationChanged/SizeChanged fire dozens of times per second while dragging or
+        // resizing; serializing the whole file on every tick caused UI stutter and write
+        // amplification. Geometry updates go through RequestFrameDataSave (one save ~500ms
+        // after the last change); WM_EXITSIZEMOVE (OnResizingEnded) flushes immediately.
+        private static DispatcherTimer _frameSaveDebounceTimer;
+        private static bool _frameSavePending;
+
+        private static void RequestFrameDataSave()
+        {
+            _frameSavePending = true;
+            if (_frameSaveDebounceTimer == null)
+            {
+                _frameSaveDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+                _frameSaveDebounceTimer.Tick += (s, e) =>
+                {
+                    _frameSaveDebounceTimer.Stop();
+                    if (!_frameSavePending) return;
+                    _frameSavePending = false;
+                    FrameDataManager.SaveFrameData();
+                };
+            }
+            _frameSaveDebounceTimer.Stop();
+            _frameSaveDebounceTimer.Start();
+        }
+
+        private static void FlushPendingFrameSave()
+        {
+            if (!_frameSavePending) return;
+            _frameSaveDebounceTimer?.Stop();
+            _frameSavePending = false;
+            FrameDataManager.SaveFrameData();
+        }
+
+        /// <summary>
+        /// Reuses the shared 1s TargetChecker instead of leaking a new live poller per call
+        /// (tab toggles, partial reloads, and new frames previously each spun up their own).
+        /// </summary>
+        private static TargetChecker GetOrCreateTargetChecker()
+        {
+            if (_currentTargetChecker == null) _currentTargetChecker = new TargetChecker(1000);
+            return _currentTargetChecker;
+        }
+
+        /// <summary>
+        /// Drops every per-frame cache/timer entry for a frame whose window is going away
+        /// (delete or partial reload). Without this the static dictionaries rooted the closed
+        /// window (title label, heart TextBlock) and the auto-roll timer kept ticking forever.
+        /// </summary>
+        private static void EvictFrameCaches(string frameId)
+        {
+            if (string.IsNullOrEmpty(frameId)) return;
+            try
+            {
+                if (_autoRollTimers.TryGetValue(frameId, out var rollTimer))
+                {
+                    rollTimer.Stop();
+                    _autoRollTimers.Remove(frameId);
+                }
+                _autoRolledFrames.Remove(frameId);
+                _framesInTransition.Remove(frameId);
+                _frameTitles.Remove(frameId);
+                _portalNavigationStates.Remove(frameId);
+
+                foreach (var key in _heartTextBlocks.Keys.ToList())
+                {
+                    try
+                    {
+                        if (((dynamic)key)?.Id?.ToString() == frameId) _heartTextBlocks.Remove(key);
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                    $"EvictFrameCaches failed for '{frameId}': {ex.Message}");
+            }
+        }
 
         public static void RefreshScrollbarSettings()
         {
@@ -364,6 +488,8 @@ namespace Desktop_Frames
                     TrayManager.Instance.ClearHiddenFrames(); // Ensure Tray is clean
                 }
 
+                FlushPendingFrameSave(); // persist any debounced geometry change before tearing down
+
                 var openFrames = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>().ToList();
                 foreach (var win in openFrames) win.Close();
 
@@ -372,6 +498,8 @@ namespace Desktop_Frames
                 GC.Collect();
 
                 _heartTextBlocks.Clear();
+                _frameTitles.Clear();            // every window just closed — drop the rooted labels
+                _portalNavigationStates.Clear(); // navigation state is per-window; all windows are gone
                 foreach (var portal in _portalFrames.Values) try { portal.Dispose(); } catch { }
                 _portalFrames.Clear();
                 LazyIconLoader.ClearQueue();  // drop stale icon requests from the closed frames
@@ -857,14 +985,21 @@ namespace Desktop_Frames
                 }
 
                 // Clean up portal frame managers for the specific frames
+                // (Dispose BEFORE removing — dropping the entry without disposing leaked the
+                // manager's FileSystemWatcher and timers for every partial reload.)
                 var portalFramesToRemove = _portalFrames.Keys
                     .Where(frame => frame?.Id?.ToString() == sourceframeId || frame?.Id?.ToString() == targetFrameId)
                     .ToList();
 
                 foreach (var frame in portalFramesToRemove)
                 {
+                    try { _portalFrames[frame]?.Dispose(); } catch { }
                     _portalFrames.Remove(frame);
                 }
+
+                // Drop per-frame caches/timers for the closed windows; CreateFrame repopulates them.
+                EvictFrameCaches(sourceframeId);
+                EvictFrameCaches(targetFrameId);
 
                 // Recreate only the specific frames with proper TargetChecker
                 var FrameData = FrameDataManager.FrameData;
@@ -875,7 +1010,7 @@ namespace Desktop_Frames
                 {
                     try
                     {
-                        CreateFrame(frame, _currentTargetChecker ?? new TargetChecker(1000));
+                        CreateFrame(frame, GetOrCreateTargetChecker());
                         LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameUpdate,
                             $"Recreated frame: {frame.Title}");
                     }
@@ -982,15 +1117,15 @@ namespace Desktop_Frames
             double newLeft = newLeftPx / dpiScale;
             double newTop = newTopPx / dpiScale;
 
-            // Apply the new position if it has changed
+            // Apply the new position (and persist) only if it actually changed —
+            // unconditionally saving here rewrote frames.json once per frame per check.
             if (newLeft != win.Left || newTop != win.Top)
             {
                 win.Left = newLeft;
                 win.Top = newTop;
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.ImportExport, $"Adjusted frame '{win.Title}' position to ({newLeft}, {newTop}) to fit within screen bounds.");
+                FrameDataManager.SaveFrameData();
             }
-            FrameDataManager.SaveFrameData();
-  
         }
 
 
@@ -1140,35 +1275,51 @@ namespace Desktop_Frames
                 bool result = MessageBoxesManager.ShowCustomMessageBoxForm();
                 if (result == true)
                 {
-                    if (SettingsManager.ExportShortcutsOnFrameDeletion && frame.ItemsType?.ToString() == "Data")
+                    // --- BUG FIX: Stale JObject identity ---
+                    // UpdateFrameProperty REPLACES list entries (JObject.FromObject), so the
+                    // closure-captured `frame` may no longer be the object in FrameData —
+                    // Remove(frame) was then a silent no-op and the frame resurrected on
+                    // reload. Resolve the LIVE object by Id and remove by index.
+                    string deleteId = frame.Id?.ToString();
+                    int deleteIndex = string.IsNullOrEmpty(deleteId)
+                        ? -1
+                        : FrameDataManager.FrameData.FindIndex(f => f.Id?.ToString() == deleteId);
+                    dynamic liveFrame = deleteIndex >= 0 ? FrameDataManager.FrameData[deleteIndex] : frame;
+
+                    if (SettingsManager.ExportShortcutsOnFrameDeletion && liveFrame.ItemsType?.ToString() == "Data")
                     {
-                        ExportAllIconsToDesktop(frame, false);
+                        ExportAllIconsToDesktop(liveFrame, false);
                     }
 
-                    BackupManager.BackupDeletedFrame(frame);
+                    BackupManager.BackupDeletedFrame(liveFrame);
 
                     // Image frames: remove their copied-image asset folder.
-                    if (frame.ItemsType?.ToString() == "Image") ImageFramemanager.DeleteAssetDir(frame.Id?.ToString());
+                    if (liveFrame.ItemsType?.ToString() == "Image") ImageFramemanager.DeleteAssetDir(deleteId);
 
-                    FrameDataManager.FrameData.Remove(frame);
-                    _heartTextBlocks.Remove(frame);
+                    if (deleteIndex >= 0) FrameDataManager.FrameData.RemoveAt(deleteIndex);
+                    else FrameDataManager.FrameData.Remove(frame); // last-resort fallback (no Id)
 
                     // --- BUG FIX: Avoid JObject HashCode Mutation ---
-                    var targetPortal = _portalFrames.FirstOrDefault(kvp => kvp.Key?.Id?.ToString() == frame.Id?.ToString());
+                    var targetPortal = _portalFrames.FirstOrDefault(kvp => kvp.Key?.Id?.ToString() == deleteId);
                     if (targetPortal.Value != null)
                     {
                         targetPortal.Value.Dispose();
                         _portalFrames.Remove(targetPortal.Key);
                     }
 
+                    // Stop the auto-roll timer and drop every cached reference to this frame
+                    // (heart TextBlock, title label, portal navigation state).
+                    EvictFrameCaches(deleteId);
+                    _heartTextBlocks.Remove(frame);
+
                     FrameDataManager.SaveFrameData();
 
                     var windows = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>();
-                    var win = windows.FirstOrDefault(w => w.Tag?.ToString() == frame.Id?.ToString());
+                    var win = windows.FirstOrDefault(w => w.Tag?.ToString() == deleteId);
 
                     // Drop it from the "Show Hidden Frames" list before closing, so a deleted-while-
                     // hidden frame can't linger there and throw when unhidden.
-                    TrayManager.RemoveHiddenFrame(win, frame.Title?.ToString());
+                    TrayManager.RemoveHiddenFrame(win, liveFrame.Title?.ToString());
 
                     if (win != null) win.Close();
 
@@ -2371,7 +2522,7 @@ namespace Desktop_Frames
                         else if (propertyName == "IsRolled")
                         {
                             bool isRolled = value?.ToLower() == "true";
-                            double targetHeight = isRolled ? 28 : Convert.ToDouble(actualFrame.UnrolledHeight?.ToString() ?? "130"); //rolled height
+                            double targetHeight = isRolled ? 28 : ToDoubleInvariant(actualFrame.UnrolledHeight?.ToString(), 130); //rolled height
                             var heightAnimation = new DoubleAnimation(win.Height, targetHeight, TimeSpan.FromSeconds(0.3))
                             {
                                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut }
@@ -2551,11 +2702,15 @@ namespace Desktop_Frames
                         InterCore.ProcessTitleChange(liveFrame, "RESET_EFFECT_TEMP", "");
                     }
 
+                    // Resolve caches by Id, not by captured reference (the list entry may have
+                    // been replaced by UpdateFrameProperty since this closure was created).
+                    EvictFrameCaches(frameId);
                     _heartTextBlocks.Remove(frame);
-                    if (_portalFrames.ContainsKey(frame))
+                    var tabPortal = _portalFrames.FirstOrDefault(kvp => kvp.Key?.Id?.ToString() == frameId);
+                    if (tabPortal.Value != null)
                     {
-                        _portalFrames[frame].Dispose();
-                        _portalFrames.Remove(frame);
+                        tabPortal.Value.Dispose();
+                        _portalFrames.Remove(tabPortal.Key);
                     }
                     currentWindow.Close();
                 }
@@ -2564,7 +2719,7 @@ namespace Desktop_Frames
 
                 System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    CreateFrame(updatedFrame, new TargetChecker(1000));
+                    CreateFrame(updatedFrame, GetOrCreateTargetChecker());
                 }));
             }
             catch (Exception ex)
@@ -3584,6 +3739,10 @@ namespace Desktop_Frames
                         LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
                             $"Loading {sortedItems.Count} items from tab '{tabName}'");
 
+                        // One COM shell for the whole batch — activating WScript.Shell per
+                        // shortcut was a per-icon COM activation on the UI thread.
+                        dynamic argShell = null;
+
                         // 5. Iterate and Add Icons (Using Unified Logic)
                         foreach (dynamic icon in sortedItems)
                         {
@@ -3607,8 +3766,8 @@ namespace Desktop_Frames
                                 {
                                     try
                                     {
-                                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                                        dynamic shortcut = shell.CreateShortcut(filePath);
+                                        argShell ??= Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                        dynamic shortcut = argShell.CreateShortcut(filePath);
                                         arguments = (string)shortcut.Arguments;
                                     }
                                     catch { }
@@ -3921,7 +4080,7 @@ namespace Desktop_Frames
                     if (!frameDict.ContainsKey("AlwaysOnTop")) { frameDict["AlwaysOnTop"] = "false"; jsonModified = true; } // --- NEW ---
                     if (!frameDict.ContainsKey("UnrolledHeight"))
                     {
-                        double height = frameDict.ContainsKey("Height") ? Convert.ToDouble(frameDict["Height"]) : 130;
+                        double height = frameDict.ContainsKey("Height") ? ToDoubleInvariant(frameDict["Height"], 130) : 130;
                         frameDict["UnrolledHeight"] = height;
                         jsonModified = true;
                     }
@@ -4008,13 +4167,21 @@ namespace Desktop_Frames
         }
 
 
+        // One-shot guard: the registry rename-migration is a startup concern, not a per-reload
+        // one — LoadAndCreateFrames also runs on every profile switch/reload.
+        private static bool _renameMigrationDone;
+
         public static void LoadAndCreateFrames(TargetChecker targetChecker)
         {
             // Get current program version from assembly
             string currentVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "0.0.0";
 
-            // --- EXECUTABLE MIGRATION ---
-            RegistryHelper.PerformRenameMigration();
+            // --- EXECUTABLE MIGRATION (once per process) ---
+            if (!_renameMigrationDone)
+            {
+                _renameMigrationDone = true;
+                RegistryHelper.PerformRenameMigration();
+            }
 
             RegistryHelper.SetProgramManagementValues(currentVersion);
 
@@ -4052,103 +4219,12 @@ namespace Desktop_Frames
             }
             // -------------------------------------------------------------------
 
-      
-            // === PRE-FLIGHT CHECK FOR SINGLE INSTANCE SETTING ===
-            // Directly read JSON to ensure we get the active profile's preference before UI fully boots
-            bool disableSingleInstance = SettingsManager.DisableSingleInstance;
-            try
-            {
-                string baseDir = System.AppContext.BaseDirectory;
-                string optionsPath = System.IO.Path.Combine(baseDir, "options.json"); // Legacy fallback
-                string masterOptionsPath = System.IO.Path.Combine(baseDir, "MasterOptions.json");
 
-                if (System.IO.File.Exists(masterOptionsPath))
-                {
-                    optionsPath = masterOptionsPath;
-                }
-                else
-                {
-                    string activeProfilePath = System.IO.Path.Combine(baseDir, "ActiveProfile.txt");
-                    if (System.IO.File.Exists(activeProfilePath))
-                    {
-                        string activeProfile = System.IO.File.ReadAllText(activeProfilePath).Trim();
-                        string profileOptionsPath = System.IO.Path.Combine(baseDir, "Profiles", activeProfile, "options.json");
-                        if (System.IO.File.Exists(profileOptionsPath))
-                        {
-                            optionsPath = profileOptionsPath;
-                        }
-                    }
-                }
-
-                if (System.IO.File.Exists(optionsPath))
-                {
-                    string jsonContent = System.IO.File.ReadAllText(optionsPath);
-                    var jObj = JObject.Parse(jsonContent);
-                    if (jObj["DisableSingleInstance"] != null)
-                    {
-                        disableSingleInstance = jObj["DisableSingleInstance"].Value<bool>();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General, $"Pre-flight check failed: {ex.Message}");
-            }
-
-            // === SINGLE INSTANCE CHECK (WITH DISABLE OPTION) ===
-            try
-            {
-                // Check if single instance enforcement is disabled
-                if (disableSingleInstance)
-                {
-                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
-                        "SingleInstance: Single instance enforcement disabled. Multiple instances allowed.");
-                }
-                else
-                {
-                    // Small delay to ensure process visibility
-                    System.Threading.Thread.Sleep(100);
-
-                    Process currentProcess = Process.GetCurrentProcess();
-                    string processName = Path.GetFileNameWithoutExtension(currentProcess.ProcessName);
-                    Process[] allInstances = Process.GetProcessesByName(processName);
-
-                    // Check if this is a duplicate instance
-                    if (allInstances.Length > 1)
-                    {
-                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
-                            $"SingleInstance: Duplicate instance detected. Found {allInstances.Length} instances. Writing trigger and exiting.");
-
-                        // Write registry trigger for the original instance
-                        bool registryWritten = RegistryHelper.WriteTrigger();
-
-                        if (registryWritten)
-                        {
-                            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
-                                "SingleInstance: Registry trigger written successfully. Exiting duplicate instance.");
-                        }
-                        else
-                        {
-                            LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
-                                "SingleInstance: Failed to write registry trigger. Still exiting duplicate instance.");
-                        }
-
-                        Environment.Exit(0);
-                        return;
-                    }
-
-                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
-                        "SingleInstance: This is the first instance. Continuing with normal startup.");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
-                    $"SingleInstance: Error in single instance check: {ex.Message}. Continuing startup.");
-            }
-
-
-
+            // NOTE: The former in-file single-instance check (options.json pre-flight +
+            // process-name scan + Thread.Sleep + Environment.Exit) was removed: it re-ran on
+            // every profile reload on the UI thread, and a mutex-less process scan lets two
+            // simultaneous launches exit each other. Single-instance enforcement lives in
+            // SingleInstanceChecker / App startup (named-Mutex based).
 
 
             // REMOVED: Legacy path override. 
@@ -4215,32 +4291,10 @@ namespace Desktop_Frames
                 MigrateLegacyJson();
             }
 
-            // Sanitize Portal Frames with missing target folders
-            var invalidFrames = new List<dynamic>();
-            foreach (dynamic frame in FrameDataManager.FrameData.ToList()) // Use ToList to avoid collection modification issues
-            {
-                if (frame.ItemsType?.ToString() == "Portal")
-                {
-                    string targetPath = frame.Path?.ToString();
-                    if (string.IsNullOrEmpty(targetPath) || !System.IO.Directory.Exists(targetPath))
-                    {
-                        invalidFrames.Add(frame);
-                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.FrameCreation, $"Marked Portal Frame '{frame.Title}' for removal due to missing target folder: {targetPath ?? "null"}");
-                    }
-                }
-            }
-
-            // Remove invalid frames and save
-            if (invalidFrames.Any())
-            {
-                foreach (var frame in invalidFrames)
-                {
-                    FrameDataManager.FrameData.Remove(frame);
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Removed Portal Frame '{frame.Title}' from FrameDataManager.FrameData");
-                }
-                FrameDataManager.SaveFrameData();
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Saved updated fences.json after removing {invalidFrames.Count} invalid Portal Frames");
-            }
+            // Portal Frames with missing target folders (offline share, unplugged USB...) are
+            // NOT deleted — a transient error must never destroy user data. CreateFrame skips
+            // creating their window and the frame comes back on the next reload when the
+            // folder is reachable again.
 
             // Clear any stuck transition states from previous session
             ClearAllTransitionStates();
@@ -4547,15 +4601,15 @@ namespace Desktop_Frames
             Action StartRename = null;   // begins inline title editing (used by Ctrl+click and the menu)
             // ---------------------------------------------------
 
-            // Check for valid Portal Frame target folder
+            // Check for valid Portal Frame target folder.
+            // DATA SAFETY: do NOT delete the frame — an offline share or unplugged drive is
+            // transient. Skip window creation; the frame returns on the next reload.
             if (frame.ItemsType?.ToString() == "Portal")
             {
                 string targetPath = frame.Path?.ToString();
                 if (string.IsNullOrEmpty(targetPath) || !System.IO.Directory.Exists(targetPath))
                 {
-                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameCreation, $"Skipping creation of Portal Frame '{frame.Title}' due to missing target folder: {targetPath ?? "null"}");
-                    FrameDataManager.FrameData.Remove(frame);
-                    FrameDataManager.SaveFrameData();
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation, $"Skipping creation of Portal Frame '{frame.Title}' — target folder unavailable: {targetPath ?? "null"}. Frame data kept.");
                     return;
                 }
             }
@@ -5315,20 +5369,14 @@ namespace Desktop_Frames
                     double unrolledHeight = (double)frame.Height; // Default to frame.Height
                     if (frame.UnrolledHeight != null)
                     {
-                        if (double.TryParse(frame.UnrolledHeight.ToString(), out double parsedHeight))
+                        double parsedHeight = ToDoubleInvariant(frame.UnrolledHeight?.ToString(), -1);
+                        if (parsedHeight > 0)
                         {
-                            if (parsedHeight > 0)
-                            {
-                                unrolledHeight = parsedHeight;
-                            }
-                            else
-                            {
-                                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"UnrolledHeight {parsedHeight} is invalid (non-positive) for frame '{frame.Title}', using Height={unrolledHeight}");
-                            }
+                            unrolledHeight = parsedHeight;
                         }
                         else
                         {
-                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Failed to parse UnrolledHeight '{frame.UnrolledHeight}' for frame '{frame.Title}', using Height={unrolledHeight}");
+                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"UnrolledHeight '{frame.UnrolledHeight}' is invalid for frame '{frame.Title}', using Height={unrolledHeight}");
                         }
                     }
                     else
@@ -5413,11 +5461,8 @@ namespace Desktop_Frames
                 var currentFrame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId);
                 if (currentFrame != null)
                 {
-
                     double newHeight = e.NewSize.Height;
                     double newWidth = e.NewSize.Width;
-                    double oldHeight = Convert.ToDouble(currentFrame.Height?.ToString() ?? "0");
-                    double oldUnrolledHeight = Convert.ToDouble(currentFrame.UnrolledHeight?.ToString() ?? "0");
                     bool isRolled = currentFrame.IsRolled?.ToString().ToLower() == "true";
 
                     // Update Width and Height with the actual new values
@@ -5425,36 +5470,15 @@ namespace Desktop_Frames
                     currentFrame.Height = newHeight;
 
                     // Handle UnrolledHeight update
-                    if (!isRolled)
+                    if (!isRolled && Math.Abs(newHeight - 28) > 5) // Only if height is significantly different from rolled-up height   //rolled height
                     {
-
-                        if (Math.Abs(newHeight - 28) > 5) // Only if height is significantly different from rolled-up height   //rolled height
-                        {
-                            double heightDifference = Math.Abs(newHeight - oldUnrolledHeight);
-                            // DebugLog("LOGIC", frameId, $"Height difference from old UnrolledHeight: {heightDifference:F1}");
-                            currentFrame.UnrolledHeight = newHeight;
-                            // DebugLog("UPDATE", frameId, $"UPDATED UnrolledHeight from {oldUnrolledHeight:F1} to {newHeight:F1}");
-                        }
-                        else
-                        {
-
-                        }
+                        currentFrame.UnrolledHeight = newHeight;
                     }
-                    else
-                    {
 
-                    }
-                    // Save to JSON
-                    //   MessageBox.Show("Debug: SizeChanged handler called. Saving frame data.");
-                    FrameDataManager.SaveFrameData();
-                    var verifyFrame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId);
-                    double verifyHeight = Convert.ToDouble(verifyFrame.Height?.ToString() ?? "0");
-                    double verifyUnrolled = Convert.ToDouble(verifyFrame.UnrolledHeight?.ToString() ?? "0");
-
-                }
-                else
-                {
-
+                    // Debounced save: SizeChanged fires per layout tick during a resize —
+                    // one write lands ~500ms after the last change, and OnResizingEnded
+                    // (WM_EXITSIZEMOVE) flushes immediately when the user lets go.
+                    RequestFrameDataSave();
                 }
             };
             win.KeyDown += (sender, e) =>
@@ -5546,6 +5570,9 @@ namespace Desktop_Frames
                 try { if (SettingsManager.AutoRollTime > 0) autoRollDelay = SettingsManager.AutoRollTime * 1000; } catch { }
 
                 var autoRollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(autoRollDelay) };
+                // Stop any timer already registered for this id (partial reloads recreate the
+                // frame) — overwriting the slot without stopping left the old timer ticking forever.
+                if (_autoRollTimers.TryGetValue(frameIdForTimer, out var staleRollTimer)) staleRollTimer.Stop();
                 _autoRollTimers[frameIdForTimer] = autoRollTimer;
 
                 autoRollTimer.Tick += (s, e) =>
@@ -5622,7 +5649,7 @@ namespace Desktop_Frames
                         _framesInTransition.Add(frameIdForTimer);
 
                         var currentFrame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameIdForTimer);
-                        double unrolledHeight = currentFrame != null ? Convert.ToDouble(currentFrame.UnrolledHeight?.ToString() ?? "130") : 130;
+                        double unrolledHeight = currentFrame != null ? ToDoubleInvariant(currentFrame.UnrolledHeight?.ToString(), 130) : 130;
 
                         var heightAnimation = new DoubleAnimation(win.Height, unrolledHeight, TimeSpan.FromSeconds(0.3))
                         {
@@ -5700,20 +5727,20 @@ namespace Desktop_Frames
 
             // Make window focusable for key events during drag
             win.Focusable = true;
-            win.Show();
-            SendFrameToBottom(win); // desktop furniture: start behind the user's apps
-
-
+            // NOTE: win.Show() happens ONCE, at the end of CreateFrame, after all content and
+            // handlers are wired up. An earlier Show() here flashed a half-built window and made
+            // the SourceInitialized subscription below dead code (the handle already existed).
 
             // --- FIX START ---
 
             // 1. Install the Message Hook (Enforces the 90% size limit)
+            // Fires during the single Show() at the end of CreateFrame.
             win.SourceInitialized += (s, e) =>
             {
                 var source = HwndSource.FromHwnd(new WindowInteropHelper(win).Handle);
                 source?.AddHook(WndProc);
             };
-            // (Safety: if already initialized)
+            // (Safety: if some path created the handle already)
             if (PresentationSource.FromVisual(win) is HwndSource existingSource)
             {
                 existingSource.AddHook(WndProc);
@@ -6601,7 +6628,7 @@ namespace Desktop_Frames
                     }
                     bool isRolled = currentFrame.IsRolled?.ToString().ToLower() == "true";
                     // Get frame data height (always accurate from SizeChanged handler)
-                    double frameHeight = Convert.ToDouble(currentFrame.Height?.ToString() ?? "130");
+                    double frameHeight = ToDoubleInvariant(currentFrame.Height?.ToString(), 130);
                     double windowHeight = win.Height;
                     // DebugLog("SYNC_CHECK", frameId, $"Before sync - frameHeight:{frameHeight:F1} | WindowHeight:{windowHeight:F1} | IsRolled:{isRolled}");
                     if (!isRolled)
@@ -6618,7 +6645,7 @@ namespace Desktop_Frames
                         // WPF layout data is stale. We reject it and use the last known good UnrolledHeight.
                         if (currentHeight <= 35)
                         {
-                            currentHeight = Convert.ToDouble(currentFrame.UnrolledHeight?.ToString() ?? "130");
+                            currentHeight = ToDoubleInvariant(currentFrame.UnrolledHeight?.ToString(), 130);
                             if (currentHeight <= 35) currentHeight = 130; // Ultimate fallback
                         }
 
@@ -6674,7 +6701,7 @@ namespace Desktop_Frames
                     else
                     {
                         // ROLLDOWN: Roll down to UnrolledHeight
-                        double unrolledHeight = Convert.ToDouble(currentFrame.UnrolledHeight?.ToString() ?? "130");
+                        double unrolledHeight = ToDoubleInvariant(currentFrame.UnrolledHeight?.ToString(), 130);
                         // // DebugLog("ACTION", frameId, $"Starting ROLLDOWN to {unrolledHeight:F1}");
                         _framesInTransition.Add(frameId);
                         // DebugLog("TRANSITION", frameId, "Added to transition state");
@@ -6969,6 +6996,10 @@ namespace Desktop_Frames
                 dp.Children.Add(wpcontscr);
             }
 
+            // Set when Portal initialization throws: CreateFrame then closes the window and
+            // returns WITHOUT calling win.Show() (showing a closed window throws).
+            bool portalInitFailed = false;
+
             void InitContent()
             {
                 // 1. Handle Note frames - they don't use WrapPanel
@@ -7037,6 +7068,10 @@ namespace Desktop_Frames
                             .OrderBy(item => item["DisplayOrder"]?.Type == JTokenType.Integer ? item["DisplayOrder"].Value<int>() : 0)
                             .ToList();
 
+                        // One COM shell for the whole batch — activating WScript.Shell per
+                        // shortcut was a per-icon COM activation on the UI thread at startup.
+                        dynamic argShell = null;
+
                         foreach (dynamic icon in sortedItems)
                         {
                             // FIX: Pass 'frame' context for customization
@@ -7062,8 +7097,8 @@ namespace Desktop_Frames
                                 {
                                     try
                                     {
-                                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                                        dynamic shortcut = shell.CreateShortcut(filePath);
+                                        argShell ??= Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                                        dynamic shortcut = argShell.CreateShortcut(filePath);
                                         arguments = (string)shortcut.Arguments;
                                     }
                                     catch { }
@@ -7169,10 +7204,13 @@ namespace Desktop_Frames
                     }
                     catch (Exception ex)
                     {
+                        // DATA SAFETY: keep the frame data — a transient init failure (offline
+                        // share, USB not mounted) must not permanently delete the frame. The
+                        // window stays closed; the frame returns on the next reload.
+                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
+                            $"Portal Frame '{frame.Title}' failed to initialize: {ex.Message}. Frame data kept; window closed.");
                         MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Failed to initialize Portal Frame: {ex.Message}", "Error");
-                        FrameDataManager.FrameData.Remove(frame);
-                        FrameDataManager.SaveFrameData();
-                        win.Close();
+                        portalInitFailed = true;
                     }
                 }
             }
@@ -7660,11 +7698,11 @@ namespace Desktop_Frames
                 var currentFrame = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId);
                 if (currentFrame != null)
                 {
-                    // Update position and save immediately
+                    // Update position; save is debounced (LocationChanged fires continuously
+                    // during a drag) and flushed by OnResizingEnded on WM_EXITSIZEMOVE.
                     currentFrame.X = win.Left;
                     currentFrame.Y = win.Top;
-                    FrameDataManager.SaveFrameData();
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate, $"Position updated for frame '{currentFrame.Title}' to X={win.Left}, Y={win.Top}");
+                    RequestFrameDataSave();
                 }
                 else
                 {
@@ -7672,6 +7710,14 @@ namespace Desktop_Frames
                 }
             };
             InitContent();
+            if (portalInitFailed)
+            {
+                // Portal init threw: abandon this window (never shown) but KEEP the frame data.
+                EvictFrameCaches(frame.Id?.ToString());
+                _heartTextBlocks.Remove(frame);
+                try { win.Close(); } catch { }
+                return;
+            }
             // Add Note frame specific context menu items after content is initialized
             if (frame.ItemsType?.ToString() == "Note")
             {
@@ -7725,6 +7771,8 @@ namespace Desktop_Frames
 
 
             // Check for persistent Legendary Mode (Nikos or >:)
+            // (The former unconditional duplicate ProcessTitleChange block was removed — it
+            // re-fired the same logic for EVERY frame on every creation.)
             string fTitle = frame.Title?.ToString() ?? "";
             if (fTitle == "Nikos" || fTitle == "Nikos Georgousis" || fTitle.Contains(">:"))
             {
@@ -7733,14 +7781,6 @@ namespace Desktop_Frames
                 {
                     // We call ProcessTitleChange to trigger the visual effect
                     InterCore.ProcessTitleChange(frame, fTitle, "");
-                }), System.Windows.Threading.DispatcherPriority.Background);
-            }
-            {
-                // Defer slightly to ensure window is loaded
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    // We call ProcessTitleChange with same names just to trigger the logic
-                    InterCore.ProcessTitleChange(frame, frame.Title.ToString(), "");
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
 
@@ -8309,7 +8349,7 @@ namespace Desktop_Frames
             catch { }
 
             double frameWidth = 230;
-            try { frameWidth = Convert.ToDouble(frame.Width?.ToString() ?? "230"); } catch { }
+            try { frameWidth = ToDoubleInvariant(frame.Width?.ToString(), 230); } catch { }
             return GridLayout.ColumnsForWidth(frameWidth - 10, cellWidth); // ~10px frame chrome
         }
 
@@ -8405,7 +8445,9 @@ namespace Desktop_Frames
             newframeDict["Width"] = 230;
             newframeDict["Height"] = 130;
             newframeDict["ItemsType"] = itemsType;
-            newframeDict["Items"] = itemsType == "Portal" ? "" : new JArray();
+            // Items is always a JArray — Portal frames simply never populate it. The old ""
+            // sentinel made every `frame.Items as JArray` read hit the null-coalesce path.
+            newframeDict["Items"] = new JArray();
             newframeDict["CustomColor"] = customColor; // Use passed value
             newframeDict["CustomLaunchEffect"] = customLaunchEffect; // Use passed value
             newframeDict["IsHidden"] = false; // Use passed value
@@ -8485,7 +8527,7 @@ namespace Desktop_Frames
                 }
             FrameDataManager.FrameData.Add(newFrame);
             FrameDataManager.SaveFrameData();
-            CreateFrame(newFrame, new TargetChecker(1000));
+            CreateFrame(newFrame, GetOrCreateTargetChecker());
         }
 
 
@@ -9147,12 +9189,15 @@ namespace Desktop_Frames
                 bool isUrlFile = System.IO.Path.GetExtension(filePath).ToLower() == ".url";
                 bool targetValid = true;
 
+                // Resolve the shortcut target ONCE per invocation (it was resolved again below
+                // after the cache check — a second .lnk parse per tick per icon).
+                string lnkTarget = isShortcut ? (resolvedTargetPath ?? FilePathUtilities.GetShortcutTargetUnicodeSafe(filePath)) : null;
+
                 // 2. TARGET VALIDATION LOGIC (Native File Polling, No COM)
                 if (isShortcut && !Utility.IsStoreAppShortcut(filePath))
                 {
-                    string tPath = resolvedTargetPath ?? FilePathUtilities.GetShortcutTargetUnicodeSafe(filePath);
-                    targetValid = !string.IsNullOrEmpty(tPath) &&
-                                 (System.IO.File.Exists(tPath) || System.IO.Directory.Exists(tPath));
+                    targetValid = !string.IsNullOrEmpty(lnkTarget) &&
+                                 (System.IO.File.Exists(lnkTarget) || System.IO.Directory.Exists(lnkTarget));
                 }
                 else if (!isShortcut)
                 {
@@ -9210,7 +9255,7 @@ namespace Desktop_Frames
                 ImageSource newIcon = null;
 
                 // [TARGET VALIDATION ENGINE - SECONDARY PATCH]
-                string targetPath = isShortcut ? (resolvedTargetPath ?? FilePathUtilities.GetShortcutTargetUnicodeSafe(filePath)) : filePath;
+                string targetPath = isShortcut ? lnkTarget : filePath;
 
                 bool targetExists = System.IO.File.Exists(targetPath) || System.IO.Directory.Exists(targetPath);
                 bool isTargetFolder = System.IO.Directory.Exists(targetPath);
@@ -9392,75 +9437,28 @@ namespace Desktop_Frames
             }
         }
 
-        public static void UpdateOptionsAndClickEvents()
+        // REMOVED: UpdateOptionsAndClickEvents() — it had zero call sites, and its icon loop
+        // was a silent no-op anyway (`sp.Tag as string` is always null: Tag holds the anonymous
+        // {FilePath, IsFolder, Arguments} object). Click behavior needs no re-wiring on settings
+        // changes: TryLaunch in ClickEventAdder reads the single/double-click preference live.
+
+        /// <summary>
+        /// Holds the exact delegate instances ClickEventAdder attached to an icon, stored via
+        /// an attached property (sp.Tag is taken by the {FilePath, IsFolder, Arguments} object).
+        /// RemoveHandler with FRESH local-function delegates removes nothing — every icon
+        /// refresh silently stacked another full set of handlers, pinning stale captures.
+        /// </summary>
+        private sealed class IconClickHandlers
         {
-
-
-            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.Settings, $"Updating options, new singleClickToLaunch={SettingsManager.SingleClickToLaunch}");
-
-            // Update _options
-            _options = new
-            {
-                IsSnapEnabled = SettingsManager.IsSnapEnabled,
-                ShowBackgroundImageOnPortalFences = SettingsManager.ShowBackgroundImageOnPortalFrames,
-                Showintray = SettingsManager.ShowInTray,
-                EnableSounds = SettingsManager.EnableSounds,
-                TintValue = SettingsManager.TintValue,
-                MenuTintValue = SettingsManager.MenuTintValue,
-                MenuIcon = SettingsManager.MenuIcon,
-                LockIcon = SettingsManager.LockIcon,
-                SelectedColor = SettingsManager.SelectedColor,
-                IsLogEnabled = SettingsManager.IsLogEnabled,
-                singleClickToLaunch = SettingsManager.SingleClickToLaunch,
-                LaunchEffect = SettingsManager.LaunchEffect,
-                CheckNetworkPaths = false // Keep this as is
-            };
-
-
-            if (System.Windows.Application.Current != null)
-            {
-
-                // Force UI update on the main thread
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                int updatedItems = 0;
-                foreach (var win in System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>())
-                {
-                    var wpcont = ((win.Content as Border)?.Child as DockPanel)?.Children
-                        .OfType<ScrollViewer>().FirstOrDefault()?.Content as WrapPanel;
-                    if (wpcont != null)
-                    {
-                        foreach (var sp in wpcont.Children.OfType<StackPanel>())
-                        {
-                            string path = sp.Tag as string;
-                            if (!string.IsNullOrEmpty(path))
-                            {
-                                bool isFolder = Directory.Exists(path) ||
-                                    (System.IO.Path.GetExtension(path).ToLower() == ".lnk" &&
-                                     Directory.Exists(Utility.GetShortcutTarget(path)));
-                                string arguments = null;
-                                if (System.IO.Path.GetExtension(path).ToLower() == ".lnk")
-                                {
-                                    dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                                    dynamic shortcut = shell.CreateShortcut(path);
-                                    arguments = (string)shortcut.Arguments;
-                                }
-                                ClickEventAdder(sp, path, isFolder, arguments);
-                                updatedItems++;
-                            }
-                        }
-                    }
-                }
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.Settings, $"Updated click events for {updatedItems} items");
-            });
-            }
-            else
-            {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.Settings, "Application.Current is null, cannot update icon.");
-            }
+            public MouseButtonEventHandler Down;
+            public MouseEventHandler Move;
+            public MouseButtonEventHandler Up;
+            public KeyEventHandler KeyUp;
+            public MouseEventHandler LostCapture;
         }
 
-
+        private static readonly DependencyProperty IconClickHandlersProperty =
+            DependencyProperty.RegisterAttached("IconClickHandlers", typeof(IconClickHandlers), typeof(IconClickHandlers));
 
         public static void ClickEventAdder(StackPanel sp, string path, bool isFolder, string arguments = null)
         {
@@ -9681,19 +9679,33 @@ namespace Desktop_Frames
                 }
             }
 
-            // --- SAFELY REMOVE PREVIOUS HANDLERS (WPF APPROACH) ---
-            sp.RemoveHandler(UIElement.MouseLeftButtonDownEvent, new MouseButtonEventHandler(MouseDownHandler));
-            sp.RemoveHandler(UIElement.MouseMoveEvent, new MouseEventHandler(MouseMoveHandler));
-            sp.RemoveHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler(MouseUpHandler));
-            sp.RemoveHandler(UIElement.KeyUpEvent, new KeyEventHandler(KeyUpHandler));
-            sp.RemoveHandler(UIElement.LostMouseCaptureEvent, new MouseEventHandler(LostCaptureHandler));
+            // --- REMOVE THE PREVIOUSLY ATTACHED HANDLERS ---
+            // The old code called RemoveHandler with FRESH delegate instances, which removes
+            // nothing — the stored instances from the last ClickEventAdder call are detached here.
+            if (sp.GetValue(IconClickHandlersProperty) is IconClickHandlers previous)
+            {
+                sp.MouseLeftButtonDown -= previous.Down;
+                sp.MouseMove -= previous.Move;
+                sp.MouseLeftButtonUp -= previous.Up;
+                sp.KeyUp -= previous.KeyUp;
+                sp.LostMouseCapture -= previous.LostCapture;
+            }
 
-            // --- ATTACH FRESH HANDLERS ---
-            sp.MouseLeftButtonDown += MouseDownHandler;
-            sp.MouseMove += MouseMoveHandler;
-            sp.MouseLeftButtonUp += MouseUpHandler;
-            sp.KeyUp += KeyUpHandler;
-            sp.LostMouseCapture += LostCaptureHandler;
+            // --- ATTACH FRESH HANDLERS (and remember them for the next refresh) ---
+            var handlers = new IconClickHandlers
+            {
+                Down = MouseDownHandler,
+                Move = MouseMoveHandler,
+                Up = MouseUpHandler,
+                KeyUp = KeyUpHandler,
+                LostCapture = LostCaptureHandler
+            };
+            sp.MouseLeftButtonDown += handlers.Down;
+            sp.MouseMove += handlers.Move;
+            sp.MouseLeftButtonUp += handlers.Up;
+            sp.KeyUp += handlers.KeyUp;
+            sp.LostMouseCapture += handlers.LostCapture;
+            sp.SetValue(IconClickHandlersProperty, handlers);
         }
 
 
@@ -11042,7 +11054,11 @@ namespace Desktop_Frames
                 frame.Width = snappedWidth;
                 frame.Height = snappedHeight;
 
-                dynamic FrameData = GetFrameData().FirstOrDefault(f => f.Title == frame.Title);
+                // Match by Id (win.Tag), not Title — duplicate titles corrupted each other's geometry.
+                string frameId = frame.Tag?.ToString();
+                dynamic FrameData = string.IsNullOrEmpty(frameId)
+                    ? null
+                    : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == frameId);
                 if (FrameData != null)
                 {
                     FrameData.Width = snappedWidth;
@@ -11053,6 +11069,10 @@ namespace Desktop_Frames
                 // Show one last time. The unified timer in ShowSizeFeedback will clean it up automatically.
                 ShowSizeFeedback(snappedWidth, snappedHeight);
             }
+
+            // WM_EXITSIZEMOVE fires when a drag OR resize gesture ends: flush the debounced
+            // geometry save immediately so the final position/size is on disk right away.
+            FlushPendingFrameSave();
         }
 
 
