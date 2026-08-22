@@ -105,6 +105,20 @@ namespace Desktop_Frames
             string frameId = frame.Id?.ToString() ?? "";
             var host = new Grid { Margin = new Thickness(6), Background = Brushes.Transparent };
             dp.Children.Add(host);
+
+            // No title bar: in Edit Mode the whole surface drags the frame (respects the position lock).
+            host.MouseLeftButtonDown += (s, e) =>
+            {
+                if (!SettingsManager.FrameEditMode || e.ChangedButton != MouseButton.Left) return;
+                if (Window.GetWindow(host) is not NonActivatingWindow win) return;
+                dynamic? live = LiveFrame(win.Tag?.ToString());
+                bool locked = false;
+                try { locked = live?.IsLocked?.ToString().ToLower() == "true"; } catch { }
+                if (locked) return;
+                win.DragMove();
+                Framemanager.SnapWindowToGrid(win);
+                e.Handled = true;
+            };
             if (frameId.Length > 0) _hosts[frameId] = host;
 
             if (!_externalIpHooked)
@@ -149,7 +163,6 @@ namespace Desktop_Frames
             foreach (var t in _timers.Values) { try { t.Stop(); } catch { } }
             _timers.Clear();
             _hosts.Clear();
-            _chrome.Clear();
         }
 
         private static void RestartTimer(string frameId, int seconds)
@@ -253,9 +266,6 @@ namespace Desktop_Frames
 
         #region Chrome, click-through and Z-order
 
-        private sealed class ChromeState { public Brush? Background, BorderBrush; public Thickness BorderThickness; }
-        private static readonly Dictionary<string, ChromeState> _chrome = new();
-
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_LAYERED = 0x00080000;
@@ -299,27 +309,15 @@ namespace Desktop_Frames
                 var dock = border?.Child as DockPanel;
                 var titleGrid = dock?.Children.OfType<Grid>().FirstOrDefault(g => DockPanel.GetDock(g) == Dock.Top);
 
+                // Never a title bar or a real border. Edit Mode shows a faint outline so the
+                // frame can be found, dragged (by its surface) and resized (grip).
                 if (border != null)
                 {
-                    if (!_chrome.TryGetValue(id, out var saved))
-                    {
-                        saved = new ChromeState { Background = border.Background, BorderBrush = border.BorderBrush, BorderThickness = border.BorderThickness };
-                        _chrome[id] = saved;
-                    }
-                    if (editMode)
-                    {
-                        border.Background = saved.Background;
-                        border.BorderBrush = saved.BorderBrush;
-                        border.BorderThickness = saved.BorderThickness;
-                    }
-                    else
-                    {
-                        border.Background = Brushes.Transparent;
-                        border.BorderBrush = Brushes.Transparent;
-                        border.BorderThickness = new Thickness(0);
-                    }
+                    border.Background = editMode ? new SolidColorBrush(Color.FromArgb(28, 255, 255, 255)) : Brushes.Transparent;
+                    border.BorderBrush = editMode ? new SolidColorBrush(Color.FromArgb(140, 255, 255, 255)) : Brushes.Transparent;
+                    border.BorderThickness = new Thickness(editMode ? 1 : 0);
                 }
-                if (titleGrid != null) titleGrid.Visibility = editMode ? Visibility.Visible : Visibility.Collapsed;
+                if (titleGrid != null) titleGrid.Visibility = Visibility.Collapsed;
 
                 var hwnd = new WindowInteropHelper(win).Handle;
                 if (hwnd != IntPtr.Zero)

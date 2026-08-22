@@ -31,6 +31,7 @@ namespace Desktop_Frames
         private ComboBox _cmbCustomColor;
         private ComboBox _cmbCustomLaunchEffect;
         private ComboBox _cmbframeBorderColor;
+        private ComboBox _cmbTitleBarColor;
         private NumericTextBox _nudframeBorderThickness;
         private CheckBox _chkOverrideTint;
         private Slider _sldTransparency;
@@ -61,7 +62,7 @@ namespace Desktop_Frames
         private int? _originalTintOverride;
 
         // Valid options from existing code
-        private readonly string[] _validColors = { "Red", "Green", "Teal", "Blue", "Bismark", "White", "Beige", "Gray", "Black", "Purple", "Fuchsia", "Yellow", "Orange" };
+        private readonly string[] _validColors = { "Red", "Green", "Teal", "Blue", "Bismark", "White", "Beige", "Gray", "Black", "Purple", "Fuchsia", "Yellow", "Orange", "Transparent" };
         private readonly string[] _validEffects = { "Zoom", "Bounce", "FadeOut", "SlideUp", "Rotate", "Agitate", "GrowAndFly", "Pulse", "Elastic", "Flip3D", "Spiral", "Shockwave", "Matrix", "Supernova", "Teleport" };
         private readonly string[] _validTextSizes = { "Small", "Medium", "Large" };
         private readonly string[] _validIconSizes = { "Tiny", "Small", "Medium", "Large", "Huge" };
@@ -735,6 +736,7 @@ namespace Desktop_Frames
             StackPanel titleStack = new StackPanel { Orientation = Orientation.Vertical };
 
             CreateDropdownField(titleStack, "Title Text Color:", _validColors, out _cmbTitleTextColor);
+            CreateDropdownField(titleStack, "Title Bar Color:", _validColors, out _cmbTitleBarColor);
             CreateDropdownField(titleStack, "Title Text Size:", _validTextSizes, out _cmbTitleTextSize);
             CreateCheckboxField(titleStack, "Bold Title Text", out _chkBoldTitleText);
 
@@ -895,6 +897,7 @@ namespace Desktop_Frames
                 _cmbCustomLaunchEffect.SelectedIndex = 0;
                 _cmbframeBorderColor.SelectedIndex = 0;
                 _cmbTitleTextColor.SelectedIndex = 0;
+                _cmbTitleBarColor.SelectedIndex = 0;
                 _cmbTitleTextSize.SelectedIndex = 0;
                 _cmbIconSize.SelectedIndex = 0;
                 _cmbTextColor.SelectedIndex = 0;
@@ -1155,6 +1158,7 @@ namespace Desktop_Frames
                     Framemanager.UpdateFrameProperty(targetFrame, "CustomColor", customColor, "Global Apply: CustomColor updated");
                     Framemanager.UpdateFrameProperty(targetFrame, "CustomLaunchEffect", customLaunchEffect, "Global Apply: CustomLaunchEffect updated");
                     Framemanager.UpdateFrameProperty(targetFrame, "FrameBorderColor", frameBorderColor, "Global Apply: FrameBorderColor updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "TitleBarColor", GetDropdownValue(_cmbTitleBarColor), "Global Apply: TitleBarColor updated");
                     Framemanager.UpdateFrameProperty(targetFrame, "FrameBorderThickness", frameBorderThickness, "Global Apply: FrameBorderThickness updated");
                     Framemanager.UpdateFrameProperty(targetFrame, "CustomTint", customTint, "Global Apply: CustomTint updated");
                     Framemanager.UpdateFrameProperty(targetFrame, "TitleTextColor", titleTextColor, "Global Apply: TitleTextColor updated");
@@ -1196,6 +1200,9 @@ namespace Desktop_Frames
                 LoadDropdownValue(_cmbCustomColor, _frame.CustomColor?.ToString(), "CustomColor");
                 LoadDropdownValue(_cmbCustomLaunchEffect, _frame.CustomLaunchEffect?.ToString(), "CustomLaunchEffect");
                 LoadDropdownValue(_cmbframeBorderColor, _frame.FrameBorderColor?.ToString(), "FrameBorderColor");
+                string titleBarColor = null;
+                try { titleBarColor = _frame.TitleBarColor?.ToString(); } catch { }
+                LoadDropdownValue(_cmbTitleBarColor, titleBarColor, "TitleBarColor");
                 LoadNumericValue(_nudframeBorderThickness, _frame.FrameBorderThickness?.ToString(), "FrameBorderThickness", 0);
 
                 // Load per-frame transparency override (CustomTint). Empty/absent => follow global default.
@@ -1466,6 +1473,8 @@ namespace Desktop_Frames
                 Framemanager.UpdateFrameProperty(_frame, "CustomColor", customColor, $"CustomColor updated to '{customColor}'");
                 Framemanager.UpdateFrameProperty(_frame, "CustomLaunchEffect", customLaunchEffect, $"CustomLaunchEffect updated to '{customLaunchEffect}'");
                 Framemanager.UpdateFrameProperty(_frame, "FrameBorderColor", frameBorderColor, $"FrameBorderColor updated to '{frameBorderColor}'");
+                string titleBarColor = GetDropdownValue(_cmbTitleBarColor);
+                Framemanager.UpdateFrameProperty(_frame, "TitleBarColor", titleBarColor, $"TitleBarColor updated to '{titleBarColor}'");
                 Framemanager.UpdateFrameProperty(_frame, "FrameBorderThickness", frameBorderThickness, $"FrameBorderThickness updated to '{frameBorderThickness}'");
                 string customTint = (_chkOverrideTint.IsChecked ?? false) ? ((int)_sldTransparency.Value).ToString() : "";
                 Framemanager.UpdateFrameProperty(_frame, "CustomTint", customTint, $"CustomTint updated to '{customTint}'");
@@ -1654,6 +1663,7 @@ namespace Desktop_Frames
         {
             try
             {
+                Framemanager.ApplyTitleBarColor(win, GetDropdownValue(_cmbTitleBarColor));
                 string titleColor = GetDropdownValue(_cmbTitleTextColor);
                 string titleSize = GetDropdownValue(_cmbTitleTextSize);
                 bool boldTitle = _chkBoldTitleText.IsChecked ?? false;

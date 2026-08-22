@@ -276,6 +276,7 @@ namespace Desktop_Frames
                 "Fuchsia" => (Color)ColorConverter.ConvertFromString("#5F093d"),
                 "Yellow" => (Color)ColorConverter.ConvertFromString("#C1C708"),
                 "Orange" => (Color)ColorConverter.ConvertFromString("#B75433"),
+                "Transparent" => Colors.Transparent,
                 _ => Colors.Transparent,
                 // "Red" => (Color)ColorConverter.ConvertFromString("#c10338"),
                 // "Green" => (Color)ColorConverter.ConvertFromString("#005618"),

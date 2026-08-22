@@ -996,7 +996,7 @@ namespace Desktop_Frames
             TextBlock lblColor = new TextBlock { Text = "Color", FontSize = 13, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 10, 0) };
             // Constrain Width to 140 and Left-align so it doesn't stretch to fill the 160px column, creating the gap automatically
             ComboBox cbColor = new ComboBox { Name = "ColorComboBox", Width = 140, HorizontalAlignment = HorizontalAlignment.Left, Height = 25, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-            foreach (string c in new[] { "Gray", "Black", "White", "Beige", "Green", "Purple", "Fuchsia", "Yellow", "Orange", "Red", "Blue", "Bismark" }) cbColor.Items.Add(c);
+            foreach (string c in new[] { "Gray", "Black", "White", "Beige", "Green", "Purple", "Fuchsia", "Yellow", "Orange", "Red", "Blue", "Bismark", "Transparent" }) cbColor.Items.Add(c);
             cbColor.SelectedItem = SettingsManager.SelectedColor;
 
             // --- BUG FIX: Disable Color dropdown if Chameleon mode is ON ---

@@ -4092,7 +4092,7 @@ namespace Desktop_Frames
             try
             {
                 bool jsonModified = false;
-                var validColors = new HashSet<string> { "Red", "Green", "Teal", "Blue", "Bismark", "White", "Beige", "Gray", "Black", "Purple", "Fuchsia", "Yellow", "Orange" };
+                var validColors = new HashSet<string> { "Red", "Green", "Teal", "Blue", "Bismark", "White", "Beige", "Gray", "Black", "Purple", "Fuchsia", "Yellow", "Orange", "Transparent" };
                 var validEffects = Enum.GetNames(typeof(LaunchEffectsManager.LaunchEffect)).ToHashSet();
 
                 for (int i = 0; i < FrameDataManager.FrameData.Count; i++)
@@ -4178,6 +4178,7 @@ namespace Desktop_Frames
                     if (!frameDict.ContainsKey("IconSize")) { frameDict["IconSize"] = "Medium"; jsonModified = true; }
                     if (!frameDict.ContainsKey("IconSpacing")) { frameDict["IconSpacing"] = 5; jsonModified = true; }
                     if (!frameDict.ContainsKey("CustomColor")) { frameDict["CustomColor"] = null; jsonModified = true; }
+                    if (!frameDict.ContainsKey("TitleBarColor")) { frameDict["TitleBarColor"] = "Default"; jsonModified = true; }
                     if (!frameDict.ContainsKey("CustomLaunchEffect")) { frameDict["CustomLaunchEffect"] = null; jsonModified = true; }
                     if (!frameDict.ContainsKey("IsHidden")) { frameDict["IsHidden"] = "false"; jsonModified = true; }
 
@@ -4979,7 +4980,7 @@ namespace Desktop_Frames
             // Create a Grid for the titlebar - move here to ensure it is created before mouse handler
             Grid titleGrid = new Grid
             {
-                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(20, 0, 0, 0))
+                Background = TitleBarBrushFor(frame)
             };
             titleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0, GridUnitType.Pixel) }); // Col 0: Spacer
             titleGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Col 1: Title
@@ -8684,6 +8685,7 @@ namespace Desktop_Frames
             newframeDict["IsRolled"] = "false";
             newframeDict["AutoRoll"] = "false"; // --- NEW ---
             newframeDict["AlwaysOnTop"] = "false"; // --- NEW ---
+            newframeDict["TitleBarColor"] = "Default"; // Default = faint dark overlay; palette name; or Transparent
             newframeDict["UnrolledHeight"] = 130;
             newframeDict["TextColor"] = null;
             newframeDict["BoldTitleText"] = "false";
@@ -11302,6 +11304,40 @@ namespace Desktop_Frames
         /// cell size from the work-area origin of the monitor the window is on). No-op when
         /// "Snap frames to grid" is off. The window's LocationChanged handler persists X/Y.
         /// </summary>
+        /// <summary>
+        /// Title-bar background for a frame's TitleBarColor: "Default"/empty = the classic faint
+        /// dark overlay, "Transparent" = none, otherwise a palette colour.
+        /// </summary>
+        public static System.Windows.Media.Brush TitleBarBrush(string colorName)
+        {
+            if (string.IsNullOrEmpty(colorName) || colorName == "Default")
+                return new SolidColorBrush(System.Windows.Media.Color.FromArgb(20, 0, 0, 0));
+            if (colorName == "Transparent") return System.Windows.Media.Brushes.Transparent;
+            return new SolidColorBrush(Utility.GetColorFromName(colorName));
+        }
+
+        public static System.Windows.Media.Brush TitleBarBrushFor(dynamic frame)
+        {
+            string colorName = null;
+            try { colorName = frame?.TitleBarColor?.ToString(); } catch { }
+            return TitleBarBrush(colorName);
+        }
+
+        /// <summary>Applies a TitleBarColor to an open frame window (the title grid is the first Top-docked child).</summary>
+        public static void ApplyTitleBarColor(NonActivatingWindow win, string colorName)
+        {
+            try
+            {
+                var dock = (win?.Content as Border)?.Child as DockPanel;
+                var titleGrid = dock?.Children.OfType<Grid>().FirstOrDefault(g => DockPanel.GetDock(g) == Dock.Top);
+                if (titleGrid != null) titleGrid.Background = TitleBarBrush(colorName);
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"ApplyTitleBarColor: {ex.Message}");
+            }
+        }
+
         public static void SnapWindowToGrid(NonActivatingWindow win)
         {
             if (win == null || !SettingsManager.SnapFramesToGrid) return;
