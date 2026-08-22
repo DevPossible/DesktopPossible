@@ -1,18 +1,18 @@
-<h1 align="center">DesktopFrames+Possible</h1>
+<h1 align="center">DesktopPossible</h1>
 <p align="center"><i>Organize your desktop like magic!</i></p>
 <p align="center"><b>A free, open-source Stardock Fences alternative for Windows 10/11</b> — group desktop icons into frames, mirror folders, and tidy your desktop.</p>
 
 <p align="center">
-  <img width="150" height="150" alt="DesktopFrames+Possible logo" src="docs/images/logo.png" />
+  <img width="150" height="150" alt="DesktopPossible logo" src="docs/images/logo.png" />
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/DevPossible/DesktopFramesPossible)](https://github.com/DevPossible/DesktopFramesPossible/releases)
+[![GitHub release](https://img.shields.io/github/v/release/DevPossible/DesktopPossible)](https://github.com/DevPossible/DesktopPossible/releases)
 
 ---
 
 > ### This is a hard fork
-> DesktopFrames+Possible is a **hard fork** of [**Desktop Frames +**](https://github.com/limbo666/DesktopFramesPlus) (MIT) by **limbo666 / Nikos Georgousis**, which is itself a continuation of the original **BirdyFences** by **HakanKokcu**. All upstream work belongs to those authors — see [Credits](#credits).
+> DesktopPossible is a **hard fork** of [**Desktop Frames +**](https://github.com/limbo666/DesktopFramesPlus) (MIT) by **limbo666 / Nikos Georgousis**, which is itself a continuation of the original **BirdyFences** by **HakanKokcu**. All upstream work belongs to those authors — see [Credits](#credits).
 >
 > As a hard fork, this project **does not track or merge upstream commits** — it evolves independently from the point of the fork. If you want the original prebuilt tool, use the [upstream releases](https://github.com/limbo666/DesktopFramesPlus/releases).
 >
@@ -22,7 +22,7 @@
 
 ## Features
 
-DesktopFrames+Possible creates **virtual frames** on your desktop, letting you group and organize icons cleanly.
+DesktopPossible creates **virtual frames** on your desktop, letting you group and organize icons cleanly.
 
 ### Core
 
@@ -72,11 +72,11 @@ A Windows Explorer–style list view for Portal frames, as an alternative to the
 
 ## Installation
 
-DesktopFrames+Possible is a **portable app** — no installer required:
+DesktopPossible is a **portable app** — no installer required:
 
-1. Download `DesktopFramesPossible-<version>-win-x64.zip` from the [latest release](https://github.com/DevPossible/DesktopFramesPossible/releases).
-2. Unzip it anywhere you like (for example `C:\Tools\DesktopFramesPossible`).
-3. Run `DesktopFramesPossible.exe`.
+1. Download `DesktopPossible-<version>-win-x64.zip` from the [latest release](https://github.com/DevPossible/DesktopPossible/releases).
+2. Unzip it anywhere you like (for example `C:\Tools\DesktopPossible`).
+3. Run `DesktopPossible.exe`.
 
 All configuration is stored beside the executable, so moving the folder moves your setup with it. To launch at boot, enable the start-with-Windows option inside the app — it registers (and cleans up) the autostart entry for you.
 
@@ -136,4 +136,4 @@ MIT — see [LICENSE](LICENSE), which retains the full copyright chain: DevPossi
 
 - Original **BirdyFences** by **HakanKokcu**.
 - **Desktop Frames +** by **limbo666 / Nikos Georgousis** — please star and support the [upstream project](https://github.com/limbo666/DesktopFramesPlus).
-- **DesktopFrames+Possible** is maintained by [DevPossible](https://devpossible.com) ([GitHub](https://github.com/DevPossible)), building on the above under the MIT License, with development assistance from Claude (see the AI note above).
+- **DesktopPossible** is maintained by [DevPossible](https://devpossible.com) ([GitHub](https://github.com/DevPossible)), building on the above under the MIT License, with development assistance from Claude (see the AI note above).

@@ -5,14 +5,15 @@ using System.Threading;
 namespace Desktop_Frames
 {
     /// <summary>
-    /// Single Instance Checker for Desktop Frames application.
+    /// Single Instance Checker for the DesktopPossible application.
     /// Uses a named per-session mutex acquired at startup and held for the process lifetime,
     /// so two simultaneous launches race safely (exactly one wins). The losing instance
     /// hands off to the winner through the existing registry trigger channel and exits.
     /// </summary>
     public static class SingleInstanceChecker
     {
-        private const string MutexName = @"Local\DesktopFramesPossible_SingleInstance";
+        // Renamed from Local\DesktopFramesPossible_SingleInstance at the DesktopPossible rebrand.
+        private const string MutexName = @"Local\DesktopPossible_SingleInstance";
 
         // Held (never released) for the process lifetime; the OS releases it on exit.
         private static Mutex _mutex;

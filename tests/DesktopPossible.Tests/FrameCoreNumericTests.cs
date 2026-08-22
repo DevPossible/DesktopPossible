@@ -4,7 +4,7 @@ using Desktop_Frames;
 using Shouldly;
 using Xunit;
 
-namespace DesktopFramesPossible.Tests;
+namespace DesktopPossible.Tests;
 
 /// <summary>
 /// Tests for Framemanager.ToDoubleInvariant — the culture-safe parser used for all

@@ -40,7 +40,7 @@ namespace Desktop_Frames
 
                 _optionsWindow = new Window
                 {
-                    Title = "DesktopFrames+Possible Options",
+                    Title = "DesktopPossible Options",
                     Width = 800,
                     Height = 850,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen,
@@ -1113,7 +1113,7 @@ namespace Desktop_Frames
                     // Propagate the new hotkeys across all existing profiles
                     SettingsManager.BroadcastHotkeysToAllProfiles();
 
-                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Global Hotkey changes have been saved and applied to all profiles.\n\nPlease restart DesktopFrames+Possible to activate the new shortcuts.", "Restart Required");
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Global Hotkey changes have been saved and applied to all profiles.\n\nPlease restart DesktopPossible to activate the new shortcuts.", "Restart Required");
                 }
 
                 // 5. Smart Desktop (Auto-Organize)

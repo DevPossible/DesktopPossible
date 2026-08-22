@@ -1,4 +1,4 @@
-# Desktop Frames + User Manual
+# DesktopPossible User Manual
 
 
 <div style="width:20%; margin: auto;">
@@ -9,7 +9,7 @@
 
 ## Overview
 
-Desktop Frames + is a powerful desktop organization tool that creates virtual "Frames" on your desktop, allowing you to group and organize icons in a clean and convenient way. Think of Frames as visible containers that help you organize your desktop shortcuts, files, and folders into logical groups.
+DesktopPossible is a powerful desktop organization tool that creates virtual "Frames" on your desktop, allowing you to group and organize icons in a clean and convenient way. Think of Frames as visible containers that help you organize your desktop shortcuts, files, and folders into logical groups.
 
 ---
 
@@ -23,7 +23,7 @@ Desktop Frames + is a powerful desktop organization tool that creates virtual "F
 
 ### First Launch
 
-When you first start Desktop Frames +, the application will:
+When you first start DesktopPossible, the application will:
 
 1. Create necessary basic configuration files
 2. Add itself to the system tray
@@ -357,7 +357,7 @@ The application version is displayed in the About dialog, accessible through the
 
 ---
 
-*This manual covers the core functionality of Desktop Frames +. The application includes many additional features and customization options discoverable through exploration and experimentation.*
+*This manual covers the core functionality of DesktopPossible. The application includes many additional features and customization options discoverable through exploration and experimentation.*
 
 *Ctrl + Click is your friend* <br>
 

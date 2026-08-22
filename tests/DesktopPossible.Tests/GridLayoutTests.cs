@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using Shouldly;
 using Xunit;
 
-namespace DesktopFramesPossible.Tests;
+namespace DesktopPossible.Tests;
 
 /// <summary>
 /// Headless tests for the free-arrange grid math (GridLayout).

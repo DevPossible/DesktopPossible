@@ -9,8 +9,8 @@
     {
       "Id": "MSG_20260821_dfp1",
       "Type": "Info",
-      "Title": "Welcome to DesktopFrames+Possible 3.0",
-      "Body": "Thanks for using DesktopFrames+Possible, the hard fork of Desktop Frames + maintained by DevPossible. Check the releases page for the latest version and release notes.",
+      "Title": "Welcome to DesktopPossible 3.0",
+      "Body": "Thanks for using DesktopPossible, the hard fork of Desktop Frames + maintained by DevPossible. Check the releases page for the latest version and release notes.",
       "Link": "https://github.com/DevPossible/DesktopPossible/releases",
       "TargetVersionMin": "0.0.0.0",
       "TargetVersionMax": "99.9.9.9",

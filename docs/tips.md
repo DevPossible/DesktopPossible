@@ -1,7 +1,7 @@
 
-# Desktop Frames + | Tips & Tricks
+# DesktopPossible | Tips & Tricks
 
-Welcome to the hidden features guide. This document highlights advanced functionality and "power-user" shortcuts to help you get the most out of Desktop Frames +.
+Welcome to the hidden features guide. This document highlights advanced functionality and "power-user" shortcuts to help you get the most out of DesktopPossible.
 
 ---
 
@@ -60,7 +60,7 @@ Switching profiles can be done by selecting the appropriate profile name on tray
    - Profile manager can help you switch, arrange, delete and rename profiles.  
 
   Profile automation
-   - This is a sofisticated feature that can automaticaly make Desktop Frames switch profile according to a selected program activity. Select the window you want to detect on profile automation and create the rule you want.   
+   - This is a sofisticated feature that can automaticaly make DesktopPossible switch profile according to a selected program activity. Select the window you want to detect on profile automation and create the rule you want.   
    - Switch to the profile can be permanent or while the program is active.  
    - Profile automation can be turned off and on via tray menu or options window.  
   

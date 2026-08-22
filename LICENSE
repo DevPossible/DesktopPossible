@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 DevPossible (DesktopFrames+Possible hard fork)
+Copyright (c) 2026 DevPossible (DesktopPossible hard fork)
 Copyright (c) 2025-2026 LIMBO666 (Desktop Frames +)
 Copyright (c) 2022 HAKANKOKCU (BirdyFences)
 
@@ -24,7 +24,7 @@ SOFTWARE.
 
 ---
 
-Lineage: DesktopFrames+Possible is a hard fork of Desktop Frames +
+Lineage: DesktopPossible is a hard fork of Desktop Frames +
 (https://github.com/limbo666/DesktopFramesPlus) by limbo666 / Nikos Georgousis,
 which is itself a continuation of BirdyFences by HakanKokcu. Both upstream
 projects are MIT licensed; their notices are retained above. See

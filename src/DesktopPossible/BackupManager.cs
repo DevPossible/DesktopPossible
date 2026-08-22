@@ -16,7 +16,7 @@ using System.Windows.Media.Effects;
 namespace Desktop_Frames
 {
 	/// <summary>
-	/// Manages backup operations for Desktop Frames data, including the frames configuration file
+	/// Manages backup operations for DesktopPossible data, including the frames configuration file
 	/// and associated shortcut files. Backups are stored in timestamped folders for easy recovery.
 	/// Refactored to centralize all backup/restore functionality and support Multi-Profile.
 	/// </summary>

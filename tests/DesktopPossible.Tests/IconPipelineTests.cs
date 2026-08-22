@@ -5,7 +5,7 @@ using Desktop_Frames;
 using Shouldly;
 using Xunit;
 
-namespace DesktopFramesPossible.Tests
+namespace DesktopPossible.Tests
 {
     /// <summary>
     /// Headless tests for the icon pipeline plumbing: TargetChecker tick re-entrancy and the

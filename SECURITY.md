@@ -3,7 +3,7 @@
 ## Supported Versions
 
 Security fixes are applied to the latest release only. Please update to the
-[latest release](https://github.com/DevPossible/DesktopFramesPossible/releases)
+[latest release](https://github.com/DevPossible/DesktopPossible/releases)
 before reporting an issue.
 
 | Version | Supported |
@@ -15,7 +15,7 @@ before reporting an issue.
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Report privately via [GitHub Security Advisories](https://github.com/DevPossible/DesktopFramesPossible/security/advisories/new)
+Report privately via [GitHub Security Advisories](https://github.com/DevPossible/DesktopPossible/security/advisories/new)
 on this repository.
 
 ### What to Include
@@ -34,7 +34,7 @@ on this repository.
 
 ## Scope Notes
 
-DesktopFrames+Possible is a **local desktop utility**. It does not run a server,
+DesktopPossible is a **local desktop utility**. It does not run a server,
 expose network endpoints, or collect telemetry. Its only network activity is an
 update/announcement check that fetches a static JSON manifest from this
 repository (`remote/getversion.json` via `raw.githubusercontent.com`). The app

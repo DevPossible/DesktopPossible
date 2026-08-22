@@ -1,11 +1,11 @@
 # Third-Party Notices
 
-DesktopFrames+Possible incorporates third-party libraries, upstream code, and
+DesktopPossible incorporates third-party libraries, upstream code, and
 media assets. This document provides attribution and license information.
 
 ## Upstream Code Lineage
 
-DesktopFrames+Possible is a hard fork of **Desktop Frames +** (MIT) by
+DesktopPossible is a hard fork of **Desktop Frames +** (MIT) by
 limbo666 / Nikos Georgousis, which is itself a continuation of **BirdyFences**
 (MIT) by HakanKokcu.
 
@@ -38,7 +38,7 @@ manifest.
 
 ## Bundled Notification Sounds
 
-The notification sounds bundled in `src/DesktopFramesPossible/Resources/*.wav`
+The notification sounds bundled in `src/DesktopPossible/Resources/*.wav`
 were sourced from [Pixabay](https://pixabay.com/) and are used under the
 [Pixabay Content License](https://pixabay.com/service/license-summary/), which
 permits redistribution of the content as an integrated part of an application.

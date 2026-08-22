@@ -26,7 +26,7 @@ namespace Desktop_Frames
             {
                 var aboutWindow = new Window
                 {
-                    Title = "About DesktopFrames+Possible",
+                    Title = "About DesktopPossible",
                     Width = 480,
                     Height = 670,
                     WindowStartupLocation = WindowStartupLocation.CenterScreen,
@@ -187,7 +187,7 @@ namespace Desktop_Frames
 
             TextBlock titleText = new TextBlock
             {
-                Text = "DesktopFrames+Possible",
+                Text = "DesktopPossible",
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 22, // Your improved font size
                 FontWeight = FontWeights.Bold,
@@ -250,11 +250,11 @@ namespace Desktop_Frames
 
             // About Section
             CreateSection(contentStack, "About", "Organize your desktop like magic!",
-                "DesktopFrames+Possible creates virtual frames on your desktop, allowing you to group and organize icons in a clean and convenient way.", 20);
+                "DesktopPossible creates virtual frames on your desktop, allowing you to group and organize icons in a clean and convenient way.", 20);
 
             // Credits Section
             CreateSection(contentStack, "Credits", null,
-                "DesktopFrames+Possible is a hard fork of Desktop Frames + by Nikos Georgousis (limbo666), which was originally created by HakanKokcu under the name BirdyFences.\n\nDesktopFrames+Possible is maintained by DevPossible.", 20);
+                "DesktopPossible is a hard fork of Desktop Frames + by Nikos Georgousis (limbo666), which was originally created by HakanKokcu under the name BirdyFences.\n\nDesktopPossible is maintained by DevPossible.", 20);
 
             // Support Development Section
             CreateSupportSection(contentStack);
@@ -366,7 +366,7 @@ namespace Desktop_Frames
                 {
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = "https://github.com/DevPossible/DesktopFramesPossible",
+                        FileName = "https://github.com/DevPossible/DesktopPossible",
                         UseShellExecute = true
                     });
                 }

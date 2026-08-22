@@ -658,7 +658,7 @@ namespace Desktop_Frames
         private static readonly Lazy<HttpClient> _http = new(() =>
         {
             var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("DesktopFramesPossible");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("DesktopPossible");
             return client;
         });
 

@@ -36,6 +36,7 @@ namespace Desktop_Frames
                 ProfileManager.Initialize();
                 System.IO.Directory.SetCurrentDirectory(ProfileManager.CurrentProfileDir);
                 SettingsManager.LoadSettings();
+                FrameStore.MigrateLegacyRoot(); // rebrand: %LocalAppData%\DesktopFramesPossible -> DesktopPossible
             }
             catch (Exception ex)
             {

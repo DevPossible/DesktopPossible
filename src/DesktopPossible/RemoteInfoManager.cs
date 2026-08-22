@@ -11,7 +11,7 @@ namespace Desktop_Frames
     public static class RemoteInfoManager
     {
         // YOUR REAL GITHUB URL
-        private const string MANIFEST_URL = "https://raw.githubusercontent.com/DevPossible/DesktopFramesPossible/main/remote/getversion.json";
+        private const string MANIFEST_URL = "https://raw.githubusercontent.com/DevPossible/DesktopPossible/main/remote/getversion.json";
 
         private static bool _hasChecked = false;
 
@@ -35,7 +35,7 @@ namespace Desktop_Frames
             {
                 using (var client = new HttpClient())
                 {
-                    client.DefaultRequestHeaders.UserAgent.ParseAdd("DesktopFramesPossible/3.0"); // Identify app
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("DesktopPossible/3.0"); // Identify app
                     client.Timeout = TimeSpan.FromSeconds(10);
 
                     // FIX: Add Cache Buster to force fresh content from GitHub
@@ -111,7 +111,7 @@ namespace Desktop_Frames
                         Title = "Update Available",
                         Body = $"A new version ({remoteVer}) is available.\nYou are currently using {currentVer}.",
                         Type = meta.CriticalUpdate ? "Alert" : "Info",
-                        Link = !string.IsNullOrEmpty(meta.DownloadUrl) ? meta.DownloadUrl : "https://github.com/DevPossible/DesktopFramesPossible/releases",
+                        Link = !string.IsNullOrEmpty(meta.DownloadUrl) ? meta.DownloadUrl : "https://github.com/DevPossible/DesktopPossible/releases",
                         CanUserDismiss = !meta.CriticalUpdate,
                         MaxDisplayCount = meta.CriticalUpdate ? 50 : 3 // Nag more for critical
                     };

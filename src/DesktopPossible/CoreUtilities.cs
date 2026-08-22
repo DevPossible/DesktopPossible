@@ -11,7 +11,7 @@ using System.Windows.Media.Effects;
 namespace Desktop_Frames
 {
     /// <summary>
-    /// Comprehensive utilities for Desktop Frames+ application
+    /// Comprehensive utilities for the DesktopPossible application
     /// Consolidates all utility methods from Framemanager, IconManager, PortalFramemanager, and FrameUtilities
     /// Organized by functional categories with clear regions for maintainability
     /// </summary>

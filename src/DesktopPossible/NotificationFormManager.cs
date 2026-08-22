@@ -38,7 +38,7 @@ namespace Desktop_Frames
         private void InitializeComponent()
         {
             // Window Props
-            this.Title = "DesktopFrames+Possible Notification"; // Taskbar/System title
+            this.Title = "DesktopPossible Notification"; // Taskbar/System title
             this.Width = 360;
             this.Height = 200;
             this.SizeToContent = SizeToContent.Height;
@@ -100,7 +100,7 @@ namespace Desktop_Frames
 
             TextBlock txtTitle = new TextBlock
             {
-                Text = $"DesktopFrames+Possible | {_msg.Title}",
+                Text = $"DesktopPossible | {_msg.Title}",
                 Foreground = Brushes.White,
                 FontWeight = FontWeights.Bold,
                 FontSize = 14

@@ -3,7 +3,7 @@ using Desktop_Frames;
 using Shouldly;
 using Xunit;
 
-namespace DesktopFramesPossible.Tests
+namespace DesktopPossible.Tests
 {
     /// <summary>
     /// Headless tests for infrastructure/interop helpers: CleanPath UNC handling,
@@ -35,7 +35,7 @@ namespace DesktopFramesPossible.Tests
         [Fact]
         public void TruncateTrayText_ShortText_ReturnedUnchanged()
         {
-            TrayManager.TruncateTrayText("DesktopFrames+Possible (Default)").ShouldBe("DesktopFrames+Possible (Default)");
+            TrayManager.TruncateTrayText("DesktopPossible (Default)").ShouldBe("DesktopPossible (Default)");
         }
 
         [Fact]
@@ -48,7 +48,7 @@ namespace DesktopFramesPossible.Tests
         [Fact]
         public void TruncateTrayText_LongProfileName_TruncatedTo63()
         {
-            string longName = "DesktopFrames+Possible (" + new string('p', 80) + ")";
+            string longName = "DesktopPossible (" + new string('p', 80) + ")";
             string result = TrayManager.TruncateTrayText(longName);
 
             result.Length.ShouldBe(63);

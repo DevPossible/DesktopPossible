@@ -8,7 +8,7 @@ using System.Windows.Media;
 namespace Desktop_Frames
 {
     /// <summary>
-    /// Centralized utility methods for Desktop Frames
+    /// Centralized utility methods for DesktopPossible
     /// Extracted from Framemanager for better code organization and reusability
     /// Contains standalone helper methods with minimal dependencies
     /// </summary>

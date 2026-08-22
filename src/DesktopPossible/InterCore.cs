@@ -15,7 +15,7 @@ using System.Windows.Threading;
 
 namespace Desktop_Frames
 {
-    // InterCore system for Desktop Frames - handles special interactive features and animations.
+    // InterCore system for DesktopPossible - handles special interactive features and animations.
     public static class InterCore
     {
         #region Private Fields

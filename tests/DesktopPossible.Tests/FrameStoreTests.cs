@@ -4,7 +4,7 @@ using Desktop_Frames;
 using Shouldly;
 using Xunit;
 
-namespace DesktopFramesPossible.Tests;
+namespace DesktopPossible.Tests;
 
 /// <summary>
 /// Headless tests for the per-frame file store: folder path building, profile-name
@@ -42,7 +42,33 @@ public class FrameStoreTests : IDisposable
     public void RootDir_IsUnderLocalAppData()
     {
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        FrameStore.RootDir.ShouldBe(Path.Combine(local, "DesktopFramesPossible", "Profiles"));
+        FrameStore.RootDir.ShouldBe(Path.Combine(local, "DesktopPossible", "Profiles"));
+    }
+
+    [Fact]
+    public void LegacyRootDir_IsUnderLocalAppData()
+    {
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        FrameStore.LegacyRootDir.ShouldBe(Path.Combine(local, "DesktopFramesPossible", "Profiles"));
+    }
+
+    [Theory]
+    [InlineData(@"C:\old\Profiles\Default\Frames\abc\x.lnk", @"C:\new\Profiles\Default\Frames\abc\x.lnk")]
+    [InlineData(@"c:\OLD\profiles\Work\Frames\id\y.txt", @"C:\new\Profiles\Work\Frames\id\y.txt")]
+    public void RemapLegacyPath_RewritesPathsUnderLegacyRoot(string input, string expected)
+    {
+        FrameStore.RemapLegacyPath(@"C:\old\Profiles", @"C:\new\Profiles", input).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData(@"C:\elsewhere\x.lnk")]
+    [InlineData(@"C:\old\ProfilesX\Default\x.lnk")]
+    [InlineData(@"Shortcuts\x.lnk")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void RemapLegacyPath_LeavesOtherPathsUnchanged(string? input)
+    {
+        FrameStore.RemapLegacyPath(@"C:\old\Profiles", @"C:\new\Profiles", input).ShouldBe(input);
     }
 
     [Fact]

@@ -1,24 +1,24 @@
-# CLAUDE.md - DesktopFrames+Possible Development Guide
+# CLAUDE.md - DesktopPossible Development Guide
 
-This file provides context for Claude Code when working on DesktopFrames+Possible.
+This file provides context for Claude Code when working on DesktopPossible.
 
 ## 1. Project Overview
 
-DesktopFrames+Possible is a free, open-source Stardock Fences alternative for
+DesktopPossible is a free, open-source Stardock Fences alternative for
 Windows 10/11: it creates virtual "frames" on the desktop to group icons,
 mirror folders (Portal frames), hold notes and images, with profiles, hotkeys,
 theming, and a smart auto-sort engine. It is a portable app — unzip, run
-`DesktopFramesPossible.exe`, config lives beside the exe.
+`DesktopPossible.exe`, config lives beside the exe.
 
 **Hard-fork context:** this is a hard fork of
 [Desktop Frames +](https://github.com/limbo666/DesktopFramesPlus) by
 limbo666 / Nikos Georgousis (itself a continuation of BirdyFences by
 HakanKokcu). We never sync or cherry-pick upstream commits — the codebase
 evolves independently. Development happens on a private GitLab;
-[github.com/DevPossible/DesktopFramesPossible](https://github.com/DevPossible/DesktopFramesPossible)
+[github.com/DevPossible/DesktopPossible](https://github.com/DevPossible/DesktopPossible)
 is the public shopfront receiving `main`, tags, and releases only.
 
-**Naming:** the product/assembly name is `DesktopFramesPossible`, but the
+**Naming:** the product/assembly name is `DesktopPossible`, but the
 internal C# namespace is `Desktop_Frames` (inherited from upstream). This is
 **deliberate** — do NOT rename the namespace; it keeps the diff against the
 fork point minimal and avoids churn across ~58 files.
@@ -31,7 +31,7 @@ and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
 `Shell.Application` for shell automation) is **late-bound** via
 `Type.GetTypeFromProgID(...)` + `dynamic`. There are NO `<COMReference>` items.
 
-- Build via `./build.ps1` (or `dotnet build src/DesktopFramesPossible.sln`).
+- Build via `./build.ps1` (or `dotnet build src/DesktopPossible.sln`).
 - The app **runs on Windows only** (`net10.0-windows10.0.19041.0`, WPF + WinForms), and
   tests also **execute** on Windows only — Linux can compile and cross-publish
   but not run them.
@@ -55,13 +55,13 @@ and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
 ## 4. Repository Layout
 
 ```text
-DesktopFramesPossible/
+DesktopPossible/
 ├── src/
-│   ├── DesktopFramesPossible.sln       # The only solution
-│   └── DesktopFramesPossible/          # WPF app (~58 single-class .cs files)
+│   ├── DesktopPossible.sln       # The only solution
+│   └── DesktopPossible/          # WPF app (~58 single-class .cs files)
 │       └── Resources/                  # Icons, logos, notification .wav files
 ├── tests/
-│   └── DesktopFramesPossible.Tests/    # xUnit unit tests (headless-safe)
+│   └── DesktopPossible.Tests/    # xUnit unit tests (headless-safe)
 ├── docs/                               # manual.md, tips.md, tweaks.md,
 │                                       # migrating-from-upstream.md,
 │                                       # upstream-version-history.md
@@ -82,7 +82,7 @@ JSON schema exactly as-is.
 
 ## 5. Architecture Map
 
-The app is ~58 single-class files in `src/DesktopFramesPossible/`, namespace
+The app is ~58 single-class files in `src/DesktopPossible/`, namespace
 `Desktop_Frames`, grouped by subsystem. Note: some class names use lowercase
 "manager" from upstream (`Framemanager`, `PortalFramemanager`,
 `NoteFramemanager`, `ImageFramemanager`) — match existing spelling.
@@ -119,7 +119,7 @@ The app is ~58 single-class files in `src/DesktopFramesPossible/`, namespace
 `AboutFormManager`, `OptionsFormManager`, `CustomizeFrameFormManager`,
 `NotificationFormManager`, `FrameFocusFormManager`, `MessageBoxesManager`,
 `SearchFormManager`, `TextFormatFormManager` — each owns one dialog/window.
-Related standalone forms: `AutomationRulesForm`, 
+Related standalone forms:
 `ProfileManagerForm`, `EditShortcutWindow`, `IconPickerDialog`,
 `ItemMoveDialog`.
 
@@ -149,8 +149,8 @@ Related standalone forms: `AutomationRulesForm`,
 `IconManager` / `IconDragDropManager` (icon rendering and drag-drop),
 `ShellContextMenu` (native shell menu hosting), `DarkMenuTheme` /
 `ThemedScrollBar` (theming), `WallpaperColorManager` (Chameleon mode),
-`SnapManager` (frame snapping), `AutomationManager` / `AutoOrganizeManager`
-(smart desktop rules), `LaunchEffectsManager`, `SingleInstanceChecker`,
+`SnapManager` (frame snapping), `AutoOrganizeManager` + `AppCategorizer`
+(desktop auto-categorization), `LaunchEffectsManager`, `SingleInstanceChecker`,
 `SmartToast`, `TargetChecker`, `RemoteDataModel`, `Utility` /
 `FilePathUtilities`.
 
@@ -202,7 +202,7 @@ project files, manifests, or tags.
 
 ## 8. Gotchas
 
-- **csproj encoding:** `DesktopFramesPossible.csproj` must stay UTF-8. Some
+- **csproj encoding:** `DesktopPossible.csproj` must stay UTF-8. Some
   editors/tools re-save it with a different encoding and break the build.
 - **Portable config beside the exe:** the app reads/writes `Profiles/` and
   `ProfileOptions.json` next to the executable. Never rename these — the
@@ -224,7 +224,7 @@ project files, manifests, or tags.
 
 ## 9. Testing
 
-Tests live in `tests/DesktopFramesPossible.Tests` (xUnit).
+Tests live in `tests/DesktopPossible.Tests` (xUnit).
 
 **Headless-safe rules** — tests run on CI runners with no desktop session, so
 they must NOT:
@@ -240,5 +240,5 @@ window plumbing.
 Run a subset (Windows only — the tests target `net10.0-windows`):
 
 ```powershell
-./build.ps1; dotnet test tests/DesktopFramesPossible.Tests --no-build --filter "FullyQualifiedName~PortalSort"
+./build.ps1; dotnet test tests/DesktopPossible.Tests --no-build --filter "FullyQualifiedName~PortalSort"
 ```

@@ -7,7 +7,7 @@ namespace Desktop_Frames
 {
     /// <summary>
     /// Per-frame file store: every Data frame owns a folder under
-    /// %LocalAppData%\DesktopFramesPossible\Profiles\&lt;profile&gt;\Frames\&lt;frameId&gt;\
+    /// %LocalAppData%\DesktopPossible\Profiles\&lt;profile&gt;\Frames\&lt;frameId&gt;\
     /// holding the files its items are backed by (moved-in shortcuts and real files,
     /// plus the .lnk wrappers created for exes/folders). Items store the ABSOLUTE path
     /// of their backing file. Frame Ids (not titles) key the folders — titles change.
@@ -21,7 +21,62 @@ namespace Desktop_Frames
         /// <summary>Root of all per-profile frame stores.</summary>
         public static string RootDir => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DesktopPossible", "Profiles");
+
+        /// <summary>
+        /// One-time rebrand migration: builds before the DesktopPossible rename kept the store under
+        /// %LocalAppData%\DesktopFramesPossible. If that legacy root exists and the new one does not,
+        /// the whole folder is moved; items store absolute paths, so FrameDataManager remaps them
+        /// on load via <see cref="RemapLegacyPath(string?)"/>. If both exist, both are left
+        /// untouched and a warning is logged — nothing is ever merged or deleted.
+        /// </summary>
+        public static void MigrateLegacyRoot()
+        {
+            try
+            {
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string legacyRoot = Path.Combine(local, "DesktopFramesPossible");
+                string newRoot = Path.Combine(local, "DesktopPossible");
+
+                if (!Directory.Exists(legacyRoot)) return;
+
+                if (Directory.Exists(newRoot))
+                {
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                        $"FrameStore: both legacy '{legacyRoot}' and new '{newRoot}' stores exist; leaving both untouched.");
+                    return;
+                }
+
+                Directory.Move(legacyRoot, newRoot);
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
+                    $"FrameStore: migrated legacy store '{legacyRoot}' -> '{newRoot}'.");
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"FrameStore: legacy store migration failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>Pre-rebrand root of the store (build identity "DesktopFramesPossible").</summary>
+        public static string LegacyRootDir => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "DesktopFramesPossible", "Profiles");
+
+        /// <summary>Remaps a backing-file path from the legacy store root to the current one.</summary>
+        public static string? RemapLegacyPath(string? path) => RemapLegacyPath(LegacyRootDir, RootDir, path);
+
+        /// <summary>
+        /// Pure variant: if <paramref name="path"/> lies under <paramref name="legacyRoot"/> the same
+        /// relative path under <paramref name="newRoot"/> is returned; otherwise the input is unchanged.
+        /// </summary>
+        public static string? RemapLegacyPath(string legacyRoot, string newRoot, string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string prefix = legacyRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return path;
+            return Path.Combine(newRoot, path.Substring(prefix.Length));
+        }
 
         /// <summary>
         /// Makes a profile name safe as a folder name: invalid path chars become '_',

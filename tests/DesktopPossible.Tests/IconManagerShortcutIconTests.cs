@@ -5,7 +5,7 @@ using Desktop_Frames;
 using Shouldly;
 using Xunit;
 
-namespace DesktopFramesPossible.Tests
+namespace DesktopPossible.Tests
 {
     /// <summary>
     /// Regression tests for the "dropped desktop shortcut shows a different icon" bug.

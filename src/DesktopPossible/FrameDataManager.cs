@@ -354,6 +354,37 @@ namespace Desktop_Frames
         /// Used by: LoadFrameData during startup
         /// Category: Data Migration (Simple)
         /// </summary>
+        /// <summary>
+        /// Rebrand migration: item paths that point into the pre-rename store root
+        /// (%LocalAppData%\DesktopFramesPossible) are rewritten to the current root when the file
+        /// has moved there (see FrameStore.MigrateLegacyRoot). Paths still present at the old
+        /// location are left alone.
+        /// </summary>
+        private static bool RemapLegacyStorePaths(IDictionary<string, object> frameDict)
+        {
+            if (!frameDict.TryGetValue("Items", out object itemsObj) || itemsObj is not JArray items) return false;
+
+            bool modified = false;
+            foreach (var item in items.OfType<JObject>())
+            {
+                string path = item["Filename"]?.ToString();
+                string remapped = FrameStore.RemapLegacyPath(path);
+                if (remapped == null || string.Equals(remapped, path, StringComparison.Ordinal)) continue;
+                if (File.Exists(path) || !File.Exists(remapped)) continue;
+
+                item["Filename"] = remapped;
+                modified = true;
+            }
+
+            if (modified)
+            {
+                frameDict["Items"] = items;
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameCreation,
+                    $"FrameDataManager: remapped legacy store paths in frame '{frameDict["Title"]}'");
+            }
+            return modified;
+        }
+
         private static void ApplySimpleMigrations()
         {
             bool jsonModified = false;
@@ -372,6 +403,7 @@ namespace Desktop_Frames
 
                         if (AddMissingBasicProperties(frameDict)) dictModified = true;
                         if (ValidateDataTypes(frameDict)) dictModified = true;
+                        if (RemapLegacyStorePaths(frameDict)) dictModified = true;
 
                         if (dictModified)
                         {

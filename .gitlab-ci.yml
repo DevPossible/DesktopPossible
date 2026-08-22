@@ -325,7 +325,7 @@ github_release:
       body="$(jq -Rs . < changelog.md)"
       payload="$(jq -n \
         --arg tag "v${VERSION}" \
-        --arg name "DesktopFrames+Possible v${VERSION}" \
+        --arg name "DesktopPossible v${VERSION}" \
         --argjson body "${body}" \
         '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false }')"
 

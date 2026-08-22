@@ -29,7 +29,7 @@ namespace Desktop_Frames
         public static bool IsStartWithWindows { get; private set; }
 
         private const string RUN_KEY_PATH = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        private const string APP_NAME = "DesktopFramesPossible"; // --- FIX: Ensures new registry entries use the correct name ---
+        private const string APP_NAME = "DesktopPossible"; // --- FIX: Ensures new registry entries use the correct name ---
 
         private static readonly List<HiddenFrame> HiddenFrames = new List<HiddenFrame>();
     
@@ -68,7 +68,7 @@ namespace Desktop_Frames
         }
 
         private static string BuildTrayText(string profileName) =>
-            TruncateTrayText($"DesktopFrames+Possible ({profileName})");
+            TruncateTrayText($"DesktopPossible ({profileName})");
 
         public void UpdateAutoOrganizeMenuCheck(bool isChecked)
         {
@@ -154,7 +154,7 @@ namespace Desktop_Frames
                     if (success)
                     {
                         // Show notification that export was successful
-                        _trayIcon.BalloonTipTitle = "DesktopFrames+Possible";
+                        _trayIcon.BalloonTipTitle = "DesktopPossible";
                         _trayIcon.BalloonTipText = "Registry values exported successfully to program folder.";
                         _trayIcon.BalloonTipIcon = ToolTipIcon.Info;
                         _trayIcon.ShowBalloonTip(3000); // Show for 3 seconds
@@ -165,7 +165,7 @@ namespace Desktop_Frames
                     else
                     {
                         // Show error notification
-                        _trayIcon.BalloonTipTitle = "DesktopFrames+Possible - Error";
+                        _trayIcon.BalloonTipTitle = "DesktopPossible - Error";
                         _trayIcon.BalloonTipText = "Failed to export registry values. Check log for details.";
                         _trayIcon.BalloonTipIcon = ToolTipIcon.Error;
                         _trayIcon.ShowBalloonTip(3000);
@@ -366,7 +366,7 @@ namespace Desktop_Frames
         {
             var waitWindow = new System.Windows.Window
             {
-                Title = "DesktopFrames+Possible",
+                Title = "DesktopPossible",
                 Width = 300,
                 Height = 150,
                 WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen,
@@ -400,7 +400,7 @@ namespace Desktop_Frames
 
             var titleText = new System.Windows.Controls.TextBlock
             {
-                Text = "DesktopFrames+Possible",
+                Text = "DesktopPossible",
                 FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
                 FontSize = 16,
                 FontWeight = System.Windows.FontWeights.Medium,
@@ -708,7 +708,8 @@ namespace Desktop_Frames
                 {
                     Path.Combine(startupPath, "Desktop Fences.lnk"),
                     Path.Combine(startupPath, "Desktop Frames +.lnk"),
-                    Path.Combine(startupPath, "DesktopFramesPossible.lnk")
+                    Path.Combine(startupPath, "DesktopFramesPossible.lnk"), // legacy pre-rebrand name
+                    Path.Combine(startupPath, "DesktopPossible.lnk")
                 };
 
                 foreach (string legacyShortcut in legacyShortcuts)
