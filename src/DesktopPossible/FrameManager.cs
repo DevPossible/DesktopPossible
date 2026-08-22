@@ -1447,6 +1447,65 @@ namespace Desktop_Frames
 
       
         /// <summary>
+        /// Right-click on an icon shows the standard Windows context menu for its file (shell
+        /// extensions, Open with, Send to, Properties, ...) with DesktopPossible's own actions —
+        /// the items of the WPF menu, flattened — appended at the bottom. The WPF menu is kept as
+        /// the fallback for items without a real file (spacers, missing targets).
+        /// </summary>
+        private static void UseShellMenuForIcon(StackPanel sp, ContextMenu wpfMenu, string filePath)
+        {
+            sp.ContextMenuOpening += (s, e) =>
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(filePath) || filePath.StartsWith("INTERNAL_BLANK_")) return;
+                    string full;
+                    try { full = System.IO.Path.GetFullPath(filePath); } catch { return; }
+                    if (!System.IO.File.Exists(full) && !System.IO.Directory.Exists(full)) return;
+                    if (Window.GetWindow(sp) is not NonActivatingWindow win) return;
+                    var hwnd = new WindowInteropHelper(win).Handle;
+                    if (hwnd == IntPtr.Zero) return;
+
+                    e.Handled = true; // the WPF menu stays closed; we show the native one
+
+                    // Let the WPF menu's Opened handlers refresh live state (checkable items) first.
+                    try { wpfMenu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent)); } catch { }
+
+                    var extras = new List<ShellContextMenu.ExtraItem>();
+                    void Add(MenuItem mi, string prefix)
+                    {
+                        if (mi.Visibility != Visibility.Visible) return;
+                        string label = prefix + (mi.Header?.ToString() ?? "");
+                        if (mi.Items.Count > 0)
+                        {
+                            foreach (var child in mi.Items) if (child is MenuItem cm) Add(cm, label + ": ");
+                            return;
+                        }
+                        extras.Add(new ShellContextMenu.ExtraItem
+                        {
+                            Label = label, Checked = mi.IsCheckable && mi.IsChecked, Enabled = mi.IsEnabled,
+                            Click = () => mi.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent))
+                        });
+                    }
+                    foreach (var item in wpfMenu.Items)
+                    {
+                        if (item is MenuItem mi) Add(mi, "");
+                        else if (item is Separator && extras.Count > 0 && extras[^1].Label != "-") extras.Add(new ShellContextMenu.ExtraItem { Label = "-" });
+                    }
+                    while (extras.Count > 0 && extras[^1].Label == "-") extras.RemoveAt(extras.Count - 1);
+
+                    var pos = System.Windows.Forms.Cursor.Position;
+                    bool extended = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+                    ShellContextMenu.ShowFullMenu(full, hwnd, HwndSource.FromHwnd(hwnd), pos.X, pos.Y, extended, extras);
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Shell menu for icon failed: {ex.Message}");
+                }
+            };
+        }
+
+        /// <summary>
         /// Centralized method to attach the standard Context Menu to an icon.
         /// Layout: Edit/Move/Remove -> Copy -> Admin -> Path
         /// Includes LIVE data lookup to ensure Checkable items stay synced.
@@ -1772,6 +1831,7 @@ namespace Desktop_Frames
 
                 DarkMenuTheme.Apply(iconContextMenu); // follow OS dark mode
                 sp.ContextMenu = iconContextMenu;
+                UseShellMenuForIcon(sp, iconContextMenu, filePath);
             }
             catch (Exception ex)
             {
@@ -2335,6 +2395,7 @@ namespace Desktop_Frames
 
                 DarkMenuTheme.Apply(iconContextMenu); // follow OS dark mode
                 sp.ContextMenu = iconContextMenu;
+                UseShellMenuForIcon(sp, iconContextMenu, filePath);
             }
             catch (Exception ex)
             {

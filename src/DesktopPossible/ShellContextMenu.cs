@@ -288,6 +288,124 @@ namespace Desktop_Frames
             }
         }
 
+        /// <summary>One DesktopPossible item appended below the shell items. Label "-" = separator.</summary>
+        public sealed class ExtraItem
+        {
+            public string Label = "";
+            public bool Checked;
+            public bool Enabled = true;
+            public Action Click;
+        }
+
+        private const uint MF_CHECKED = 0x0008;
+        private const int EXTRA_BASE = 0x9000;
+
+        /// <summary>
+        /// Shows the FULL native Explorer context menu for <paramref name="path"/> (what the desktop
+        /// shows) with <paramref name="extras"/> appended after a separator. Frame icons use this:
+        /// the standard Windows menu first, DesktopPossible's own actions at the bottom.
+        /// </summary>
+        public static void ShowFullMenu(string path, IntPtr ownerHwnd, HwndSource ownerSource, int screenX, int screenY,
+            bool extended, System.Collections.Generic.IList<ExtraItem> extras)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+
+            IntPtr pidl = IntPtr.Zero, parentPtr = IntPtr.Zero, childPidl = IntPtr.Zero, ctxPtr = IntPtr.Zero, hMenu = IntPtr.Zero;
+            IShellFolder parent = null;
+            IContextMenu com1 = null;
+            HwndSourceHook hook = null;
+
+            try
+            {
+                if (SHParseDisplayName(path, IntPtr.Zero, out pidl, 0, out _) != 0 || pidl == IntPtr.Zero) return;
+
+                Guid gFolder = IID_IShellFolder;
+                if (SHBindToParent(pidl, ref gFolder, out parentPtr, out childPidl) != 0 || parentPtr == IntPtr.Zero) return;
+                parent = (IShellFolder)Marshal.GetObjectForIUnknown(parentPtr);
+
+                Guid gCtx = IID_IContextMenu;
+                IntPtr[] apidl = { childPidl };
+                if (parent.GetUIObjectOf(ownerHwnd, 1, apidl, ref gCtx, IntPtr.Zero, out ctxPtr) != 0 || ctxPtr == IntPtr.Zero) return;
+                com1 = (IContextMenu)Marshal.GetObjectForIUnknown(ctxPtr);
+
+                try { _com3 = (IContextMenu3)com1; } catch { _com3 = null; }
+                if (_com3 == null) { try { _com2 = (IContextMenu2)com1; } catch { _com2 = null; } }
+
+                hMenu = CreatePopupMenu();
+                uint qFlags = CMF_EXPLORE | (extended ? CMF_EXTENDEDVERBS : 0);
+                com1.QueryContextMenu(hMenu, 0, idCmdFirst, idCmdLast, qFlags);
+
+                if (extras != null && extras.Count > 0)
+                {
+                    AppendMenu(hMenu, MF_SEPARATOR, UIntPtr.Zero, null);
+                    for (int i = 0; i < extras.Count; i++)
+                    {
+                        var x = extras[i];
+                        if (x.Label == "-") { AppendMenu(hMenu, MF_SEPARATOR, UIntPtr.Zero, null); continue; }
+                        uint flags = MF_STRING | (x.Checked ? MF_CHECKED : 0) | (x.Enabled ? 0 : MF_GRAYED);
+                        AppendMenu(hMenu, flags, (UIntPtr)(EXTRA_BASE + i), x.Label);
+                    }
+                }
+
+                ApplyDarkMenus(ownerHwnd);
+
+                if (ownerSource != null)
+                {
+                    hook = (IntPtr h, int msg, IntPtr wp, IntPtr lp, ref bool handled) =>
+                    {
+                        if (_com3 != null && (msg == WM_INITMENUPOPUP || msg == WM_DRAWITEM || msg == WM_MEASUREITEM || msg == WM_MENUCHAR))
+                        {
+                            if (_com3.HandleMenuMsg2((uint)msg, wp, lp, out IntPtr res) == 0) { handled = true; return res; }
+                        }
+                        else if (_com2 != null && (msg == WM_INITMENUPOPUP || msg == WM_DRAWITEM || msg == WM_MEASUREITEM))
+                        {
+                            if (_com2.HandleMenuMsg((uint)msg, wp, lp) == 0) { handled = true; return IntPtr.Zero; }
+                        }
+                        return IntPtr.Zero;
+                    };
+                    ownerSource.AddHook(hook);
+                }
+
+                uint cmd = TrackPopupMenuEx(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON, screenX, screenY, ownerHwnd, IntPtr.Zero);
+
+                if (hook != null && ownerSource != null) { ownerSource.RemoveHook(hook); hook = null; }
+
+                if (cmd >= EXTRA_BASE && extras != null && cmd - EXTRA_BASE < extras.Count)
+                {
+                    try { extras[(int)(cmd - EXTRA_BASE)].Click?.Invoke(); }
+                    catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Icon menu action failed: {ex.Message}"); }
+                }
+                else if (cmd >= idCmdFirst && cmd <= idCmdLast)
+                {
+                    var ici = new CMINVOKECOMMANDINFOEX
+                    {
+                        cbSize = Marshal.SizeOf(typeof(CMINVOKECOMMANDINFOEX)),
+                        fMask = CMIC_MASK_UNICODE,
+                        hwnd = ownerHwnd,
+                        lpVerb = (IntPtr)(cmd - idCmdFirst),
+                        lpVerbW = (IntPtr)(cmd - idCmdFirst),
+                        nShow = SW_SHOWNORMAL
+                    };
+                    com1.InvokeCommand(ref ici);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"ShellContextMenu (full) error: {ex.Message}");
+            }
+            finally
+            {
+                if (hook != null && ownerSource != null) ownerSource.RemoveHook(hook);
+                _com2 = null; _com3 = null;
+                if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
+                if (com1 != null) Marshal.ReleaseComObject(com1);
+                if (parent != null) Marshal.ReleaseComObject(parent);
+                if (ctxPtr != IntPtr.Zero) Marshal.Release(ctxPtr);
+                if (parentPtr != IntPtr.Zero) Marshal.Release(parentPtr);
+                if (pidl != IntPtr.Zero) ILFree(pidl);
+            }
+        }
+
         /// <summary>
         /// Loads the registered shell context-menu handlers for <paramref name="path"/> into the
         /// process WITHOUT showing a menu. The first QueryContextMenu of the session LoadLibrary's
