@@ -390,3 +390,4 @@ github_release:
         cat upload.json
         exit 1
       fi
+      done
