@@ -60,7 +60,7 @@ public class FrameCoreNumericTests
     [InlineData("not-a-number")]
     public void InvalidValues_ReturnFallback(object? value)
     {
-        Framemanager.ToDoubleInvariant(value, 130).ShouldBe(130);
+        Framemanager.ToDoubleInvariant(value!, 130).ShouldBe(130);
     }
 
     [Fact]

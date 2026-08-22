@@ -1,3 +1,7 @@
+// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -38,7 +42,6 @@ namespace Desktop_Frames
         private ToolStripMenuItem _profilesMenuItem;
         public static TrayManager Instance { get; private set; } // Singleton instance
 
-        private bool _areFramesTempHidden = false;
 
         private List<NonActivatingWindow> _tempHiddenFrames = new List<NonActivatingWindow>();
 
@@ -946,7 +949,6 @@ namespace Desktop_Frames
         {
             HiddenFrames.Clear();
             _tempHiddenFrames.Clear();
-            _areFramesTempHidden = false;
             UpdateHiddenFramesMenu();
             UpdateTrayIcon();
         }

@@ -26,8 +26,10 @@ namespace Desktop_Frames
             try
             {
                 string frameId = frame?.Id?.ToString() ?? "";
-                dynamic live = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId) ?? frame;
-                if (live == null) return;
+                dynamic? live = frame;
+                dynamic? found = FrameDataManager.FrameData.FirstOrDefault(f => f.Id?.ToString() == frameId);
+                if (found is not null) live = found;
+                if (live is null) return;
 
                 var others = ProfileManager.GetProfiles()
                     .Select(p => p.Name)

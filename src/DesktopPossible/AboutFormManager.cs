@@ -1,4 +1,8 @@
-﻿using System;
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
+using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -74,8 +78,6 @@ namespace Desktop_Frames
                 aboutWindow.Content = mainBorder;
 
                 // Make window draggable ONLY by header to avoid button click conflicts
-                bool isDragging = false;
-                Point clickPosition = new Point();
 
                 // Get the header from the root grid for dragging
                 var headerElement = rootGrid.Children.OfType<Border>().FirstOrDefault();

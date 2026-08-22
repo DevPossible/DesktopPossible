@@ -191,7 +191,7 @@ namespace DesktopPossible.Tests
             // Arrange - null legacy entries are the only invalid ones
             var frameDict = new Dictionary<string, object>
             {
-                ["FenceBorderColor"] = null
+                ["FenceBorderColor"] = null!
             };
 
             // Act

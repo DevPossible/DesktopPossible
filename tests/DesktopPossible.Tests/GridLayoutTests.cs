@@ -94,7 +94,7 @@ public class GridLayoutTests
     [Fact]
     public void FirstFreeCell_NullOccupiedSet_ReturnsOrigin()
     {
-        GridLayout.FirstFreeCell(null, 3).ShouldBe((0, 0));
+        GridLayout.FirstFreeCell(null!, 3).ShouldBe((0, 0));
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public class GridLayoutTests
     [Fact]
     public void PreviewDisplacement_NoOthers_JustPlacesDraggedItem()
     {
-        var map = GridLayout.PreviewDisplacement(null, "drag", (1, 1), 3);
+        var map = GridLayout.PreviewDisplacement(null!, "drag", (1, 1), 3);
 
         map.Count.ShouldBe(1);
         map["drag"].ShouldBe((1, 1));
@@ -313,8 +313,8 @@ public class GridLayoutTests
         var cell = GridLayout.PlaceInFirstFreeCell(items, mover, 3);
 
         cell.ShouldBe((0, 0));
-        ((int)mover["GridCol"]).ShouldBe(0);
-        ((int)mover["GridRow"]).ShouldBe(0);
+        ((int)mover["GridCol"]!).ShouldBe(0);
+        ((int)mover["GridRow"]!).ShouldBe(0);
     }
 
     [Fact]
@@ -347,9 +347,9 @@ public class GridLayoutTests
         var a = (JObject)items[1];
         var b = (JObject)items[0];
         var c = (JObject)items[2];
-        ((int)a["GridCol"], (int)a["GridRow"]).ShouldBe((0, 0));
-        ((int)b["GridCol"], (int)b["GridRow"]).ShouldBe((1, 0));
-        ((int)c["GridCol"], (int)c["GridRow"]).ShouldBe((0, 1));
+        ((int)a["GridCol"]!, (int)a["GridRow"]!).ShouldBe((0, 0));
+        ((int)b["GridCol"]!, (int)b["GridRow"]!).ShouldBe((1, 0));
+        ((int)c["GridCol"]!, (int)c["GridRow"]!).ShouldBe((0, 1));
     }
 
     [Fact]
@@ -360,7 +360,7 @@ public class GridLayoutTests
 
         GridLayout.EnsureCells(items, 3).ShouldBeFalse();
 
-        ((int)items[0]["GridCol"], (int)items[0]["GridRow"]).ShouldBe((2, 4));
+        ((int)items[0]["GridCol"]!, (int)items[0]["GridRow"]!).ShouldBe((2, 4));
     }
 
     [Fact]
@@ -372,8 +372,8 @@ public class GridLayoutTests
 
         GridLayout.EnsureCells(items, 3).ShouldBeTrue();
 
-        ((int)first["GridCol"], (int)first["GridRow"]).ShouldBe((0, 0));
-        ((int)dupe["GridCol"], (int)dupe["GridRow"]).ShouldBe((1, 0));
+        ((int)first["GridCol"]!, (int)first["GridRow"]!).ShouldBe((0, 0));
+        ((int)dupe["GridCol"]!, (int)dupe["GridRow"]!).ShouldBe((1, 0));
     }
 
     [Fact]
@@ -386,8 +386,8 @@ public class GridLayoutTests
 
         GridLayout.EnsureCells(items, 3).ShouldBeTrue();
 
-        ((int)b["GridCol"], (int)b["GridRow"]).ShouldBe((0, 0));
-        ((int)a["GridCol"], (int)a["GridRow"]).ShouldBe((1, 0));
+        ((int)b["GridCol"]!, (int)b["GridRow"]!).ShouldBe((0, 0));
+        ((int)a["GridCol"]!, (int)a["GridRow"]!).ShouldBe((1, 0));
     }
 
     [Fact]
@@ -400,14 +400,14 @@ public class GridLayoutTests
 
         GridLayout.EnsureCells(items, 2).ShouldBeFalse();
 
-        ((int)wide["GridCol"]).ShouldBe(5);
+        ((int)wide["GridCol"]!).ShouldBe(5);
     }
 
     [Fact]
     public void EnsureCells_EmptyOrNullList_NoChanges()
     {
         GridLayout.EnsureCells(new JArray(), 3).ShouldBeFalse();
-        GridLayout.EnsureCells(null, 3).ShouldBeFalse();
+        GridLayout.EnsureCells(null!, 3).ShouldBeFalse();
     }
 
     #endregion

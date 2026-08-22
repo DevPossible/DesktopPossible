@@ -1,3 +1,7 @@
+// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -353,14 +357,10 @@ namespace Desktop_Frames
                 if (pInfo != null) pInfo.Name = newName;
 
                 // Update Rules
-                bool rulesChanged = false;
                 foreach (var rule in _automationRules)
                 {
                     if (string.Equals(rule.TargetProfile, oldName, StringComparison.OrdinalIgnoreCase))
-                    {
                         rule.TargetProfile = newName;
-                        rulesChanged = true;
-                    }
                 }
 
                 if (string.Equals(_manualBaseProfile, oldName, StringComparison.OrdinalIgnoreCase))

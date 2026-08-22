@@ -1,4 +1,8 @@
-﻿using System;
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -848,13 +852,14 @@ namespace Desktop_Frames
 
                 // Read the first 4096 bytes. The "APPS" signature is always in the header.
                 byte[] buffer = new byte[4096];
+                int bytesRead;
                 using (var fs = new System.IO.FileStream(lnkPath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite))
                 {
-                    fs.Read(buffer, 0, buffer.Length);
+                    bytesRead = fs.Read(buffer, 0, buffer.Length);
                 }
 
                 // Convert to ASCII. The "APPS" signature is stored as standard text.
-                string rawData = System.Text.Encoding.ASCII.GetString(buffer);
+                string rawData = System.Text.Encoding.ASCII.GetString(buffer, 0, bytesRead);
 
                 // CHECK: "APPS" signature identifies shortcuts to shell:AppsFolder
                 return rawData.Contains("APPS");

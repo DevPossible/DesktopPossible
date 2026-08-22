@@ -1,4 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;

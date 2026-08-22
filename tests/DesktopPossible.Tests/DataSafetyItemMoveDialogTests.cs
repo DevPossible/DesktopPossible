@@ -59,7 +59,7 @@ namespace DesktopPossible.Tests
         public void GetOrCreateItemsArray_NullContainer_ReturnsNull()
         {
             // Act & Assert
-            ItemMoveDialog.GetOrCreateItemsArray(null).ShouldBeNull();
+            ItemMoveDialog.GetOrCreateItemsArray(null!).ShouldBeNull();
         }
 
         [Fact]

@@ -1,4 +1,8 @@
-﻿using System;
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -46,7 +50,6 @@ namespace Desktop_Frames
         // physical-pixel cursor position into DIPs for the preview window's Left/Top.
         private static double _dragPreviewDpiScale = 1.0;
         private static System.Windows.Point _lastDropIndicatorPosition = new System.Windows.Point(-1, -1);
-        private static int _lastDropIndicatorIndex = -1;
 
         // Free-arrange drag state: live displacement preview + ghost drop preview.
         private static (int Col, int Row) _lastPreviewCell = (-1, -1);

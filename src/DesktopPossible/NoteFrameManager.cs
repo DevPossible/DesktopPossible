@@ -1,4 +1,8 @@
-﻿using Newtonsoft.Json.Linq;
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+// file until it is annotated (annotations remain valid). New files are fully nullable-clean.
+#nullable disable warnings
+
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1232,7 +1236,7 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI,
                     $"Applied note scheme: BG={frameColor}, FG={noteTextBox.Foreground}");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Safe defaults
                 noteTextBox.Background = Brushes.Transparent;

@@ -175,7 +175,7 @@ namespace Desktop_Frames
         /// <summary>
         /// The set of cells currently claimed by items in the list (optionally excluding one item).
         /// </summary>
-        public static HashSet<(int Col, int Row)> OccupiedCells(JArray items, JObject exclude = null)
+        public static HashSet<(int Col, int Row)> OccupiedCells(JArray items, JObject? exclude = null)
         {
             var occupied = new HashSet<(int, int)>();
             if (items == null) return occupied;
@@ -211,7 +211,7 @@ namespace Desktop_Frames
             foreach (var item in items.OfType<JObject>())
             {
                 if (ReferenceEquals(item, newItem)) continue;
-                string key = item["Filename"]?.ToString();
+                string? key = item["Filename"]?.ToString();
                 if (key == null || key == newKey) continue;
                 if (TryGetCell(item, out var cell)) others.Add((key, cell.Col, cell.Row));
             }
@@ -221,7 +221,7 @@ namespace Desktop_Frames
             foreach (var item in items.OfType<JObject>())
             {
                 if (ReferenceEquals(item, newItem)) continue;
-                string key = item["Filename"]?.ToString();
+                string? key = item["Filename"]?.ToString();
                 if (key != null && map.TryGetValue(key, out var cell))
                 {
                     item[ColKey] = cell.Col;
