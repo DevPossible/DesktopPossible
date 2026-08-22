@@ -36,16 +36,8 @@ namespace Desktop_Frames
                     AllowsTransparency = true
                 };
 
-                // Set icon from executable
-                try
-                {
-                    aboutWindow.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { } // Ignore icon loading errors
+                // Set icon from executable (cached; avoids leaking an HICON per dialog open)
+                if (DialogIconCache.AppIcon != null) aboutWindow.Icon = DialogIconCache.AppIcon;
 
                 // Main container with white background and shadow
                 Border mainBorder = new Border
@@ -111,6 +103,28 @@ namespace Desktop_Frames
             }
         }
 
+        /// <summary>
+        /// Loads an embedded resource image fully into memory (CacheOption.OnLoad) so the
+        /// manifest stream can be disposed immediately instead of being held by WPF's
+        /// default lazy decode. Returns null if the resource is missing.
+        /// </summary>
+        private static BitmapImage LoadEmbeddedBitmap(string resourceName)
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            using (var resourceStream = assembly.GetManifestResourceStream(resourceName))
+            {
+                if (resourceStream == null) return null;
+
+                BitmapImage bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = resourceStream;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+        }
+
         private static void CreateHeader(Grid rootGrid)
         {
             Border headerBorder = new Border
@@ -139,15 +153,9 @@ namespace Desktop_Frames
             // Load logo from resources if available
             try
             {
-                var assembly = Assembly.GetExecutingAssembly();
-                var resourceStream = assembly.GetManifestResourceStream("Desktop_Frames.Resources.logo1.png");
-                if (resourceStream != null)
+                var bitmap = LoadEmbeddedBitmap("Desktop_Frames.Resources.logo1.png");
+                if (bitmap != null)
                 {
-                    BitmapImage bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.StreamSource = resourceStream;
-                    bitmap.EndInit();
-
                     Image logoImage = new Image
                     {
                         Source = bitmap,
@@ -654,16 +662,8 @@ namespace Desktop_Frames
                
                 try
                 {
-                    var assembly = Assembly.GetExecutingAssembly();
-                    var resourceStream = assembly.GetManifestResourceStream("Desktop_Frames.Resources.Feed.png");
-                    if (resourceStream != null)
-                    {
-                        BitmapImage bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.StreamSource = resourceStream;
-                        bitmap.EndInit();
-                        mainImage.Source = bitmap;
-                    }
+                    var bitmap = LoadEmbeddedBitmap("Desktop_Frames.Resources.Feed.png");
+                    if (bitmap != null) mainImage.Source = bitmap;
                 }
                 catch (Exception imgEx)
                 {
@@ -742,9 +742,9 @@ namespace Desktop_Frames
                    
                         try
                         {
-                            var assembly = Assembly.GetExecutingAssembly();
-                            var resourceStream = assembly.GetManifestResourceStream("Desktop_Frames.Resources.dragon.png");
-                            if (resourceStream != null)
+                            // Decode fully up front (stream disposed immediately), then animate.
+                            var dragonBitmap = LoadEmbeddedBitmap("Desktop_Frames.Resources.dragon.png");
+                            if (dragonBitmap != null)
                             {
                                 // Fade out current image
                                 var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(300));
@@ -752,11 +752,6 @@ namespace Desktop_Frames
 
                                 await System.Threading.Tasks.Task.Delay(300);
 
-                                // Load dragon image
-                                BitmapImage dragonBitmap = new BitmapImage();
-                                dragonBitmap.BeginInit();
-                                dragonBitmap.StreamSource = resourceStream;
-                                dragonBitmap.EndInit();
                                 mainImage.Source = dragonBitmap;
 
                                 // Fade in dragon image

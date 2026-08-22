@@ -38,7 +38,7 @@ namespace Desktop_Frames
         private void InitializeComponent()
         {
             // Window Props
-            this.Title = "Desktop Fences + Notification"; // Taskbar/System title
+            this.Title = "DesktopFrames+Possible Notification"; // Taskbar/System title
             this.Width = 360;
             this.Height = 200;
             this.SizeToContent = SizeToContent.Height;
@@ -100,7 +100,7 @@ namespace Desktop_Frames
 
             TextBlock txtTitle = new TextBlock
             {
-                Text = $"Desktop Fences + | {_msg.Title}",
+                Text = $"DesktopFrames+Possible | {_msg.Title}",
                 Foreground = Brushes.White,
                 FontWeight = FontWeights.Bold,
                 FontSize = 14
@@ -197,12 +197,15 @@ namespace Desktop_Frames
 
         private void StartAutoCloseTimer()
         {
-            _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+            // Bar maximum is AutoCloseSeconds * 100, so draining 10 units every 100ms
+            // empties it in exactly AutoCloseSeconds (10 ticks/sec × 10 units) without
+            // hammering the dispatcher with a 10ms timer.
+            _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _autoCloseTimer.Tick += (s, e) =>
             {
                 if (_timerBar.Value > 0)
                 {
-                    _timerBar.Value -= 1;
+                    _timerBar.Value = Math.Max(0, _timerBar.Value - 10);
                 }
                 else
                 {
@@ -211,6 +214,15 @@ namespace Desktop_Frames
                 }
             };
             _autoCloseTimer.Start();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // Stop the timer on any close path (✕ button, programmatic close) so a dead
+            // window doesn't keep a DispatcherTimer alive.
+            _autoCloseTimer?.Stop();
+            _autoCloseTimer = null;
+            base.OnClosed(e);
         }
     }
 }

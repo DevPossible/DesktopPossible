@@ -44,6 +44,9 @@ namespace Desktop_Frames
         private string _originalTextColor;
         private bool _originalWordWrap;
         private bool _originalSpellCheck;
+
+        // True once Apply has written to the TextBox/JSON, so Cancel knows it must revert.
+        private bool _appliedToJson = false;
         #endregion
 
         #region Constructor
@@ -82,7 +85,7 @@ namespace Desktop_Frames
         /// <summary>
         /// Gets whether the user clicked Save (true) or Cancel (false)
         /// </summary>
-        public new bool DialogResult => _result;
+        public bool Result => _result;
         #endregion
 
         #region Form Initialization
@@ -104,16 +107,8 @@ namespace Desktop_Frames
                 this.Background = new SolidColorBrush(Color.FromRgb(248, 249, 250));
                 this.ResizeMode = ResizeMode.NoResize;
 
-                // Set icon from executable (same as customize form)
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { } // Ignore icon loading errors
+                // Set icon from executable (cached; avoids leaking an HICON per dialog open)
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 // Main container with modern card design (same as customize form)
                 Border mainCard = new Border
@@ -449,6 +444,27 @@ namespace Desktop_Frames
         }
         #endregion
 
+        /// <summary>
+        /// Gets the DPI scale factor for proper WPF window positioning (same as customize form)
+        /// </summary>
+        private double GetFormDpiScaleFactor()
+        {
+            try
+            {
+                // Use Graphics to get the screen's DPI
+                using (var graphics = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    float dpiX = graphics.DpiX; // Horizontal DPI
+                    return dpiX / 96.0; // Standard DPI is 96, so scale factor = dpiX / 96
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Could not get DPI scale factor: {ex.Message}. Using default scale of 1.0");
+                return 1.0; // Default to no scaling if DPI detection fails
+            }
+        }
+
         private void PositionFormOnMouseScreen()
         {
             try
@@ -456,9 +472,11 @@ namespace Desktop_Frames
                 // Get current cursor position (same logic as customize form)
                 var cursorPosition = System.Windows.Forms.Cursor.Position;
 
-                // Convert to WPF coordinates and center form around cursor
-                this.Left = cursorPosition.X - (this.Width / 2);
-                this.Top = cursorPosition.Y - (this.Height / 2);
+                // Cursor.Position is in physical pixels; Window.Left/Top are device-independent
+                // units, so divide by the DPI scale before centering around the cursor.
+                double dpiScale = GetFormDpiScaleFactor();
+                this.Left = (cursorPosition.X / dpiScale) - (this.Width / 2);
+                this.Top = (cursorPosition.Y / dpiScale) - (this.Height / 2);
 
                 // Ensure form stays on screen
                 if (this.Left < 0) this.Left = 0;
@@ -690,6 +708,7 @@ namespace Desktop_Frames
             {
                 ApplyChanges();
                 SaveChangesToJson();
+                _appliedToJson = true;
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
                     $"Applied text format changes for frame '{_frame.Title}' (form remains open)");
@@ -726,7 +745,6 @@ namespace Desktop_Frames
         {
             try
             {
-               // RestoreOriginalValues();
                 _result = false;
                 Close();
 
@@ -738,6 +756,21 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
                     $"Error cancelling: {ex.Message}");
                 Close();
+            }
+        }
+
+        /// <summary>
+        /// Covers every non-Save exit path (Cancel button, ✕, Escape, Alt+F4): if Apply
+        /// already pushed changes to the TextBox and JSON, revert both to the values
+        /// captured when the dialog opened, so Cancel-after-Apply really cancels.
+        /// </summary>
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            if (!_result && _appliedToJson)
+            {
+                RestoreOriginalValues();
+                SaveOriginalValuesToJson();
             }
         }
         #endregion
@@ -833,6 +866,32 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
                     $"Error saving changes to frame data: {ex.Message}");
                 throw;
+            }
+        }
+
+        /// <summary>Writes the open-time values back to the frame JSON (undo for Apply).</summary>
+        private void SaveOriginalValuesToJson()
+        {
+            try
+            {
+                string textColorValue = (string.IsNullOrEmpty(_originalTextColor) || _originalTextColor == "Default")
+                    ? null : _originalTextColor;
+                string wordWrapValue = _originalWordWrap.ToString().ToLower();
+                string spellCheckValue = _originalSpellCheck.ToString().ToLower();
+
+                Framemanager.UpdateFrameProperty(_frame, "NoteFontSize", _originalFontSize ?? "Medium", $"NoteFontSize restored to '{_originalFontSize ?? "Medium"}'");
+                Framemanager.UpdateFrameProperty(_frame, "NoteFontFamily", _originalFontFamily ?? "Segoe UI", $"NoteFontFamily restored to '{_originalFontFamily ?? "Segoe UI"}'");
+                Framemanager.UpdateFrameProperty(_frame, "TextColor", textColorValue, $"TextColor restored to '{textColorValue}'");
+                Framemanager.UpdateFrameProperty(_frame, "WordWrap", wordWrapValue, $"WordWrap restored to '{wordWrapValue}'");
+                Framemanager.UpdateFrameProperty(_frame, "SpellCheck", spellCheckValue, $"SpellCheck restored to '{spellCheckValue}'");
+
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
+                    $"Reverted applied text format changes for frame '{_frame.Title}' on cancel");
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
+                    $"Error reverting applied text format changes: {ex.Message}");
             }
         }
 

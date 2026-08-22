@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -21,11 +20,10 @@ public partial class EditShortcutWindow : Window
     private TextBox argumentsBox;
     private Button _saveButton;
 
-    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
-    private static extern uint ExtractIconEx(string szFileName, int nIconIndex, IntPtr[] phiconLarge, IntPtr[] phiconSmall, uint nIcons);
-
-    [DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr hIcon);
+    // One WScript.Shell COM instance shared by all shortcut reads/writes in this dialog
+    // (previously five separate COM activations per dialog lifetime).
+    private dynamic _wshShell;
+    private dynamic WshShell => _wshShell ??= Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
 
     public EditShortcutWindow(string shortcutPath, string currentDisplayName)
     {
@@ -507,8 +505,7 @@ public partial class EditShortcutWindow : Window
             }
 
             // Fallback to WshShell for .lnk files
-            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-            dynamic shortcut = shell.CreateShortcut(shortcutPath);
+            dynamic shortcut = WshShell.CreateShortcut(shortcutPath);
             return (string)(shortcut.TargetPath ?? "");
         }
         catch (Exception ex)
@@ -522,8 +519,7 @@ public partial class EditShortcutWindow : Window
     {
         try
         {
-            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-            dynamic shortcut = shell.CreateShortcut(shortcutPath);
+            dynamic shortcut = WshShell.CreateShortcut(shortcutPath);
             return (string)(shortcut.Arguments ?? "");
         }
         catch (Exception ex)
@@ -567,8 +563,7 @@ public partial class EditShortcutWindow : Window
             }
 
             // Standard .lnk handling
-            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-            dynamic shortcut = shell.CreateShortcut(shortcutPath);
+            dynamic shortcut = WshShell.CreateShortcut(shortcutPath);
             string iconLocation = (string)(shortcut.IconLocation ?? "");
             return string.IsNullOrEmpty(iconLocation) ? "Default" : iconLocation;
         }
@@ -673,8 +668,7 @@ public partial class EditShortcutWindow : Window
             else
             {
                 // Standard .lnk handling
-                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                dynamic shortcut = WshShell.CreateShortcut(shortcutPath);
                 originalTarget = (string)(shortcut.TargetPath ?? "");
             }
 
@@ -774,11 +768,10 @@ public partial class EditShortcutWindow : Window
             else
             {
                 // Standard .lnk Saving (Keep existing working logic)
-                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                dynamic shortcut = shell.CreateShortcut(shortcutPath);
+                dynamic shortcut = WshShell.CreateShortcut(shortcutPath);
                 shortcut.TargetPath = newTargetPath;
-                string newArguments = argumentsBox?.Text?.Trim() ?? "";
-                if (!string.IsNullOrEmpty(newArguments)) shortcut.Arguments = newArguments;
+                // Always assign: an empty box must clear previously saved arguments.
+                shortcut.Arguments = argumentsBox?.Text?.Trim() ?? "";
 
                 // Handle Working Directory
                 try

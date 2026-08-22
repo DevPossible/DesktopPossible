@@ -24,6 +24,13 @@ namespace Desktop_Frames
         private static SearchFormManager _instance;
         private bool _isClosing = false;
 
+        // Debounce rapid typing so we don't rebuild the results panel (and resolve shell
+        // icons) on every keystroke.
+        private System.Windows.Threading.DispatcherTimer _searchDebounceTimer;
+
+        // Session icon cache: one shell-icon resolution per unique path per window lifetime.
+        private readonly Dictionary<string, ImageSource> _iconCache = new Dictionary<string, ImageSource>(StringComparer.OrdinalIgnoreCase);
+
         // Layout Constants
         private const double WINDOW_WIDTH = 600;
         private const double HEADER_HEIGHT = 50; // Height of search box area
@@ -125,6 +132,16 @@ namespace Desktop_Frames
             _searchBox.TextChanged += OnSearchTextChanged;
             _searchBox.PreviewKeyDown += OnSearchKeyDown;
 
+            _searchDebounceTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(150)
+            };
+            _searchDebounceTimer.Tick += (s, e) =>
+            {
+                _searchDebounceTimer.Stop();
+                RunSearch();
+            };
+
             searchContainer.Children.Add(_watermark);
             searchContainer.Children.Add(_searchBox);
             Grid.SetRow(searchContainer, 0);
@@ -203,6 +220,7 @@ namespace Desktop_Frames
         {
             base.OnClosed(e);
             _isClosing = true;
+            _searchDebounceTimer?.Stop();
             if (_instance == this) _instance = null;
         }
 
@@ -256,10 +274,24 @@ namespace Desktop_Frames
         // --- LOGIC: Search & Animation ---
         private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
         {
-            string query = _searchBox.Text.Trim().ToLower();
-
-            // 1. Toggle Watermark
+            // 1. Toggle Watermark immediately (cheap), then debounce the actual search.
             _watermark.Visibility = string.IsNullOrEmpty(_searchBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+
+            if (string.IsNullOrEmpty(_searchBox.Text.Trim()))
+            {
+                // Empty query: collapse right away, no debounce needed.
+                _searchDebounceTimer.Stop();
+                RunSearch();
+                return;
+            }
+
+            _searchDebounceTimer.Stop();
+            _searchDebounceTimer.Start();
+        }
+
+        private void RunSearch()
+        {
+            string query = _searchBox.Text.Trim().ToLower();
 
             _resultsPanel.Children.Clear();
 
@@ -296,8 +328,13 @@ namespace Desktop_Frames
                     Background = Brushes.Transparent
                 };
 
-                ImageSource iconSrc = Utility.GetShellIcon(match.Path, match.IsFolder);
-                if (iconSrc == null) iconSrc = new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
+                string iconKey = match.Path ?? "";
+                if (!_iconCache.TryGetValue(iconKey, out ImageSource iconSrc))
+                {
+                    iconSrc = Utility.GetShellIcon(match.Path, match.IsFolder)
+                              ?? new BitmapImage(new Uri("pack://application:,,,/Resources/file-WhiteX.png"));
+                    _iconCache[iconKey] = iconSrc;
+                }
 
                 Image img = new Image { Source = iconSrc, Width = 32, Height = 32, Margin = new Thickness(0, 5, 0, 2) };
 
@@ -373,13 +410,23 @@ namespace Desktop_Frames
         {
             if (e.Key == Key.Escape) this.SafeClose();
 
+            if (e.Key == Key.Enter && _searchDebounceTimer.IsEnabled)
+            {
+                // A search is still pending from the debounce; run it now so Enter acts
+                // on what the user actually typed.
+                _searchDebounceTimer.Stop();
+                RunSearch();
+            }
+
             if (e.Key == Key.Enter && _resultsPanel.Children.Count > 0)
             {
                 var firstMatch = _allShortcuts.FirstOrDefault(x => x.Name.ToLower().Contains(_searchBox.Text.Trim().ToLower()));
                 if (firstMatch != null) LaunchResult(firstMatch);
             }
         }
-        private void LaunchResult(SearchResult result)
+        // async void is acceptable here: it is only invoked from UI event handlers and the
+        // entire body is wrapped in try/catch.
+        private async void LaunchResult(SearchResult result)
         {
             if (result == null) return;
 
@@ -401,12 +448,14 @@ namespace Desktop_Frames
                     {
                         finalPath = candidate;
                     }
-                    // B. Deep Search (Subfolders/Tabs)
+                    // B. Deep Search (Subfolders/Tabs) — off the UI thread, lazily
+                    // enumerated so it stops at the first match.
                     else if (System.IO.Directory.Exists(profileShortcuts))
                     {
                         try
                         {
-                            var found = System.IO.Directory.GetFiles(profileShortcuts, fileName, System.IO.SearchOption.AllDirectories).FirstOrDefault();
+                            string found = await System.Threading.Tasks.Task.Run(() =>
+                                System.IO.Directory.EnumerateFiles(profileShortcuts, fileName, System.IO.SearchOption.AllDirectories).FirstOrDefault());
                             if (!string.IsNullOrEmpty(found))
                             {
                                 finalPath = found;

@@ -54,24 +54,10 @@ namespace Desktop_Frames
         {
             try
             {
-                // --- FIX: Prevent WPF from killing the app if this is the first window opened at startup ---
-                var app = System.Windows.Application.Current;
-                ShutdownMode originalMode = ShutdownMode.OnLastWindowClose;
-
-                if (app != null)
-                {
-                    originalMode = app.ShutdownMode;
-                    app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                }
-
+                // App.xaml declares ShutdownMode=OnExplicitShutdown globally, so no
+                // save/set/restore dance is needed to keep WPF alive here.
                 var messageBox = new CustomYesNoMessageBoxWindow(message, title, overrideSound);
                 messageBox.ShowDialog();
-
-                // Restore the original shutdown mode so the app behaves normally afterwards
-                if (app != null)
-                {
-                    app.ShutdownMode = originalMode;
-                }
 
                 return messageBox.DialogResult;
             }
@@ -148,15 +134,7 @@ namespace Desktop_Frames
                 this.Height = dynamicHeight;
 
                 // Set icon
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { }
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 CreateContent();
             }
@@ -408,15 +386,7 @@ namespace Desktop_Frames
                 this.SizeToContent = SizeToContent.Height; // Magic: Pushes the window downwards to fit any amount of text!
 
                 // Set icon
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { }
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 CreateAutoClosingContent();
             }
@@ -687,33 +657,32 @@ namespace Desktop_Frames
                 try
                 {
                     var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                    var resourceStream = assembly.GetManifestResourceStream("Desktop_Frames.Resources.logo1.png");
-                    if (resourceStream != null)
+                    using (var resourceStream = assembly.GetManifestResourceStream("Desktop_Frames.Resources.logo1.png"))
                     {
-                        var bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.StreamSource = resourceStream;
-                        bitmap.EndInit();
-                        logoImage.Source = bitmap;
-                    }
-                    else
-                    {
-                        string exePath = System.Environment.ProcessPath!;
-                        logoImage.Source = Utility.ToImageSource(System.Drawing.Icon.ExtractAssociatedIcon(exePath));
+                        if (resourceStream != null)
+                        {
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad; // decode now so the stream can be disposed
+                            bitmap.StreamSource = resourceStream;
+                            bitmap.EndInit();
+                            bitmap.Freeze();
+                            logoImage.Source = bitmap;
+                        }
+                        else if (DialogIconCache.AppIcon != null)
+                        {
+                            logoImage.Source = DialogIconCache.AppIcon;
+                        }
+                        else
+                        {
+                            logoImage.Visibility = Visibility.Collapsed;
+                        }
                     }
                 }
                 catch
                 {
-                    try
-                    {
-                        string exePath = System.Environment.ProcessPath!;
-                        logoImage.Source = Utility.ToImageSource(System.Drawing.Icon.ExtractAssociatedIcon(exePath));
-                    }
-                    catch
-                    {
-                        // Hide logo if all attempts fail
-                        logoImage.Visibility = Visibility.Collapsed;
-                    }
+                    if (DialogIconCache.AppIcon != null) logoImage.Source = DialogIconCache.AppIcon;
+                    else logoImage.Visibility = Visibility.Collapsed; // Hide logo if all attempts fail
                 }
                 waitStack.Children.Add(logoImage);
 
@@ -831,15 +800,7 @@ namespace Desktop_Frames
                 this.Height = dynamicHeight;
 
                 // Set icon
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { }
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 CreateOKOnlyContent();
             }
@@ -1064,15 +1025,7 @@ namespace Desktop_Frames
                 this.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) this.DragMove(); };
 
                 // Set icon
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { }
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 CreateTabDeleteContent();
             }
@@ -1448,15 +1401,7 @@ namespace Desktop_Frames
                 this.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) this.DragMove(); };
 
                 // Set icon from executable
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { }
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 CreateContent();
             }

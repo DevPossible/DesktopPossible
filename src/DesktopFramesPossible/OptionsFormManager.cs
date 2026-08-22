@@ -50,14 +50,7 @@ namespace Desktop_Frames
                     AllowsTransparency = true
                 };
 
-                try
-                {
-                    _optionsWindow.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions());
-                }
-                catch { }
+                if (DialogIconCache.AppIcon != null) _optionsWindow.Icon = DialogIconCache.AppIcon;
 
                 Border mainBorder = new Border
                 {
@@ -114,6 +107,9 @@ namespace Desktop_Frames
                 mainBorder.Child = mainGrid;
                 _optionsWindow.Content = mainBorder;
                 _optionsWindow.KeyDown += (s, e) => { if (e.Key == Key.Enter) SaveOptions(); else if (e.Key == Key.Escape) _optionsWindow.Close(); };
+                // Drop the static references once the dialog is gone so the whole visual tree
+                // (and everything its controls capture) can be collected.
+                _optionsWindow.Closed += (s, e) => { _tabControl = null; _optionsWindow = null; };
                 // Pause Here:
                 AutoOrganizeManager.Pause();
 
@@ -125,11 +121,10 @@ namespace Desktop_Frames
                 finally
                 {
                     IsOpen = false;
+                    // Resume in the finally so an exception during the dialog can't leave
+                    // Auto-Organize permanently paused.
+                    AutoOrganizeManager.Resume();
                 }
-
-                // Resume Here:
-                AutoOrganizeManager.Resume();
-
             }
             catch (Exception ex)
             {
@@ -1260,6 +1255,7 @@ namespace Desktop_Frames
                     BackupManager.CreateBackup($"{ts}_backup_reset", silent: true);
 
                     // 2. Wipe Profile-Specific Folders
+                    var failedFolders = new List<string>();
                     foreach (string f in new[] { "Temp Shortcuts", "Shortcuts", "Last Frame Deleted", "CopiedItem" })
                     {
                         string p = ProfileManager.GetProfileFilePath(f);
@@ -1270,7 +1266,12 @@ namespace Desktop_Frames
                                 System.IO.Directory.Delete(p, true);
                                 System.IO.Directory.CreateDirectory(p); // Recreate empty folder
                             }
-                            catch { }
+                            catch (Exception dirEx)
+                            {
+                                failedFolders.Add(f);
+                                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Error,
+                                    $"Factory reset: failed to wipe folder '{f}' ({p}): {dirEx.Message}");
+                            }
                         }
                     }
 
@@ -1283,7 +1284,11 @@ namespace Desktop_Frames
                     System.IO.File.WriteAllText(oj, "{}");
 
                     // 4. Force a clean OS-level restart (Guarantees all UI clears properly)
-                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Factory Reset complete.\nThe application will now restart.", "Reset Successful");
+                    // Surface any folders that could not be wiped instead of pretending success.
+                    string resetMessage = failedFolders.Count == 0
+                        ? "Factory Reset complete.\nThe application will now restart."
+                        : $"Factory Reset completed with warnings.\nCould not fully clear: {string.Join(", ", failedFolders)}.\nSee the log for details. The application will now restart.";
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm(resetMessage, failedFolders.Count == 0 ? "Reset Successful" : "Reset Incomplete");
 
                     string appPath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo

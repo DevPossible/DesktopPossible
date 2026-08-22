@@ -52,6 +52,10 @@ namespace Desktop_Frames
         private Button _btnSave;
         private bool _isCtrlPressed = false;
 
+        // Captured at open so the live tint/color preview can be undone on Cancel/Close.
+        private string _originalCustomColor;
+        private int? _originalTintOverride;
+
         // Valid options from existing code
         private readonly string[] _validColors = { "Red", "Green", "Teal", "Blue", "Bismark", "White", "Beige", "Gray", "Black", "Purple", "Fuchsia", "Yellow", "Orange" };
         private readonly string[] _validEffects = { "Zoom", "Bounce", "FadeOut", "SlideUp", "Rotate", "Agitate", "GrowAndFly", "Pulse", "Elastic", "Flip3D", "Spiral", "Shockwave", "Matrix", "Supernova", "Teleport" };
@@ -70,8 +74,50 @@ namespace Desktop_Frames
         {
 			// Get the most current frame data from Framemanager to avoid stale references
 			_frame = GetCurrentFrameData(frame);
+            CaptureOriginalTintAndColor();
             InitializeComponent();
             LoadCurrentValues();
+        }
+
+        /// <summary>Capture the frame's tint/color as they were at open, so the live
+        /// preview (PreviewTransparency) can be rolled back if the user cancels.</summary>
+        private void CaptureOriginalTintAndColor()
+        {
+            try { _originalCustomColor = _frame.CustomColor?.ToString(); } catch { _originalCustomColor = null; }
+            _originalTintOverride = null;
+            try
+            {
+                string t = _frame.CustomTint?.ToString();
+                if (!string.IsNullOrWhiteSpace(t) && int.TryParse(t, out int tv))
+                    _originalTintOverride = Math.Max(0, Math.Min(100, tv));
+            }
+            catch { }
+        }
+
+        /// <summary>Reapply the open-time tint/color to the frame window (undoes the live preview).</summary>
+        private void RestoreTintPreview()
+        {
+            try
+            {
+                string frameId = _frame.Id?.ToString();
+                if (string.IsNullOrEmpty(frameId)) return;
+                var win = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>()
+                    .FirstOrDefault(w => w.Tag?.ToString() == frameId);
+                if (win == null) return;
+
+                string effColor = (!string.IsNullOrEmpty(_originalCustomColor) && _originalCustomColor != "Default")
+                    ? _originalCustomColor
+                    : SettingsManager.SelectedColor;
+                Utility.ApplyTintAndColorToFrame(win, effColor, _originalTintOverride);
+            }
+            catch { }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            // Cancel/close without Save or Apply: undo any live tint/color preview.
+            if (!_result) RestoreTintPreview();
         }
         #endregion
 
@@ -102,16 +148,8 @@ namespace Desktop_Frames
                 this.Background = new SolidColorBrush(Color.FromRgb(248, 249, 250));
                 this.ResizeMode = ResizeMode.NoResize;
 
-                // Set icon from executable
-                try
-                {
-                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                        System.Drawing.Icon.ExtractAssociatedIcon(Process.GetCurrentProcess().MainModule.FileName).Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions()
-                    );
-                }
-                catch { } // Ignore icon loading errors
+                // Set icon from executable (cached; avoids leaking an HICON per dialog open)
+                if (DialogIconCache.AppIcon != null) this.Icon = DialogIconCache.AppIcon;
 
                 // Main container with modern card design
                 Border mainCard = new Border
@@ -1057,7 +1095,7 @@ namespace Desktop_Frames
         /// <summary>
         /// Commits changes to ALL frames globally and updates their runtime UI
         /// </summary>
-        private async void ApplyChangesToAll()
+        private void ApplyChangesToAll()
         {
             try
             {
@@ -1085,8 +1123,8 @@ namespace Desktop_Frames
 
                 var windows = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>().ToList();
 
-                // --- PHASE 1: INSTANT VISUAL UPDATE ---
-                // We update the screen first before touching the heavy JSON data engine
+                // Single sequential pass per frame: update visuals, then persist. The target
+                // frame is passed explicitly instead of temporarily swapping _frame.
                 foreach (dynamic targetFrame in allFrames)
                 {
                     string frameId = targetFrame.Id?.ToString();
@@ -1095,65 +1133,41 @@ namespace Desktop_Frames
                     var win = windows.FirstOrDefault(w => w.Tag?.ToString() == frameId);
                     if (win != null)
                     {
-                        var originalFrame = _frame;
-                        _frame = targetFrame;
-
                         ApplyFrameBorderSettings(win);
-                        ApplyTitleSettings(win);
+                        ApplyTitleSettings(win, targetFrame);
                         ApplyCustomColorSetting(win);
 
                         string itemsType = targetFrame.ItemsType?.ToString();
                         if (itemsType == "Note")
                         {
-                            ApplyNoteSettings(win);
+                            ApplyNoteSettings(win, targetFrame);
                         }
                         else
                         {
-                            ApplyIconSettings(win);
+                            ApplyIconSettings(win, targetFrame);
                         }
-
-                        _frame = originalFrame;
                     }
+
+                    Framemanager.UpdateFrameProperty(targetFrame, "CustomColor", customColor, "Global Apply: CustomColor updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "CustomLaunchEffect", customLaunchEffect, "Global Apply: CustomLaunchEffect updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "FrameBorderColor", frameBorderColor, "Global Apply: FrameBorderColor updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "FrameBorderThickness", frameBorderThickness, "Global Apply: FrameBorderThickness updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "CustomTint", customTint, "Global Apply: CustomTint updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "TitleTextColor", titleTextColor, "Global Apply: TitleTextColor updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "TitleTextSize", titleTextSize, "Global Apply: TitleTextSize updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "BoldTitleText", boldTitleText, "Global Apply: BoldTitleText updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "IconSize", iconSize, "Global Apply: IconSize updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "IconSpacing", iconSpacing, "Global Apply: IconSpacing updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "TextColor", textColor, "Global Apply: TextColor updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "DisableTextShadow", disableTextShadow, "Global Apply: DisableTextShadow updated");
+                    Framemanager.UpdateFrameProperty(targetFrame, "GrayscaleIcons", grayscaleIcons, "Global Apply: GrayscaleIcons updated");
                 }
-
-                // Force the UI to repaint the new visuals immediately
-                await System.Threading.Tasks.Task.Delay(10); // A short delay forces the WPF render thread to flush
-
-                // --- PHASE 2: BACKGROUND DATA SAVE ---
-                // Offload the massive JSON disk writes to a background queue so the UI never freezes
-                await System.Threading.Tasks.Task.Run(() =>
-                {
-                    foreach (dynamic targetFrame in allFrames)
-                    {
-                        string frameId = targetFrame.Id?.ToString();
-                        if (string.IsNullOrEmpty(frameId)) continue;
-
-                        // Safely execute the writes on the dispatcher, but chunked as Background Priority
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            Framemanager.UpdateFrameProperty(targetFrame, "CustomColor", customColor, "Global Apply: CustomColor updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "CustomLaunchEffect", customLaunchEffect, "Global Apply: CustomLaunchEffect updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "FrameBorderColor", frameBorderColor, "Global Apply: FrameBorderColor updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "FrameBorderThickness", frameBorderThickness, "Global Apply: FrameBorderThickness updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "CustomTint", customTint, "Global Apply: CustomTint updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "TitleTextColor", titleTextColor, "Global Apply: TitleTextColor updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "TitleTextSize", titleTextSize, "Global Apply: TitleTextSize updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "BoldTitleText", boldTitleText, "Global Apply: BoldTitleText updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "IconSize", iconSize, "Global Apply: IconSize updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "IconSpacing", iconSpacing, "Global Apply: IconSpacing updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "TextColor", textColor, "Global Apply: TextColor updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "DisableTextShadow", disableTextShadow, "Global Apply: DisableTextShadow updated");
-                            Framemanager.UpdateFrameProperty(targetFrame, "GrayscaleIcons", grayscaleIcons, "Global Apply: GrayscaleIcons updated");
-                        }, System.Windows.Threading.DispatcherPriority.Background);
-                    }
-                });
 
                 _result = true;
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error applying changes to all frames: {ex.Message}");
-                // Throw removed intentionally to avoid unhandled exception crashes in async void
             }
         }
 
@@ -1492,7 +1506,7 @@ namespace Desktop_Frames
                 if (win != null)
                 {
                     ApplyFrameBorderSettings(win);
-                    ApplyTitleSettings(win);
+                    ApplyTitleSettings(win, _frame);
                     ApplyCustomColorSetting(win);
 
                     // --- CHANGED LOGIC START ---
@@ -1501,12 +1515,12 @@ namespace Desktop_Frames
                     if (itemsType == "Note")
                     {
                         // Explicitly update Note visuals
-                        ApplyNoteSettings(win);
+                        ApplyNoteSettings(win, _frame);
                     }
                     else
                     {
                         // Update Icon visuals
-                        ApplyIconSettings(win);
+                        ApplyIconSettings(win, _frame);
 
                         // Portal Details view shares text color + grayscale — refresh it too.
                         if (itemsType == "Portal") Framemanager.RefreshPortalDetails(frameId);
@@ -1525,11 +1539,11 @@ namespace Desktop_Frames
 
         // In CustomizeFrameFormManager.cs
 
-        private void ApplyNoteSettings(NonActivatingWindow win)
+        private void ApplyNoteSettings(NonActivatingWindow win, dynamic frame)
         {
             try
             {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Refreshing Note visuals for frame '{_frame.Title}'");
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Refreshing Note visuals for frame '{frame.Title}'");
 
                 var border = win.Content as Border;
                 var dockPanel = border?.Child as DockPanel;
@@ -1545,15 +1559,15 @@ namespace Desktop_Frames
                         // This ensures the visual update uses exactly what the user just clicked "Save" on,
                         // ignoring any stale data in the global list.
 
-                        // 1. Clone properties from the original _frame into a dictionary
+                        // 1. Clone properties from the target frame into a dictionary
                         var effectiveFrame = new Dictionary<string, object>();
                         try
                         {
                             IDictionary<string, object> originalDict = null;
                             // Handle JObject vs ExpandoObject
-                            if (_frame is Newtonsoft.Json.Linq.JObject jObj)
+                            if (frame is Newtonsoft.Json.Linq.JObject jObj)
                                 originalDict = jObj.ToObject<Dictionary<string, object>>();
-                            else if (_frame is IDictionary<string, object> dict)
+                            else if (frame is IDictionary<string, object> dict)
                                 originalDict = dict;
 
                             if (originalDict != null)
@@ -1632,7 +1646,7 @@ namespace Desktop_Frames
             }
         }
 
-        private void ApplyTitleSettings(NonActivatingWindow win)
+        private void ApplyTitleSettings(NonActivatingWindow win, dynamic frame)
         {
             try
             {
@@ -1676,12 +1690,12 @@ namespace Desktop_Frames
                     }
                     else
                     {
-                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Could not find title Label in titleGrid for frame '{_frame.Title}'");
+                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Could not find title Label in titleGrid for frame '{frame.Title}'");
                     }
                 }
                 else
                 {
-                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Could not find titleGrid for frame '{_frame.Title}'");
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Could not find titleGrid for frame '{frame.Title}'");
                 }
             }
             catch (Exception ex)
@@ -1714,17 +1728,18 @@ namespace Desktop_Frames
             }
         }
 
-        private void ApplyIconSettings(NonActivatingWindow win)
+        private void ApplyIconSettings(NonActivatingWindow win, dynamic frame)
         {
             try
             {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Refreshing icons for frame '{_frame.Title}' to apply icon settings");
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Refreshing icons for frame '{frame.Title}' to apply icon settings");
 
                 var wrapPanel = FindVisualChild<System.Windows.Controls.WrapPanel>(win);
                 if (wrapPanel != null)
                 {
                     var FrameData = Framemanager.GetFrameData();
-                    dynamic currentFrame = FrameData.FirstOrDefault(f => f.Id?.ToString() == _frame.Id?.ToString());
+                    string targetId = frame.Id?.ToString();
+                    dynamic currentFrame = FrameData.FirstOrDefault(f => f.Id?.ToString() == targetId);
 
                     if (currentFrame != null)
                     {
