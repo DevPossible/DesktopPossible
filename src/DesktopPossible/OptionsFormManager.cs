@@ -62,7 +62,6 @@ namespace Desktop_Frames
                 Grid mainGrid = new Grid();
                 mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(40) }); // Header
                 mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Content
-                mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) }); // Footer
 
                 // Header
                 Border headerBorder = new Border { Background = new SolidColorBrush(_userAccentColor), Height = 40 };
@@ -101,15 +100,21 @@ namespace Desktop_Frames
                 headerBorder.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) _optionsWindow.DragMove(); };
 
                 CreateTabContent(mainGrid);
-                CreateFooter(mainGrid);
+                WireApplyOnChange();
 
                 mainGrid.Children.Add(headerBorder);
                 mainBorder.Child = mainGrid;
                 _optionsWindow.Content = mainBorder;
-                _optionsWindow.KeyDown += (s, e) => { if (e.Key == Key.Enter) SaveOptions(); else if (e.Key == Key.Escape) _optionsWindow.Close(); };
+                _optionsWindow.KeyDown += (s, e) => { if (e.Key == Key.Enter || e.Key == Key.Escape) _optionsWindow.Close(); };
                 // Drop the static references once the dialog is gone so the whole visual tree
                 // (and everything its controls capture) can be collected.
-                _optionsWindow.Closed += (s, e) => { _tabControl = null; _optionsWindow = null; };
+                _optionsWindow.Closed += (s, e) =>
+                {
+                    FlushPendingApply();
+                    if (_hotkeysChangedWhileOpen)
+                        MessageBoxesManager.ShowOKOnlyMessageBoxForm("Global Hotkey changes have been saved and applied to all profiles.\n\nPlease restart DesktopPossible to activate the new shortcuts.", "Restart Required");
+                    _tabControl = null; _optionsWindow = null;
+                };
                 // Pause Here:
                 AutoOrganizeManager.Pause();
 
@@ -935,9 +940,43 @@ namespace Desktop_Frames
             p.Children.Add(g);
         }
 
-        // --- SAVING ---
-        private static void SaveOptions()
+        // --- APPLYING ---
+        // There is no Save/Cancel: every control change is applied (and persisted) immediately.
+        // Changes are coalesced through a short timer so slider drags don't re-apply per pixel.
+        private static System.Windows.Threading.DispatcherTimer _applyTimer;
+        private static bool _hotkeysChangedWhileOpen;
+
+        private static void WireApplyOnChange()
         {
+            _hotkeysChangedWhileOpen = false;
+            _applyTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _applyTimer.Tick += (s, e) => { _applyTimer.Stop(); ApplyOptions(); };
+
+            // Routed events bubble up from every CheckBox/RadioButton/ComboBox/Slider in the tabs.
+            _optionsWindow.AddHandler(System.Windows.Controls.Primitives.ToggleButton.ClickEvent, new RoutedEventHandler((s, e) => ScheduleApply()));
+            _optionsWindow.AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent, new SelectionChangedEventHandler((s, e) => { if (e.OriginalSource is ComboBox) ScheduleApply(); }));
+            _optionsWindow.AddHandler(System.Windows.Controls.Primitives.RangeBase.ValueChangedEvent, new RoutedPropertyChangedEventHandler<double>((s, e) => { if (e.OriginalSource is Slider) ScheduleApply(); }));
+        }
+
+        private static void ScheduleApply()
+        {
+            if (_applyTimer == null) return;
+            _applyTimer.Stop();
+            _applyTimer.Start();
+        }
+
+        private static void FlushPendingApply()
+        {
+            if (_applyTimer == null) return;
+            bool pending = _applyTimer.IsEnabled;
+            _applyTimer.Stop();
+            _applyTimer = null;
+            if (pending) ApplyOptions();
+        }
+
+        private static void ApplyOptions()
+        {
+            if (_tabControl == null) return;
             try
             {
                 bool tempPortalImageState = SettingsManager.ShowBackgroundImageOnPortalFrames;
@@ -1014,10 +1053,12 @@ namespace Desktop_Frames
                         // NEW: Desktop Icon Visibility
                         if (cb.Name == "HideDesktopElementsOnStart")
                         {
-                            SettingsManager.HideDesktopElementsOnStart = cb.IsChecked == true;
-
-                            // Immediately apply this state upon saving
-                            DesktopIconManager.SetDesktopIconsVisible(!SettingsManager.HideDesktopElementsOnStart);
+                            bool hideOnStart = cb.IsChecked == true;
+                            if (SettingsManager.HideDesktopElementsOnStart != hideOnStart)
+                            {
+                                SettingsManager.HideDesktopElementsOnStart = hideOnStart;
+                                DesktopIconManager.SetDesktopIconsVisible(!hideOnStart);
+                            }
                         }
                         if (cb.Name == "HideDesktopElementsOnAllFramesHide") SettingsManager.HideDesktopElementsOnAllFramesHide = cb.IsChecked == true;
                         if (cb.Name == "ToggleDesktopIconsOnDoubleClick") SettingsManager.ToggleDesktopIconsOnDoubleClick = cb.IsChecked == true;
@@ -1112,10 +1153,9 @@ namespace Desktop_Frames
 
                 if (hotkeysChanged)
                 {
-                    // Propagate the new hotkeys across all existing profiles
+                    // Propagate the new hotkeys across all existing profiles; the restart notice is shown once on close.
                     SettingsManager.BroadcastHotkeysToAllProfiles();
-
-                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Global Hotkey changes have been saved and applied to all profiles.\n\nPlease restart DesktopPossible to activate the new shortcuts.", "Restart Required");
+                    _hotkeysChangedWhileOpen = true;
                 }
 
                 // 5. Smart Desktop (Auto-Organize)
@@ -1186,7 +1226,8 @@ namespace Desktop_Frames
                     SettingsManager.EnableBackgroundValidationLogging = false;
 
                 SettingsManager.SetEnabledLogCategories(newEnabledCategories);
-                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.Settings, "Options saved successfully");
+                SettingsManager.SaveSettings();
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.Settings, "Options applied");
 
                 if (tempPortalImageState != newPortalWatermarkState) TrayManager.reloadallFrames();
                 TrayManager.Instance?.UpdateTrayIcon();
@@ -1205,29 +1246,12 @@ namespace Desktop_Frames
 
                 // --- NEW: Broadcast Scrollbar Settings ---
                 Framemanager.RefreshScrollbarSettings();
-
-                _optionsWindow.Close();
             }
             catch (Exception ex)
             {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Settings, $"Error saving options: {ex.Message}");
-                MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Error: {ex.Message}", "Save Error");
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.Settings, $"Error applying options: {ex.Message}");
+                MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Error: {ex.Message}", "Options Error");
             }
-        }
-
-        private static void CreateFooter(Grid mainGrid)
-        {
-            Border f = new Border { Background = new SolidColorBrush(Color.FromRgb(248, 249, 250)), BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)), BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(20, 8, 20, 8) };
-            Grid.SetRow(f, 2);
-            StackPanel sp = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-
-            Button c = new Button { Content = "Cancel", Width = 100, Height = 34, FontWeight = FontWeights.Bold, Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 10, 0), Cursor = Cursors.Hand };
-            c.Click += (s, e) => _optionsWindow.Close();
-
-            Button sv = new Button { Content = "Save", Width = 100, Height = 34, FontWeight = FontWeights.Bold, Background = new SolidColorBrush(_userAccentColor), Foreground = Brushes.White, BorderThickness = new Thickness(0), Cursor = Cursors.Hand };
-            sv.Click += (s, e) => SaveOptions();
-
-            sp.Children.Add(c); sp.Children.Add(sv); f.Child = sp; mainGrid.Children.Add(f);
         }
 
         private static void RestoreBackup()
