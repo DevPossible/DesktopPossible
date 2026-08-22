@@ -189,6 +189,33 @@ namespace Desktop_Frames
         }
 
         /// <summary>
+        /// Tries to stamp an item with a specific cell (clamped to the column count).
+        /// Returns false when the cell is occupied by another item — caller falls back
+        /// to PlaceInFirstFreeCell. The item may be a JObject already in the list
+        /// (its own stale cell never blocks) or a not-yet-added IDictionary.
+        /// </summary>
+        public static bool TryPlaceAt(JArray items, object item, (int Col, int Row) cell, int columns)
+        {
+            var jItem = item as JObject;
+            var target = (ClampColumn(Math.Max(0, cell.Col), columns), Math.Max(0, cell.Row));
+            if (OccupiedCells(items, jItem).Contains(target)) return false;
+
+            if (jItem != null)
+            {
+                jItem[ColKey] = target.Item1;
+                jItem[RowKey] = target.Item2;
+                return true;
+            }
+            if (item is IDictionary<string, object> dict)
+            {
+                dict[ColKey] = target.Item1;
+                dict[RowKey] = target.Item2;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Stamps a NEW item (not yet added to the list) with the first free cell.
         /// </summary>
         public static (int Col, int Row) PlaceInFirstFreeCell(JArray items, IDictionary<string, object> newItem, int columns)

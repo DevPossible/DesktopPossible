@@ -7159,14 +7159,44 @@ namespace Desktop_Frames
             }
 
 
+            // FREE ARRANGE: live landing-cell ghost while an external FileDrop hovers the
+            // frame (internal drags have their own displacement preview in
+            // IconDragDropManager; this covers drags coming from Explorer/the desktop).
+            win.DragOver += (sender, e) =>
+            {
+                try
+                {
+                    if (wpcont.FreeArrange && e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                        !IconDragDropManager.IsOleDragFromFrame(frame.Id?.ToString()))
+                    {
+                        IconDragDropManager.ShowExternalDropPreview(wpcont, e.GetPosition(wpcont));
+                    }
+                }
+                catch { }
+            };
+            win.DragLeave += (sender, e) => IconDragDropManager.ClearExternalDropPreview();
+
             win.Drop += (sender, e) =>
             {
                 e.Handled = true;
+
+                // External-drop ghost: capture the landing cell it promised (the first
+                // dropped item goes exactly there via PlaceItemInFreeGrid), then clear it.
+                try
+                {
+                    if (wpcont.FreeArrange && e.Data.GetDataPresent(DataFormats.FileDrop))
+                    {
+                        PendingExternalDropCell = IconDragDropManager.GetExternalDropCell(wpcont, e.GetPosition(wpcont));
+                    }
+                }
+                catch { PendingExternalDropCell = null; }
+                IconDragDropManager.ClearExternalDropPreview();
 
                 // OLE drag that started from THIS frame and was dropped back on it:
                 // no-op — returning None keeps the source item and nothing is added.
                 if (IconDragDropManager.IsOleDragFromFrame(frame.Id?.ToString()))
                 {
+                    PendingExternalDropCell = null;
                     e.Effects = DragDropEffects.None;
                     return;
                 }
@@ -8015,7 +8045,12 @@ namespace Desktop_Frames
                     }
                     else if (targetExists)
                     {
-                        shortcutIcon = Utility.GetShellIcon(targetPath, targetIsFolder);
+                        // The shortcut may declare its own icon (IconLocation) — that is what
+                        // Explorer shows. Only fall back to the target's icon when no custom
+                        // icon is set (TryGetShortcutCustomIcon handles env vars, relative
+                        // paths, and resource indices).
+                        shortcutIcon = IconManager.TryGetShortcutCustomIcon(filePath, targetPath)
+                                       ?? Utility.GetShellIcon(targetPath, targetIsFolder);
                     }
                     else
                     {
@@ -8263,6 +8298,15 @@ namespace Desktop_Frames
         /// <param name="frame">The destination frame.</param>
         /// <param name="targetList">The destination item list (main Items or a tab's Items).</param>
         /// <param name="newItem">The item: an IDictionary (new, not yet added) or a JObject (already in the list).</param>
+        /// <summary>
+        /// Set by the frame drop handler when an external FileDrop lands on a
+        /// free-arrange frame: the grid cell under the cursor. Consumed (once) by
+        /// PlaceItemInFreeGrid so the first dropped item lands where the user pointed
+        /// (matching the drag-over ghost); additional items in the same drop get
+        /// first-free cells. Same-thread handoff only (drop handlers run on the UI thread).
+        /// </summary>
+        internal static (int Col, int Row)? PendingExternalDropCell;
+
         public static void PlaceItemInFreeGrid(dynamic frame, JArray targetList, object newItem)
         {
             try
@@ -8270,6 +8314,14 @@ namespace Desktop_Frames
                 if (targetList == null || newItem == null || !IsFreeArrange(frame)) return;
 
                 int columns = GetFreeArrangeColumns(frame);
+
+                // Honor the cursor cell from an external drop when it is free.
+                if (PendingExternalDropCell is (int, int) preferred)
+                {
+                    PendingExternalDropCell = null; // single use — extra items flow first-free
+                    if (GridLayout.TryPlaceAt(targetList, newItem, preferred, columns)) return;
+                }
+
                 if (newItem is JObject jItem)
                     GridLayout.PlaceInFirstFreeCell(targetList, jItem, columns);
                 else if (newItem is IDictionary<string, object> dictItem)
@@ -9193,18 +9245,12 @@ namespace Desktop_Frames
                 {
                     try
                     {
-                        dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                        dynamic shortcut = shell.CreateShortcut(filePath);
-                        if (!string.IsNullOrEmpty((string?)shortcut.IconLocation) && (string)shortcut.IconLocation != ",0")
-                        {
-                            string[] iconParts = ((string)shortcut.IconLocation).Split(',');
-                            string iconPath = iconParts[0];
-                            int iconIndex = 0;
-                            if (iconParts.Length == 2 && int.TryParse(iconParts[1], out int parsedIndex)) iconIndex = parsedIndex;
-
-                            if (System.IO.File.Exists(iconPath))
-                                newIcon = IconManager.ExtractIconFromFile(iconPath, iconIndex);
-                        }
+                        // Route through the shared resolver (env-var expansion, relative
+                        // paths, last-comma split, resource IDs) — the previous inline
+                        // Split(',') + File.Exists parse silently failed on
+                        // "%SystemRoot%\...\shell32.dll,N" style IconLocations and the
+                        // icon then fell back to the target's icon below.
+                        newIcon = IconManager.TryGetShortcutCustomIcon(filePath, targetPath);
                     }
                     catch { }
 
@@ -10712,24 +10758,12 @@ namespace Desktop_Frames
                             newIcon = IconManager.ExtractIconFromFile(urlIcon.Path, urlIcon.Index);
                         }
                     }
-                    // B. Try WshShell for .lnk
+                    // B. Custom shortcut icon for .lnk — shared resolver (env vars, relative
+                    // paths, resource IDs); the previous inline parse failed on
+                    // "%SystemRoot%\..." IconLocations and fell through to the target icon.
                     else if (isLnk)
                     {
-                        try
-                        {
-                            dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
-                            dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                            if (!string.IsNullOrEmpty((string?)shortcut.IconLocation) && (string)shortcut.IconLocation != ",0")
-                            {
-                                string[] parts = ((string)shortcut.IconLocation).Split(',');
-                                if (System.IO.File.Exists(parts[0]))
-                                {
-                                    int idx = 0;
-                                    if (parts.Length > 1) int.TryParse(parts[1], out idx);
-                                    newIcon = IconManager.ExtractIconFromFile(parts[0], idx);
-                                }
-                            }
-                        }
+                        try { newIcon = IconManager.TryGetShortcutCustomIcon(shortcutPath, freshTargetPath); }
                         catch { }
                     }
 

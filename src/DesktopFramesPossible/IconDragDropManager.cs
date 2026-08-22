@@ -42,6 +42,9 @@ namespace Desktop_Frames
 
         private static WrapPanel _sourceWrapPanel = null;
         private static Window _dragPreviewWindow = null;
+        // DPI scale of the source window, captured at drag start; used to convert the
+        // physical-pixel cursor position into DIPs for the preview window's Left/Top.
+        private static double _dragPreviewDpiScale = 1.0;
         private static System.Windows.Point _lastDropIndicatorPosition = new System.Windows.Point(-1, -1);
         private static int _lastDropIndicatorIndex = -1;
 
@@ -849,6 +852,79 @@ namespace Desktop_Frames
             }
         }
 
+        #region External drop preview (OLE drags from outside the app onto a free-arrange frame)
+
+        private static Border _externalGhost;
+
+        /// <summary>
+        /// The cell an external FileDrop would land in at the given panel point:
+        /// the hovered cell when free, otherwise the first free cell (row-major) —
+        /// mirroring PlaceItemInFreeGrid's placement so the ghost never lies.
+        /// </summary>
+        public static (int Col, int Row) GetExternalDropCell(FreeGridPanel panel, System.Windows.Point panelPoint)
+        {
+            var occupied = new HashSet<(int, int)>();
+            foreach (UIElement child in panel.Children)
+            {
+                if (child is StackPanel sp)
+                {
+                    int c = FreeGridPanel.GetGridCol(sp), r = FreeGridPanel.GetGridRow(sp);
+                    if (c >= 0 && r >= 0) occupied.Add((c, r));
+                }
+            }
+
+            int columns = Math.Max(1, panel.Columns);
+            var hover = GridLayout.CellFromPoint(panelPoint.X, panelPoint.Y, panel.CellWidth, panel.CellHeight, columns);
+            if (!occupied.Contains(hover)) return hover;
+
+            for (int idx = 0; ; idx++)
+            {
+                var cell = (idx % columns, idx / columns);
+                if (!occupied.Contains(cell)) return cell;
+            }
+        }
+
+        /// <summary>Shows/moves the dashed landing-cell ghost during an external drag-over.</summary>
+        public static void ShowExternalDropPreview(FreeGridPanel panel, System.Windows.Point panelPoint)
+        {
+            try
+            {
+                if (panel == null || !panel.FreeArrange) return;
+
+                var cell = GetExternalDropCell(panel, panelPoint);
+                if (_externalGhost == null || !ReferenceEquals(_externalGhost.Parent, panel))
+                {
+                    ClearExternalDropPreview();
+                    _externalGhost = new Border
+                    {
+                        BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 0, 150, 255)),
+                        BorderThickness = new Thickness(2),
+                        CornerRadius = new CornerRadius(6),
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 150, 255)),
+                        IsHitTestVisible = false,
+                        Tag = "ExternalDropGhost"
+                    };
+                    panel.Children.Add(_externalGhost);
+                }
+                FreeGridPanel.SetGridCol(_externalGhost, cell.Col);
+                FreeGridPanel.SetGridRow(_externalGhost, cell.Row);
+            }
+            catch { }
+        }
+
+        /// <summary>Removes the external drag-over ghost (DragLeave/Drop).</summary>
+        public static void ClearExternalDropPreview()
+        {
+            try
+            {
+                if (_externalGhost?.Parent is Panel parent) parent.Children.Remove(_externalGhost);
+            }
+            catch { }
+            _externalGhost = null;
+        }
+
+        #endregion
+
         private static void CreateDragPreview(StackPanel originalIcon)
         {
             try
@@ -860,7 +936,21 @@ namespace Desktop_Frames
                 }
 
                 NonActivatingWindow parentWindow = FindVisualParent<NonActivatingWindow>(originalIcon);
-                double dpiScale = parentWindow != null ? GetDpiScaleFactor(parentWindow) : 1.0;
+                // Per-window DPI (correct on mixed-DPI multi-monitor setups); cached for the
+                // whole drag so UpdateDragPreviewPosition converts screen pixels -> DIPs with
+                // the same factor (it previously hardcoded 1.0, putting the preview far from
+                // the cursor on scaled displays).
+                double dpiScale = 1.0;
+                try
+                {
+                    if (parentWindow != null)
+                    {
+                        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(parentWindow);
+                        dpiScale = dpi.DpiScaleX;
+                    }
+                }
+                catch { dpiScale = parentWindow != null ? GetDpiScaleFactor(parentWindow) : 1.0; }
+                _dragPreviewDpiScale = dpiScale;
 
                 _dragPreviewWindow = new Window
                 {
@@ -949,7 +1039,10 @@ namespace Desktop_Frames
         {
             if (_dragPreviewWindow != null)
             {
-                double dpiScale = 1.0; // Simplified for speed, usually sufficient
+                // screenPosition is physical pixels (GetCursorPos); Window.Left/Top are DIPs.
+                // Use the DPI scale captured at drag start (was hardcoded 1.0, which threw the
+                // preview off by the scale factor on high-DPI displays).
+                double dpiScale = _dragPreviewDpiScale;
                 _dragPreviewWindow.Left = (screenPosition.X / dpiScale) + 10;
                 _dragPreviewWindow.Top = (screenPosition.Y / dpiScale) - 10;
             }
