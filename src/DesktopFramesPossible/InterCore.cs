@@ -36,6 +36,11 @@ namespace Desktop_Frames
         private static string _lastTriggerValue;
         // ------------------------------------
 
+        // Hotkey handler delegates kept in fields so Cleanup() unsubscribes the SAME instances
+        // that Initialize() subscribed (a fresh lambda would unsubscribe nothing).
+        private static EventHandler _dancePartyHandler;
+        private static EventHandler _gravityDropHandler;
+
         #endregion
 
         #region Public Methods
@@ -46,8 +51,10 @@ namespace Desktop_Frames
             try
             {
                 // REGISTER HOTKEYS from GlobalHotkeyManager
-                GlobalHotkeyManager.DancePartyTriggered += (s, e) => ActivateDanceParty();
-                GlobalHotkeyManager.GravityDropTriggered += (s, e) => ActivateGravityDrop();
+                _dancePartyHandler = (s, e) => ActivateDanceParty();
+                _gravityDropHandler = (s, e) => ActivateGravityDrop();
+                GlobalHotkeyManager.DancePartyTriggered += _dancePartyHandler;
+                GlobalHotkeyManager.GravityDropTriggered += _gravityDropHandler;
 
                 // --- NEW: Start Registry Listener ---
                 _registryMonitor = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
@@ -71,9 +78,17 @@ namespace Desktop_Frames
                 _sparkleOverlay?.Close();
                 _originalIconPositions.Clear();
 
-                // Unsubscribe to prevent leaks
-                GlobalHotkeyManager.DancePartyTriggered -= (s, e) => ActivateDanceParty();
-                GlobalHotkeyManager.GravityDropTriggered -= (s, e) => ActivateGravityDrop();
+                // Unsubscribe the SAME delegate instances we subscribed in Initialize()
+                if (_dancePartyHandler != null)
+                {
+                    GlobalHotkeyManager.DancePartyTriggered -= _dancePartyHandler;
+                    _dancePartyHandler = null;
+                }
+                if (_gravityDropHandler != null)
+                {
+                    GlobalHotkeyManager.GravityDropTriggered -= _gravityDropHandler;
+                    _gravityDropHandler = null;
+                }
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, "InterCore system cleaned up");
             }
@@ -946,20 +961,26 @@ namespace Desktop_Frames
         private static void PlaySweepSound()
         {
             if (SettingsManager.EnableSounds == false) return;
-            try
+
+            // PlaySync on a worker thread: the async Play() returned before playback finished and
+            // the using blocks disposed the stream/player, truncating the sound.
+            System.Threading.Tasks.Task.Run(() =>
             {
-                using (Stream soundStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Desktop_Frames.Resources.sweep-sound-effect-240243.wav"))
+                try
                 {
-                    if (soundStream != null)
+                    using (Stream soundStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Desktop_Frames.Resources.sweep-sound-effect-240243.wav"))
                     {
-                        using (SoundPlayer player = new SoundPlayer(soundStream)) { player.Play(); }
+                        if (soundStream != null)
+                        {
+                            using (SoundPlayer player = new SoundPlayer(soundStream)) { player.PlaySync(); }
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error playing sound: {ex.Message}");
-            }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error playing sound: {ex.Message}");
+                }
+            });
         }
     }
 }

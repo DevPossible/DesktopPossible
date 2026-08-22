@@ -57,8 +57,10 @@ namespace DesktopFrames
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+
+        private const uint SMTO_ABORTIFHUNG = 0x0002;
 
         // ── State ────────────────────────────────────────────────────────────
         private static IntPtr _hookHandle = IntPtr.Zero;
@@ -96,10 +98,20 @@ namespace DesktopFrames
         // ── Hook callback ────────────────────────────────────────────────────
         private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && (int)wParam == WM_LBUTTONDOWN)
+            // Guard the whole body: an exception must never prevent CallNextHookEx
+            // (Windows silently drops misbehaving low-level hooks).
+            try
             {
-                var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                HandleClick(data.pt, data.time);
+                if (nCode >= 0 && (int)wParam == WM_LBUTTONDOWN)
+                {
+                    var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    HandleClick(data.pt, data.time);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"DesktopMouseHook: HookCallback error: {ex.Message}");
             }
             return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
         }
@@ -116,21 +128,28 @@ namespace DesktopFrames
                 _lastClickTime = 0;
                 _lastClickPoint = default;
 
-                IntPtr hWnd = WindowFromPoint(pt);
-
-                if (IsDesktopWindow(hWnd) && !HasSelectedDesktopIcon(hWnd))
+                // Classification happens on the dispatcher side so the WH_MOUSE_LL callback
+                // returns instantly and never messages Explorer from inside the hook (a busy
+                // Explorer would otherwise stall ALL system mouse input and get our hook dropped).
+                Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    // FIX: Use BeginInvoke so the mouse hook returns instantly.
-                    // This stops the UI from feeling like it is "following/lagging" your click.
-                    Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    try
                     {
+                        IntPtr hWnd = WindowFromPoint(pt);
+                        if (!IsDesktopWindow(hWnd) || HasSelectedDesktopIcon(hWnd)) return;
+
                         // Fences-style: double-clicking the bare desktop toggles the native icons.
                         if (SettingsManager.ToggleDesktopIconsOnDoubleClick)
                             Desktop_Frames.DesktopIconManager.ToggleDesktopIcons();
 
                         Framemanager.WakeUpFrames();
-                    }));
-                }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                            $"DesktopMouseHook: double-click handling error: {ex.Message}");
+                    }
+                }));
             }
             else
             {
@@ -164,8 +183,13 @@ namespace DesktopFrames
             // We only query the list view itself
             if (sb.ToString() == "SysListView32")
             {
-                int selectedCount = (int)SendMessage(hWnd, LVM_GETSELECTEDCOUNT, IntPtr.Zero, IntPtr.Zero);
-                return selectedCount > 0;
+                // Bounded query: a hung Explorer must not block us (SMTO_ABORTIFHUNG, 50ms).
+                // On timeout/failure assume "no selection" so a bare-desktop double-click still works.
+                if (SendMessageTimeout(hWnd, LVM_GETSELECTEDCOUNT, IntPtr.Zero, IntPtr.Zero,
+                        SMTO_ABORTIFHUNG, 50, out IntPtr result) == IntPtr.Zero)
+                    return false;
+
+                return (int)result > 0;
             }
 
             return false;

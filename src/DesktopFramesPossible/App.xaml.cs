@@ -12,10 +12,11 @@ namespace Desktop_Frames
     {
         private TrayManager _trayManager;
         private TargetChecker _targetChecker;
-        private static Mutex _mutex;
-        private const string UNIQUE_APP_NAME = "Global\\DesktopFramesPossible_Mutex_v1";
 
-
+        // Registry trigger channel reader: a second launch writes a trigger (wake or CMD_DRAW)
+        // to the registry and exits; this instance polls for it once per second.
+        private System.Windows.Threading.DispatcherTimer _triggerPollTimer;
+        private string _lastTriggerValue;
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
@@ -44,33 +45,17 @@ namespace Desktop_Frames
             }
 
             // --- 2. SINGLE INSTANCE PROTECTION START ---
-            bool isNewInstance;
-            _mutex = new Mutex(true, UNIQUE_APP_NAME, out isNewInstance);
+            // Named mutex acquired here and held for the process lifetime; exactly one of two
+            // simultaneous launches wins. The loser hands off via the registry trigger and exits.
+            bool isNewInstance = SingleInstanceChecker.TryAcquireSingleInstance();
 
             // Only exit if it's not a new instance AND the user hasn't explicitly disabled the check
             if (!isNewInstance && !SettingsManager.DisableSingleInstance)
             {
-                // --- DEBUGGING GHOSTS START ---
-                try
-                {
-                    string debugLog = $"[{DateTime.Now}] Instance 2 Started.\n";
-                    debugLog += $"Args (e.Args): {string.Join(" | ", e.Args)}\n";
-                    debugLog += $"Args (Environment): {string.Join(" | ", Environment.GetCommandLineArgs())}\n";
+                bool isDrawCommand = e.Args.Any(arg => arg.IndexOf("-create", StringComparison.OrdinalIgnoreCase) >= 0)
+                                     || Environment.GetCommandLineArgs().Any(arg => arg.IndexOf("-create", StringComparison.OrdinalIgnoreCase) >= 0);
 
-                    bool isDrawCommand = e.Args.Any(arg => arg.IndexOf("-create", StringComparison.OrdinalIgnoreCase) >= 0)
-                                         || Environment.GetCommandLineArgs().Any(arg => arg.IndexOf("-create", StringComparison.OrdinalIgnoreCase) >= 0);
-
-                    if (isDrawCommand)
-                    {
-                        RegistryHelper.WriteTrigger($"CMD_DRAW|{Guid.NewGuid()}");
-                    }
-                    else
-                    {
-                        RegistryHelper.WriteTrigger(null);
-                    }
-                }
-                catch { }
-                // --- DEBUGGING GHOSTS END ---
+                SingleInstanceChecker.HandleDuplicateInstance(isDrawCommand ? $"CMD_DRAW|{Guid.NewGuid()}" : null);
 
                 Shutdown();
                 return;
@@ -86,10 +71,8 @@ namespace Desktop_Frames
                     $"Startup: Working Directory set to {ProfileManager.CurrentProfileDir}");
 
                 // 3. Continue Normal Startup
+                // (Settings were already loaded above, right after the profile directory was set.)
                 {
-                    // Initialize settings (Now loads from Profile/options.json)
-                    SettingsManager.LoadSettings();
-
                     // --- NEW: Self-Heal Context Menu Path ---
                     // Ensures the registry key points to the current EXE location
                     RegistryHelper.RefreshContextMenuPath();
@@ -186,6 +169,17 @@ namespace Desktop_Frames
                     // and periodically thereafter.
                     MemoryOptimizer.Start();
 
+                    // --- Registry trigger channel reader ---
+                    // A second launch (single-instance loser, or the desktop context menu's
+                    // "-create") writes a trigger to the registry and exits. Poll it once per
+                    // second: CMD_DRAW starts draw mode, a plain timestamp wakes hidden frames.
+                    _triggerPollTimer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(1)
+                    };
+                    _triggerPollTimer.Tick += OnTriggerPoll;
+                    _triggerPollTimer.Start();
+
                     // Warm the context-menu subsystems (WPF popup + native shell handlers) once the
                     // UI is idle, so the FIRST right-click of the session isn't jittery.
                     Dispatcher.BeginInvoke(new Action(() =>
@@ -201,8 +195,55 @@ namespace Desktop_Frames
             }
         }
 
+        /// <summary>
+        /// Polls the registry trigger channel written by secondary launches.
+        /// Handles CMD_DRAW (draw a new frame) and the plain wake trigger; the easter-egg
+        /// effects of the old InterCore monitor stay retired.
+        /// </summary>
+        private void OnTriggerPoll(object sender, EventArgs e)
+        {
+            try
+            {
+                string currentValue = RegistryHelper.CheckForTrigger();
+
+                // Empty registry -> reset memory so the next trigger is accepted.
+                if (string.IsNullOrEmpty(currentValue))
+                {
+                    _lastTriggerValue = null;
+                    return;
+                }
+
+                // Debounce: identical to the last processed value -> ignore.
+                if (currentValue == _lastTriggerValue) return;
+                _lastTriggerValue = currentValue;
+
+                if (currentValue.StartsWith("CMD_DRAW", StringComparison.Ordinal))
+                {
+                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
+                        $"Trigger received: Draw Mode ({currentValue})");
+                    Framemanager.StartDrawMode();
+                }
+                else
+                {
+                    // Timestamp (plain second-launch) -> wake hidden frames so the user sees a response.
+                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
+                        $"Trigger received: Wake Up ({currentValue})");
+                    if (Framemanager._areFramesAutoHidden)
+                        Framemanager.WakeUpFrames();
+                }
+
+                RegistryHelper.DeleteTrigger();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"Trigger poll error: {ex.Message}");
+            }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            _triggerPollTimer?.Stop();
             InterCore.Cleanup();
             try
             {

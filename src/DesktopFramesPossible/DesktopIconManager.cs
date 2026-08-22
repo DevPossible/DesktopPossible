@@ -165,7 +165,12 @@ namespace Desktop_Frames
 
         private static void ShowDot()
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            // Safety check for early startup or late shutdown (mirrors HideDot); also guard the
+            // ProcessExit path, where the dispatcher may already be shutting down.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            dispatcher.Invoke(() =>
             {
                 if (_dotWindow == null)
                 {
@@ -226,9 +231,12 @@ namespace Desktop_Frames
         private static void HideDot()
         {
             // --- BUG FIX: Safety check for early startup or late shutdown ---
-            if (Application.Current == null || Application.Current.Dispatcher == null) return;
+            // Also guard the ProcessExit path: invoking on a dispatcher that has begun shutting
+            // down would throw/hang during teardown.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
 
-            Application.Current.Dispatcher.Invoke(() =>
+            dispatcher.Invoke(() =>
             {
                 if (_dotWindow != null && _dotWindow.IsVisible)
                 {

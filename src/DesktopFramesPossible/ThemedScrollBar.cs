@@ -12,15 +12,36 @@ namespace Desktop_Frames
     {
         private static string Hex(Color c, byte a) => $"#{a:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
 
+        // Marker key stamped into every dictionary we produce, so a re-apply can find and remove
+        // the previously merged one instead of accumulating dictionaries per re-apply.
+        private const string MarkerKey = "__ThemedScrollBarDictionary";
+
+        // Parsed dictionaries cached per thumb colour hex — XamlReader.Parse is expensive and the
+        // same handful of frame colours repeat; sharing one instance across scopes is safe in WPF.
+        private static readonly System.Collections.Generic.Dictionary<string, ResourceDictionary> _dictCache =
+            new System.Collections.Generic.Dictionary<string, ResourceDictionary>();
+
         /// <summary>Merges an implicit ScrollBar style (thumb derived from <paramref name="c"/>) into scope.Resources.</summary>
         public static void Apply(FrameworkElement scope, Color c)
         {
             if (scope == null) return;
             try
             {
-                string xaml = Xaml.Replace("%THUMB%", Hex(c, 0x66));
-                var dict = (ResourceDictionary)System.Windows.Markup.XamlReader.Parse(xaml);
-                scope.Resources.MergedDictionaries.Add(dict);
+                string thumb = Hex(c, 0x66);
+                if (!_dictCache.TryGetValue(thumb, out var dict))
+                {
+                    string xaml = Xaml.Replace("%THUMB%", thumb);
+                    dict = (ResourceDictionary)System.Windows.Markup.XamlReader.Parse(xaml);
+                    dict[MarkerKey] = true;
+                    _dictCache[thumb] = dict;
+                }
+
+                var merged = scope.Resources.MergedDictionaries;
+                for (int i = merged.Count - 1; i >= 0; i--)
+                {
+                    if (merged[i].Contains(MarkerKey)) merged.RemoveAt(i);
+                }
+                merged.Add(dict);
             }
             catch { }
         }

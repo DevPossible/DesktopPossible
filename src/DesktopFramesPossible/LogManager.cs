@@ -44,8 +44,28 @@ namespace Desktop_Frames
             {
                 lock (_logLock)
                 {
+                    RotateDiagIfNeeded();
                     System.IO.File.AppendAllText(_diagFilePath, $"{DateTime.Now:HH:mm:ss.fff} {message}\n");
                 }
+            }
+            catch { }
+        }
+
+        /// <summary>Caps portal_diag.log at the same 5MB as the main log (rolls to a single .old file).</summary>
+        private static void RotateDiagIfNeeded()
+        {
+            const long maxFileSize = 5 * 1024 * 1024; // 5MB, same cap as the main log
+
+            try
+            {
+                if (!System.IO.File.Exists(_diagFilePath)) return;
+
+                var fileInfo = new FileInfo(_diagFilePath);
+                if (fileInfo.Length <= maxFileSize) return;
+
+                string oldPath = _diagFilePath + ".old";
+                if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
+                System.IO.File.Move(_diagFilePath, oldPath);
             }
             catch { }
         }

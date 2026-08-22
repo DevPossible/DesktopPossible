@@ -12,7 +12,7 @@ namespace Desktop_Frames
     {
         #region Win32 API - DWM Cloaking Detection
         [DllImport("dwmapi.dll")]
-        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out bool pvAttribute, int cbAttribute);
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
@@ -133,9 +133,9 @@ namespace Desktop_Frames
         {
             try
             {
-                bool cloaked;
-                int result = DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, sizeof(bool));
-                return result == 0 && cloaked;
+                // DWMWA_CLOAKED returns a DWORD flag set (nonzero = cloaked); cbAttribute must be 4.
+                int result = DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out int cloaked, sizeof(int));
+                return result == 0 && cloaked != 0;
             }
             catch
             {

@@ -137,9 +137,9 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate,
                     $"Copying item: {displayName} from {filePath}");
 
-                // Set up copy folder path - similar to BackupManager._lastDeletedFolderPath pattern
-                string exeDir = System.AppContext.BaseDirectory;
-                _copiedItemFolderPath = Path.Combine(exeDir, "CopiedItem");
+                // Set up copy folder path under the current profile (per-profile convention;
+                // also keeps portable installs writable — the exe dir may be Program Files).
+                _copiedItemFolderPath = Path.Combine(ProfileManager.CurrentProfileDir, "CopiedItem");
 
                 // Ensure the copy folder exists - BackupManager pattern
                 if (!Directory.Exists(_copiedItemFolderPath))
@@ -242,9 +242,9 @@ namespace Desktop_Frames
                 string displayName = pastedItem["DisplayName"]?.ToString() ??
                     Path.GetFileNameWithoutExtension(originalFileName);
 
-                // Generate unique filename for the new shortcut
-                string exeDir = System.AppContext.BaseDirectory;
-                string shortcutsDir = Path.Combine(exeDir, "Shortcuts");
+                // Generate unique filename for the new shortcut (per-profile Shortcuts folder,
+                // matching the relative "Shortcuts\..." Filename convention below)
+                string shortcutsDir = Path.Combine(ProfileManager.CurrentProfileDir, "Shortcuts");
 
                 if (!Directory.Exists(shortcutsDir))
                 {
@@ -374,8 +374,7 @@ namespace Desktop_Frames
         {
             try
             {
-                string exeDir = System.AppContext.BaseDirectory;
-                _copiedItemFolderPath = Path.Combine(exeDir, "CopiedItem");
+                _copiedItemFolderPath = Path.Combine(ProfileManager.CurrentProfileDir, "CopiedItem");
 
                 if (Directory.Exists(_copiedItemFolderPath))
                 {
@@ -425,8 +424,7 @@ namespace Desktop_Frames
                 }
 
                 // Verify files still exist - BackupManager validation pattern
-                string exeDir = System.AppContext.BaseDirectory;
-                string copiedItemPath = Path.Combine(exeDir, "CopiedItem");
+                string copiedItemPath = Path.Combine(ProfileManager.CurrentProfileDir, "CopiedItem");
                 string jsonPath = Path.Combine(copiedItemPath, "CopiedItem.json");
 
                 bool folderExists = Directory.Exists(copiedItemPath);

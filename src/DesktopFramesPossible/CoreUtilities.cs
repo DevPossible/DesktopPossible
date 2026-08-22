@@ -392,7 +392,14 @@ namespace Desktop_Frames
             if (string.IsNullOrEmpty(path))
                 return path;
 
-            return path.Trim().Replace("\\\\", "\\");
+            path = path.Trim();
+
+            // Preserve the UNC prefix (\\server\share): collapse doubled separators only
+            // after the first two characters.
+            if (path.Length <= 2)
+                return path;
+
+            return path.Substring(0, 2) + path.Substring(2).Replace("\\\\", "\\");
         }
         #endregion
 

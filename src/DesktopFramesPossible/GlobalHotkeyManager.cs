@@ -161,27 +161,68 @@ namespace Desktop_Frames
         }
         #endregion
 
+        #region Modifier Parsing (culture-safe, allocation-free per keystroke)
+
+        /// <summary>
+        /// Parses a comma-separated modifier string (e.g. "Control, Alt") into the bitmask used
+        /// throughout this class: Ctrl=1, Alt=2, Shift=4, Win=8. Culture-invariant (ordinal,
+        /// case-insensitive) so Turkish-family locales don't break "shift"/"win" matching.
+        /// Returns -1 for a null/whitespace string (no valid configuration).
+        /// Pure function — safe to call from tests.
+        /// </summary>
+        public static int ParseModifierMask(string modifierString)
+        {
+            if (string.IsNullOrWhiteSpace(modifierString)) return -1;
+
+            int mask = 0;
+            if (modifierString.Contains("ctrl", StringComparison.OrdinalIgnoreCase) ||
+                modifierString.Contains("control", StringComparison.OrdinalIgnoreCase)) mask |= 1;
+            if (modifierString.Contains("alt", StringComparison.OrdinalIgnoreCase)) mask |= 2;
+            if (modifierString.Contains("shift", StringComparison.OrdinalIgnoreCase)) mask |= 4;
+            if (modifierString.Contains("win", StringComparison.OrdinalIgnoreCase)) mask |= 8;
+            return mask;
+        }
+
+        // Configured modifier strings change only when settings change, so parse each distinct
+        // string once and reuse the mask on every keystroke (no ToLower()/Contains allocations
+        // in the hook). Only ever touched from the hook callback thread.
+        private static readonly System.Collections.Generic.Dictionary<string, int> _modifierMaskCache =
+            new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
+
+        private static int GetModifierMaskCached(string modifierString)
+        {
+            if (modifierString == null) return -1;
+            if (!_modifierMaskCache.TryGetValue(modifierString, out int mask))
+            {
+                mask = ParseModifierMask(modifierString);
+                _modifierMaskCache[modifierString] = mask;
+            }
+            return mask;
+        }
+
+        /// <summary>Current pressed-modifier bitmask (Ctrl=1, Alt=2, Shift=4, Win=8).</summary>
+        private static int GetPressedModifierMask()
+        {
+            int mask = 0;
+            if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) mask |= 1;
+            if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) mask |= 2;
+            if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) mask |= 4;
+            if ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0) mask |= 8;
+            return mask;
+        }
+
+        #endregion
+
         #region Private Methods
         /// <summary>
-        /// Strictly parses comma-separated modifiers (e.g. "Control, Alt") 
-        /// and ensures ONLY those modifiers are pressed.
+        /// Strictly checks the configured comma-separated modifiers (e.g. "Control, Alt"):
+        /// ONLY those modifiers may be pressed.
         /// </summary>
         private static bool CheckModifiersStrict(string modifierString)
         {
-            if (string.IsNullOrWhiteSpace(modifierString)) return false;
-            string mod = modifierString.ToLower();
-
-            bool requireCtrl = mod.Contains("ctrl") || mod.Contains("control");
-            bool requireAlt = mod.Contains("alt");
-            bool requireShift = mod.Contains("shift");
-            bool requireWin = mod.Contains("win");
-
-            bool isCtrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-            bool isAlt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-            bool isShift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            bool isWin = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
-
-            return (requireCtrl == isCtrl) && (requireAlt == isAlt) && (requireShift == isShift) && (requireWin == isWin);
+            int required = GetModifierMaskCached(modifierString);
+            if (required < 0) return false;
+            return GetPressedModifierMask() == required;
         }
 
         /// <summary>
@@ -352,13 +393,11 @@ namespace Desktop_Frames
                         int triggerKey = SettingsManager.SpotSearchKey;
                         if (vkCode == triggerKey)
                         {
-                            string mod = SettingsManager.SpotSearchModifier?.ToLower();
-                            bool isModPressed = false;
-
-                            if (mod == "control") isModPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-                            else if (mod == "alt") isModPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-                            else if (mod == "shift") isModPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-                            else if (mod == "none") isModPressed = true;
+                            // Culture-safe: parse the configured modifier once (cached bitmask) instead
+                            // of a per-keystroke ToLower() string compare.
+                            int requiredMod = GetModifierMaskCached(SettingsManager.SpotSearchModifier);
+                            bool isModPressed = requiredMod == 0 ||
+                                                (requiredMod > 0 && (GetPressedModifierMask() & requiredMod) == requiredMod);
 
                             if (isKeyDown && isModPressed)
                             {
@@ -406,7 +445,7 @@ namespace Desktop_Frames
                                 else
                                     Framemanager.ForceHideFrames();
                             }));
-                            if ((SettingsManager.ToggleFramesModifier ?? "").ToLower().Contains("win")) SuppressStartMenu();
+                            if ((GetModifierMaskCached(SettingsManager.ToggleFramesModifier) & 8) == 8) SuppressStartMenu();
                             return (IntPtr)1; // Swallow so other apps don't process it
                         }
                     }

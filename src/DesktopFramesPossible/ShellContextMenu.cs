@@ -128,6 +128,7 @@ namespace Desktop_Frames
             if (string.IsNullOrEmpty(path)) return;
 
             IntPtr pidl = IntPtr.Zero, parentPtr = IntPtr.Zero, childPidl = IntPtr.Zero, ctxPtr = IntPtr.Zero, hMenu = IntPtr.Zero, hSub = IntPtr.Zero;
+            bool hSubAttached = false; // once attached to hMenu, DestroyMenu(hMenu) destroys hSub too
             IShellFolder parent = null;
             IContextMenu com1 = null;
             HwndSourceHook hook = null;
@@ -182,7 +183,7 @@ namespace Desktop_Frames
                     com1.QueryContextMenu(hSub, 0, idCmdFirst, idCmdLast, qFlags);
                     subPopulated = true;
                 }
-                AppendMenu(hMenu, MF_POPUP, (UIntPtr)(ulong)hSub.ToInt64(), "All Windows options");
+                hSubAttached = AppendMenu(hMenu, MF_POPUP, (UIntPtr)(ulong)hSub.ToInt64(), "All Windows options");
 
                 // Follow the OS light/dark setting for the (classic) menu.
                 ApplyDarkMenus(ownerHwnd);
@@ -271,6 +272,9 @@ namespace Desktop_Frames
             {
                 if (hook != null && ownerSource != null) ownerSource.RemoveHook(hook);
                 _com2 = null; _com3 = null;
+                // If an exception prevented AppendMenu(MF_POPUP) from attaching hSub to hMenu,
+                // hSub is still a standalone menu and must be destroyed separately.
+                if (!hSubAttached && hSub != IntPtr.Zero) DestroyMenu(hSub);
                 if (hMenu != IntPtr.Zero) DestroyMenu(hMenu);
                 if (com1 != null) Marshal.ReleaseComObject(com1);
                 if (parent != null) Marshal.ReleaseComObject(parent);

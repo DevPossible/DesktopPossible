@@ -39,10 +39,8 @@ namespace Desktop_Frames
         public static TrayManager Instance { get; private set; } // Singleton instance
 
         private bool _areFramesTempHidden = false;
-    
-        private List<NonActivatingWindow> _tempHiddenFrames = new List<NonActivatingWindow>();
 
-        private bool Showintray = SettingsManager.ShowInTray;
+        private List<NonActivatingWindow> _tempHiddenFrames = new List<NonActivatingWindow>();
 
         private const int WM_NCLBUTTONDOWN = 0xA1;
 
@@ -54,9 +52,23 @@ namespace Desktop_Frames
 
         private class HiddenFrame
         {
+            public string Id { get; set; }
             public string Title { get; set; }
             public NonActivatingWindow Window { get; set; }
         }
+
+        /// <summary>
+        /// NotifyIcon.Text throws when longer than 63 characters — truncate at every assignment
+        /// site. Pure helper (testable).
+        /// </summary>
+        public static string TruncateTrayText(string text, int maxLength = 63)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxLength) return text;
+            return text.Substring(0, maxLength);
+        }
+
+        private static string BuildTrayText(string profileName) =>
+            TruncateTrayText($"DesktopFrames+Possible ({profileName})");
 
         public void UpdateAutoOrganizeMenuCheck(bool isChecked)
         {
@@ -219,16 +231,18 @@ namespace Desktop_Frames
 
         public void InitializeTray()
         {
-            string exePath = Process.GetCurrentProcess().MainModule.FileName;
+            string exePath = Environment.ProcessPath;
 
             // Dispose old icon if re-initializing to prevent ghosting
             if (_trayIcon != null) { _trayIcon.Visible = false; _trayIcon.Dispose(); }
+            _initialIcon?.Dispose();
+            _initialIcon = Icon.ExtractAssociatedIcon(exePath);
 
             _trayIcon = new NotifyIcon
             {
-                Icon = Icon.ExtractAssociatedIcon(exePath),
+                Icon = _initialIcon,
                 Visible = true,
-                Text = $"DesktopFrames+Possible ({ProfileManager.CurrentProfileName})"
+                Text = BuildTrayText(ProfileManager.CurrentProfileName)
             };
 
             _trayIcon.DoubleClick += OnTrayIconDoubleClick;
@@ -498,9 +512,14 @@ namespace Desktop_Frames
 				frame.Visibility = Visibility.Hidden;
             });
 
-            if (!HiddenFrames.Any(f => f.Title == frame.Title))
+            // Key by frame Id (window Tag) so two hidden frames with the same title are BOTH
+            // tracked and restorable; fall back to Title only when no Id is available.
+            string id = frame.Tag?.ToString();
+            if (string.IsNullOrEmpty(id)) id = frame.Title;
+
+            if (!HiddenFrames.Any(f => f.Id == id))
             {
-                HiddenFrames.Add(new HiddenFrame { Title = frame.Title, Window = frame });
+                HiddenFrames.Add(new HiddenFrame { Id = id, Title = frame.Title, Window = frame });
 				frame.Visibility = System.Windows.Visibility.Hidden;
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Added frame '{frame.Title}' to hidden list");
                 Instance?.UpdateHiddenFramesMenu();
@@ -508,11 +527,12 @@ namespace Desktop_Frames
             }
         }
 
-        public static void ShowHiddenFrame(string title)
+        public static void ShowHiddenFrame(string id)
         {
-            var HiddenFrame = HiddenFrames.FirstOrDefault(f => f.Title == title);
+            var HiddenFrame = HiddenFrames.FirstOrDefault(f => f.Id == id);
             if (HiddenFrame == null) return;
 
+            string title = HiddenFrame.Title;
             try
             {
                 var w = HiddenFrame.Window;
@@ -530,7 +550,10 @@ namespace Desktop_Frames
                     w.Show();
                 });
 
-                var FrameData = Framemanager.GetFrameData().FirstOrDefault(f => f.Title == title);
+                // Match by Id first (duplicate titles must not corrupt each other); Title fallback
+                // covers legacy entries keyed without an Id.
+                var FrameData = Framemanager.GetFrameData().FirstOrDefault(f => f.Id?.ToString() == id)
+                                ?? Framemanager.GetFrameData().FirstOrDefault(f => f.Title == title);
                 if (FrameData != null)
                 {
                     Framemanager.UpdateFrameProperty(FrameData, "IsHidden", "false", $"Showed frame '{title}'");
@@ -572,7 +595,7 @@ namespace Desktop_Frames
             foreach (var frame in HiddenFrames)
             {
                 var menuItem = new ToolStripMenuItem(frame.Title);
-                menuItem.Click += (s, e) => ShowHiddenFrame(frame.Title);
+                menuItem.Click += (s, e) => ShowHiddenFrame(frame.Id);
                 _showHiddenFramesItem.DropDownItems.Add(menuItem);
             }
         }
@@ -607,7 +630,7 @@ namespace Desktop_Frames
                         ProfileManager.SwitchToProfile(profile.Name);
                         // Update the 'Home' profile so automation reverts to this manual choice later
                         ProfileManager.SetManualBaseProfile(profile.Name);
-                        _trayIcon.Text = $"DesktopFrames+Possible ({profile.Name})";
+                        if (_trayIcon != null) _trayIcon.Text = BuildTrayText(profile.Name);
                         UpdateProfilesMenu();
                     };
                 }
@@ -745,7 +768,7 @@ namespace Desktop_Frames
                 if (enable)
                 {
                     // We wrap the path in quotes to be safe against spaces in path
-                    string exePath = Process.GetCurrentProcess().MainModule.FileName;
+                    string exePath = Environment.ProcessPath;
                     key.SetValue(APP_NAME, $"\"{exePath}\"");
                 }
                 else
@@ -784,12 +807,16 @@ namespace Desktop_Frames
         {
             if (_disposed) return;
             _trayIcon?.Dispose();
+            _initialIcon?.Dispose();
+            _initialIcon = null;
             if (_lastIconHandle != IntPtr.Zero) { DestroyIcon(_lastIconHandle); _lastIconHandle = IntPtr.Zero; }
             _disposed = true;
         }
 
         [DllImport("user32.dll", SetLastError = true)] private static extern bool DestroyIcon(IntPtr hIcon);
         private IntPtr _lastIconHandle = IntPtr.Zero;
+        // The ExtractAssociatedIcon result shown until the first UpdateTrayIcon; disposed on replace.
+        private Icon _initialIcon;
 
         /// <summary>True when the Windows taskbar/system uses the light theme (so we draw a dark glyph).</summary>
         private static bool IsTaskbarLight()
@@ -877,16 +904,22 @@ namespace Desktop_Frames
 
         public void UpdateTrayIcon()
         {
-            if (Showintray == true)
+            if (_trayIcon == null) return;
+
+            // Read the setting live (a startup snapshot would go stale when toggled in Options).
+            if (SettingsManager.ShowInTray)
             {
                 // FIX: Update the tooltip text to match the current profile
-                _trayIcon.Text = $"DesktopFrames+Possible ({ProfileManager.CurrentProfileName})";
+                _trayIcon.Text = BuildTrayText(ProfileManager.CurrentProfileName);
 
                 var newIcon = BuildTrayIcon(HiddenFrames.Count + _tempHiddenFrames.Count);
                 _trayIcon.Icon = newIcon;
                 // Free the previous GDI icon handle (Icon.FromHandle doesn't own it) to avoid a handle leak.
                 if (_lastIconHandle != IntPtr.Zero) DestroyIcon(_lastIconHandle);
                 _lastIconHandle = newIcon.Handle;
+                // The initial ExtractAssociatedIcon icon is no longer displayed — release it.
+                _initialIcon?.Dispose();
+                _initialIcon = null;
                 _trayIcon.Visible = true;
             }
             else

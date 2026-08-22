@@ -120,7 +120,7 @@ namespace Desktop_Frames
                 using (FileStream fs = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
                     imageBytes = new byte[fs.Length];
-                    fs.Read(imageBytes, 0, imageBytes.Length);
+                    fs.ReadExactly(imageBytes, 0, imageBytes.Length);
                 }
 
                 using (MemoryStream ms = new MemoryStream(imageBytes))
