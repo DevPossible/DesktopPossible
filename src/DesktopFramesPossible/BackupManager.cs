@@ -287,7 +287,10 @@ namespace Desktop_Frames
                     Filter = "Frame Files|*.frame;*.fence", // SUPPORT BOTH EXTENSIONS
                     DefaultExt = ".frame", // DEFAULT TO NEW
                     InitialDirectory = Directory.Exists(exportsDir) ? exportsDir : exeDir,
-                    Title = "Select Frame Export File"
+                    Title = "Select Frame Export File",
+                    // Do not let the dialog permanently change the process CWD — legacy
+                    // relative-path code depends on it pointing at the profile folder.
+                    RestoreDirectory = true
                 };
 
                 if (openDialog.ShowDialog() != true) return;
@@ -609,11 +612,54 @@ namespace Desktop_Frames
                 SettingsManager.LastAutoBackupDate = DateTime.Now;
                 SettingsManager.SaveSettings();
 
+                // Retention: without this, daily full copies of Shortcuts accumulate forever
+                // and fill portable/USB deployments.
+                CleanupOldAutoBackups();
+
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, $"Auto-backup completed: {backupFolderName}");
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.ImportExport, $"Auto-backup failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Deletes auto-backup folders beyond the newest 10 for the current profile.
+        /// Only folders matching the auto naming ("*_backup_auto") are touched — manual
+        /// backups are never deleted. Mirrors LogManager.CleanupOldLogs.
+        /// </summary>
+        private static void CleanupOldAutoBackups()
+        {
+            try
+            {
+                string backupsFolderPath = ProfileManager.GetProfileFilePath("Backups");
+                if (!Directory.Exists(backupsFolderPath)) return;
+
+                var oldAutoBackups = Directory.GetDirectories(backupsFolderPath)
+                    .Where(d => Path.GetFileName(d).EndsWith("_backup_auto", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(d => Directory.GetCreationTime(d))
+                    .Skip(10); // Keep the newest 10 auto-backups
+
+                foreach (var oldBackup in oldAutoBackups)
+                {
+                    try
+                    {
+                        Directory.Delete(oldBackup, true);
+                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.ImportExport,
+                            $"Auto-backup retention: deleted old backup {Path.GetFileName(oldBackup)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.ImportExport,
+                            $"Auto-backup retention: failed to delete {oldBackup}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.ImportExport,
+                    $"Auto-backup retention cleanup failed: {ex.Message}");
             }
         }
 
@@ -745,7 +791,7 @@ namespace Desktop_Frames
                 backupContent = backupContent.Replace("\"FenceBorderThickness\"", "\"FrameBorderThickness\"");
                 backupContent = backupContent.Replace("\"frameBorderThickness\"", "\"FrameBorderThickness\"");
 
-                File.WriteAllText(currentFramesPath, backupContent);
+                AtomicFile.WriteAllText(currentFramesPath, backupContent);
 
                 if (Directory.Exists(currentShortcutsPath))
                 {

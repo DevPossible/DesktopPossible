@@ -10,6 +10,12 @@ namespace Desktop_Frames
 {
     public class AutoOrganizeForm : Window
     {
+        /// <summary>True while the Smart Desktop Rules dialog is open. Virtual-desktop
+        /// profile switching is suspended while set (like OptionsFormManager.IsOpen):
+        /// the dialog edits the CURRENT profile's rules, and a switch under it would
+        /// save the old profile's rules into the new profile's file.</summary>
+        public static bool IsOpen { get; private set; }
+
         private ListBox _rulesList;
         private ScrollViewer _editorScroll;
         private StackPanel _editorPanel;
@@ -41,6 +47,7 @@ namespace Desktop_Frames
 
         public AutoOrganizeForm()
         {
+            IsOpen = true;
             AutoOrganizeManager.Pause(); // Pause while editing rules!
                                          // Clone rules for safe editing
             _localRules = AutoOrganizeManager.Rules.Select(r => new OrganizeRule
@@ -117,7 +124,7 @@ namespace Desktop_Frames
             }
             else if (e.Key == Key.Escape)
             {
-                AutoOrganizeManager.Resume();
+                // Resume() runs once in OnClosed for every close path (incl. Alt-F4).
                 DialogResult = false;
                 Close();
                 e.Handled = true;
@@ -178,7 +185,7 @@ namespace Desktop_Frames
 
             closeButton.MouseEnter += (s, e) => closeButton.Background = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
             closeButton.MouseLeave += (s, e) => closeButton.Background = Brushes.Transparent;
-            closeButton.Click += (s, e) => { AutoOrganizeManager.Resume(); DialogResult = false; Close(); };
+            closeButton.Click += (s, e) => { DialogResult = false; Close(); };
 
             headerGrid.Children.Add(titleText);
             headerGrid.Children.Add(closeButton);
@@ -389,7 +396,7 @@ namespace Desktop_Frames
             Button closeButton = CreateModernSecondaryButton("Close");
             closeButton.MinWidth = 80;
             closeButton.Margin = new Thickness(0, 0, 10, 0);
-            closeButton.Click += (s, e) => { AutoOrganizeManager.Resume(); DialogResult = false; Close(); };
+            closeButton.Click += (s, e) => { DialogResult = false; Close(); };
 
             Button saveButton = new Button
             {
@@ -653,6 +660,17 @@ namespace Desktop_Frames
 
             // Stay open, but confirm save!
             MessageBoxesManager.ShowOKOnlyMessageBoxForm("Your rules have been saved and applied successfully.", "Saved");
+        }
+
+        /// <summary>
+        /// Single exit point for EVERY close path — buttons, Escape, AND Alt-F4/system
+        /// close (which previously bypassed Resume() and left the watcher paused forever).
+        /// </summary>
+        protected override void OnClosed(EventArgs e)
+        {
+            IsOpen = false;
+            AutoOrganizeManager.Resume();
+            base.OnClosed(e);
         }
     }
 }

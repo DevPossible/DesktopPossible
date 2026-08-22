@@ -208,7 +208,7 @@ namespace Desktop_Frames
                 }
                 catch { /* unreadable — fall through and write */ }
 
-                File.WriteAllText(_activeOptionsPath, formattedJson);
+                AtomicFile.WriteAllText(_activeOptionsPath, formattedJson);
             }
             catch (Exception ex)
             {
@@ -572,7 +572,7 @@ namespace Desktop_Frames
                             data["FadeOutFxTargetAlpha"] = FadeOutFxTargetAlpha;
                             data["FadeOutTime"] = FadeOutTime;
 
-                            File.WriteAllText(optionsFile, JsonConvert.SerializeObject(data, Formatting.Indented));
+                            AtomicFile.WriteAllText(optionsFile, JsonConvert.SerializeObject(data, Formatting.Indented));
                         }
                         catch (Exception ex)
                         {

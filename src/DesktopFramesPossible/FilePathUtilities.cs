@@ -366,6 +366,13 @@ namespace Desktop_Frames
 
                 try
                 {
+                    // Resolve relative item paths against the ACTIVE PROFILE folder explicitly.
+                    // Relying on the process CWD is unsafe: any file dialog silently changes it,
+                    // which would turn every relative path "dead" and mass-delete items.
+                    string resolvedPath = Path.IsPathRooted(filename)
+                        ? filename
+                        : Path.Combine(ProfileManager.CurrentProfileDir, filename);
+
                     bool isShortcut = Path.GetExtension(filename).ToLower() == ".lnk";
 
                     if (isShortcut)
@@ -374,12 +381,12 @@ namespace Desktop_Frames
                         if (isFolder)
                         {
                             // Use existing folder checking logic
-                            targetExists = DoesFolderExist(filename, true);
+                            targetExists = DoesFolderExist(resolvedPath, true);
                         }
                         else
                         {
                             // For file shortcuts, resolve target and check existence
-                            string targetPath = GetShortcutTargetUnicodeSafe(filename);
+                            string targetPath = GetShortcutTargetUnicodeSafe(resolvedPath);
                             targetExists = !string.IsNullOrEmpty(targetPath) &&
                                          (System.IO.File.Exists(targetPath) || Directory.Exists(targetPath));
                         }
@@ -387,10 +394,11 @@ namespace Desktop_Frames
                     else
                     {
                         // Direct file/folder reference
-                        targetExists = isFolder ? Directory.Exists(filename) : System.IO.File.Exists(filename);
+                        targetExists = isFolder ? Directory.Exists(resolvedPath) : System.IO.File.Exists(resolvedPath);
                     }
 
-                    // Remove if target doesn't exist
+                    // Remove ONLY when the target is confirmed missing (checks completed
+                    // without an exception and reported "not found").
                     if (!targetExists)
                     {
                         LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameUpdate,
@@ -405,10 +413,10 @@ namespace Desktop_Frames
                 }
                 catch (Exception ex)
                 {
+                    // A check FAILED — that is not proof the target is missing (transient IO,
+                    // COM hiccup, permissions). Keep the item and log; never delete on error.
                     LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameUpdate,
-                        $"Error checking item '{filename}': {ex.Message}. Removing item.");
-                    items.RemoveAt(i);
-                    removedCount++;
+                        $"Error checking item '{filename}': {ex.Message}. Keeping item.");
                 }
             }
 
@@ -424,9 +432,10 @@ namespace Desktop_Frames
         {
             try
             {
-                // Delete main shortcut file (same logic as manual Remove)
-                string exeDir = System.AppContext.BaseDirectory;
-                string shortcutPath = System.IO.Path.Combine(exeDir, "Shortcuts", System.IO.Path.GetFileName(filename));
+                // Delete main shortcut file from the ACTIVE PROFILE's Shortcuts folder —
+                // the pre-profile-era app root would never contain the actual file.
+                string profileDir = ProfileManager.CurrentProfileDir;
+                string shortcutPath = System.IO.Path.Combine(profileDir, "Shortcuts", System.IO.Path.GetFileName(filename));
 
                 if (System.IO.File.Exists(shortcutPath))
                 {
@@ -444,7 +453,7 @@ namespace Desktop_Frames
                 }
 
                 // Delete backup shortcut if it exists (same logic as manual Remove)
-                string tempShortcutsDir = System.IO.Path.Combine(exeDir, "Temp Shortcuts");
+                string tempShortcutsDir = System.IO.Path.Combine(profileDir, "Temp Shortcuts");
                 string backupPath = System.IO.Path.Combine(tempShortcutsDir, System.IO.Path.GetFileName(filename));
 
                 if (System.IO.File.Exists(backupPath))

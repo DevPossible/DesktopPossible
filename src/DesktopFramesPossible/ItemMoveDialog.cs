@@ -288,7 +288,7 @@ namespace Desktop_Frames
                 if (issourceFrame && !frameHasTabs)
                     continue;
 
-                string frameTitle = frame?.ToString() ?? "Unnamed Frame";
+                string frameTitle = frame.Title?.ToString() ?? "Unnamed Frame";
 
                 if (!frameHasTabs)
                 {
@@ -473,6 +473,23 @@ namespace Desktop_Frames
         }
 
         /// <summary>
+        /// Resolves the "Items" array on a tab/frame JObject, creating AND attaching it
+        /// when it is missing or not a JArray. Returning a detached "?? new JArray()"
+        /// fallback would silently lose every item added to it — only the removal from
+        /// the source would persist.
+        /// </summary>
+        public static JArray GetOrCreateItemsArray(JObject container)
+        {
+            if (container == null) return null;
+
+            if (container["Items"] is JArray items) return items;
+
+            var created = new JArray();
+            container["Items"] = created;
+            return created;
+        }
+
+        /// <summary>
         /// Handles the actual move operation to frame or tab
         /// </summary>
         private static void HandleMoveToTarget(dynamic item, dynamic sourceFrame, dynamic targetFrame,
@@ -523,7 +540,7 @@ namespace Desktop_Frames
                     if (targetTabIndex.Value >= 0 && targetTabIndex.Value < targetTabs.Count)
                     {
                         var targetTab = targetTabs[targetTabIndex.Value] as JObject;
-                        destItems = targetTab?["Items"] as JArray ?? new JArray();
+                        destItems = GetOrCreateItemsArray(targetTab);
                         string tabName = targetTab?["TabName"]?.ToString() ?? $"Tab {targetTabIndex.Value}";
                         destinationDescription = $"tab '{tabName}' in frame '{targetFrame.Title}'";
                     }
@@ -531,7 +548,21 @@ namespace Desktop_Frames
                 else
                 {
                     // Moving to frame main Items
-                    destItems = targetFrame.Items as JArray ?? new JArray();
+                    if (targetFrame is JObject targetFrameObj)
+                    {
+                        destItems = GetOrCreateItemsArray(targetFrameObj);
+                    }
+                    else
+                    {
+                        destItems = targetFrame.Items as JArray;
+                        if (destItems == null)
+                        {
+                            // Missing/non-array Items: create it and ATTACH it to the frame,
+                            // otherwise the item would be added to a detached array and lost.
+                            destItems = new JArray();
+                            targetFrame.Items = destItems;
+                        }
+                    }
                     destinationDescription = $"main area of frame '{targetFrame.Title}'";
                 }
 

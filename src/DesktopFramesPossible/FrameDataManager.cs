@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -220,37 +221,10 @@ namespace Desktop_Frames
 
                     // ====================================================================
                     // [LEGACY "FENCES" MIGRATION - DO NOT REMOVE]
-                    // The Ultimate Interceptor: Forces old or accidentally generated 
+                    // The Ultimate Interceptor: Forces old or accidentally generated
                     // "Fence" keys into official "Frame" keys RIGHT BEFORE saving to disk.
                     // ====================================================================
-                    void ConsolidateKey(string officialKey, string[] legacyKeys)
-                    {
-                        object rescuedValue = null;
-
-                        // Extract valid data from old keys and delete them permanently
-                        foreach (string oldKey in legacyKeys)
-                        {
-                            if (frameDict.ContainsKey(oldKey))
-                            {
-                                if (frameDict[oldKey] != null && frameDict[oldKey].ToString() != "0" && frameDict[oldKey].ToString() != "")
-                                {
-                                    rescuedValue = frameDict[oldKey];
-                                }
-                                frameDict.Remove(oldKey); // Vacuum it out
-                            }
-                        }
-
-                        // Apply rescued data to the official key if it doesn't already have a valid setting
-                        bool hasValidOfficial = frameDict.ContainsKey(officialKey) && frameDict[officialKey] != null && frameDict[officialKey].ToString() != "0" && frameDict[officialKey].ToString() != "";
-
-                        if (!hasValidOfficial && rescuedValue != null)
-                        {
-                            frameDict[officialKey] = rescuedValue;
-                        }
-                    }
-
-                    ConsolidateKey("FrameBorderColor", new[] { "FrameBorderColor", "FrameBorderColor" });
-                    ConsolidateKey("FrameBorderThickness", new[] { "FrameBorderThickness", "FrameBorderThickness" });
+                    ConsolidateLegacyKeys(frameDict);
 
                     // Apply simple format consistency
                     ApplyFormatConsistency(frameDict);
@@ -259,7 +233,7 @@ namespace Desktop_Frames
                 }
 
                 string formattedJson = JsonConvert.SerializeObject(serializedData, Formatting.Indented);
-                File.WriteAllText(_jsonFilePath, formattedJson);
+                AtomicFile.WriteAllText(_jsonFilePath, formattedJson);
 
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.Settings,
                     $"Saved frames.json with consistent formatting for {serializedData.Count} frames");
@@ -328,6 +302,46 @@ namespace Desktop_Frames
         #endregion
 
         #region Simple Migration and Validation - Internal Use
+
+        /// <summary>
+        /// [LEGACY "FENCES" MIGRATION - DO NOT REMOVE]
+        /// Folds legacy "Fence"/camelCase border keys into the official "Frame" keys.
+        /// Only null legacy values are discarded — "0" and "" are legitimate settings
+        /// (e.g. border thickness 0) and are preserved.
+        /// Used by: SaveFrameData (right before serializing each frame)
+        /// Category: Data Migration (Simple)
+        /// </summary>
+        public static void ConsolidateLegacyKeys(IDictionary<string, object> frameDict)
+        {
+            void ConsolidateKey(string officialKey, string[] legacyKeys)
+            {
+                object rescuedValue = null;
+
+                // Extract data from old keys and delete them permanently
+                foreach (string oldKey in legacyKeys)
+                {
+                    if (frameDict.ContainsKey(oldKey))
+                    {
+                        if (frameDict[oldKey] != null)
+                        {
+                            rescuedValue = frameDict[oldKey];
+                        }
+                        frameDict.Remove(oldKey); // Vacuum it out
+                    }
+                }
+
+                // Apply rescued data to the official key if it doesn't already have a value
+                bool hasValidOfficial = frameDict.ContainsKey(officialKey) && frameDict[officialKey] != null;
+
+                if (!hasValidOfficial && rescuedValue != null)
+                {
+                    frameDict[officialKey] = rescuedValue;
+                }
+            }
+
+            ConsolidateKey("FrameBorderColor", new[] { "FenceBorderColor", "frameBorderColor" });
+            ConsolidateKey("FrameBorderThickness", new[] { "FenceBorderThickness", "frameBorderThickness" });
+        }
 
 
 
@@ -408,34 +422,54 @@ namespace Desktop_Frames
         /// Used by: ApplySimpleMigrations
         /// Category: Data Validation
         /// </summary>
-        private static bool ValidateDataTypes(IDictionary<string, object> frameDict)
+        public static bool ValidateDataTypes(IDictionary<string, object> frameDict)
         {
             bool modified = false;
 
             if (frameDict.ContainsKey("UnrolledHeight"))
             {
-                if (!double.TryParse(frameDict["UnrolledHeight"]?.ToString(), out double unrolledHeight) || unrolledHeight <= 0)
+                if (!TryGetDouble(frameDict, "UnrolledHeight", out double unrolledHeight) || unrolledHeight <= 0)
                 {
-                    double defaultHeight = frameDict.ContainsKey("Height") ?
-                        Convert.ToDouble(frameDict["Height"]) : 130;
-                    frameDict["UnrolledHeight"] = defaultHeight.ToString();
+                    double defaultHeight = TryGetDouble(frameDict, "Height", out double h) ? h : 130;
+                    frameDict["UnrolledHeight"] = defaultHeight.ToString(CultureInfo.InvariantCulture);
                     modified = true;
                 }
             }
 
-            if (!double.TryParse(frameDict["Width"]?.ToString(), out double width) || width <= 0)
+            if (!TryGetDouble(frameDict, "Width", out double width) || width <= 0)
             {
                 frameDict["Width"] = 230;
                 modified = true;
             }
 
-            if (!double.TryParse(frameDict["Height"]?.ToString(), out double height) || height <= 0)
+            if (!TryGetDouble(frameDict, "Height", out double height) || height <= 0)
             {
                 frameDict["Height"] = 130;
                 modified = true;
             }
 
             return modified;
+        }
+
+        /// <summary>
+        /// Culture-safe numeric read: boxed numerics convert directly; strings parse with
+        /// InvariantCulture (the format the JSON is persisted in), so comma-decimal locales
+        /// can never misread "130.5" as 1305 or reset a valid value.
+        /// </summary>
+        private static bool TryGetDouble(IDictionary<string, object> frameDict, string key, out double value)
+        {
+            value = 0;
+            if (!frameDict.TryGetValue(key, out object raw) || raw == null) return false;
+
+            try
+            {
+                value = Convert.ToDouble(raw, CultureInfo.InvariantCulture);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -472,7 +506,7 @@ namespace Desktop_Frames
         {
             frameDict["IsHidden"] = "false";
             frameDict["IsRolled"] = "false";
-            frameDict["UnrolledHeight"] = frameDict["Height"].ToString();
+            frameDict["UnrolledHeight"] = Convert.ToString(frameDict["Height"], CultureInfo.InvariantCulture);
             frameDict["TabsEnabled"] = "false";
             frameDict["CurrentTab"] = 0;
             frameDict["Tabs"] = new JArray();

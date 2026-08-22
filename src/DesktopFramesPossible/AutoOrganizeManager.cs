@@ -30,6 +30,8 @@ namespace Desktop_Frames
         private static FileSystemWatcher _watcher;
         public static List<OrganizeRule> Rules = new List<OrganizeRule>(); // Expose to the UI
         private static string _rulesFilePath => ProfileManager.GetProfileFilePath("auto_organize.json");
+        // Serializes rule-file writes: background move tasks and the UI can both save.
+        private static readonly object _saveLock = new object();
         private static readonly string _desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
         public static void Initialize()
@@ -53,8 +55,20 @@ namespace Desktop_Frames
 
                 if (SettingsManager.EnableAutoOrganize)
                 {
-                    if (_watcher == null) Start();
-                    else _watcher.EnableRaisingEvents = true;
+                    // Respect an active UI pause: the rules editor (and the Options form)
+                    // paused the watcher and will Resume() it on close — a profile switch
+                    // must not silently un-pause it underneath them.
+                    bool pausedByUi = AutoOrganizeForm.IsOpen || OptionsFormManager.IsOpen;
+
+                    if (_watcher == null)
+                    {
+                        Start();
+                        if (pausedByUi) Pause();
+                    }
+                    else if (!pausedByUi)
+                    {
+                        _watcher.EnableRaisingEvents = true;
+                    }
                 }
                 else
                 {
@@ -86,9 +100,31 @@ namespace Desktop_Frames
 
         public static void SaveRules()
         {
+            SaveRulesSnapshot(Rules, _rulesFilePath);
+        }
+
+        /// <summary>
+        /// Saves a snapshot of the rules taken earlier by a background task. The save is
+        /// skipped when the profile (rules file path) or the rules list changed since the
+        /// snapshot — an in-flight move must never write the OLD profile's rules into the
+        /// NEW profile's file, nor clobber rules the user just saved in the editor.
+        /// </summary>
+        private static void SaveRulesSnapshot(List<OrganizeRule> rules, string rulesFilePath)
+        {
             try
             {
-                File.WriteAllText(_rulesFilePath, JsonConvert.SerializeObject(Rules, Formatting.Indented));
+                lock (_saveLock)
+                {
+                    if (!string.Equals(rulesFilePath, _rulesFilePath, StringComparison.OrdinalIgnoreCase) ||
+                        !ReferenceEquals(rules, Rules))
+                    {
+                        LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
+                            "Auto-Organize: skipped stale rules save (profile or rules changed since snapshot).");
+                        return;
+                    }
+
+                    AtomicFile.WriteAllText(rulesFilePath, JsonConvert.SerializeObject(rules, Formatting.Indented));
+                }
             }
             catch (Exception ex)
             {
@@ -160,6 +196,12 @@ namespace Desktop_Frames
         {
             if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize) return;
 
+            // Snapshot the rules list and its file path at task start: this task runs off
+            // the UI thread and can outlive a profile switch — it must keep working with
+            // (and saving to) the profile that was active when the file event fired.
+            var rulesSnapshot = Rules;
+            string rulesFilePathSnapshot = _rulesFilePath;
+
             string fileName = Path.GetFileName(filePath);
             string ext = Path.GetExtension(filePath).ToLower();
 
@@ -168,13 +210,13 @@ namespace Desktop_Frames
             if (ext == ".lnk" || ext == ".url" || ext == ".crdownload" || ext == ".part" || ext == ".tmp") return;
 
             // Sort rules by priority (lower number = higher priority)
-            var activeRules = Rules.Where(r => r.IsEnabled).OrderBy(r => r.Priority).ToList();
+            var activeRules = rulesSnapshot.Where(r => r.IsEnabled).OrderBy(r => r.Priority).ToList();
 
             foreach (var rule in activeRules)
             {
                 if (DoesFileMatchRule(fileName, rule))
                 {
-                    await ExecuteMoveAsync(filePath, rule);
+                    await ExecuteMoveAsync(filePath, rule, rulesSnapshot, rulesFilePathSnapshot);
                     break; // File processed, stop checking rules
                 }
             }
@@ -205,7 +247,8 @@ namespace Desktop_Frames
             return true;
         }
 
-        private static async Task ExecuteMoveAsync(string sourcePath, OrganizeRule rule)
+        private static async Task ExecuteMoveAsync(string sourcePath, OrganizeRule rule,
+            List<OrganizeRule> rulesSnapshot, string rulesFilePathSnapshot)
         {
             if (!Directory.Exists(rule.TargetFolderPath))
             {
@@ -256,7 +299,9 @@ namespace Desktop_Frames
 
                 // --- SUCCESS TRACKING & NOTIFICATIONS ---
                 rule.LastRun = DateTime.Now;
-                SaveRules(); // Save the new timestamp
+                // Save the new timestamp — against the snapshot taken at task start, so a
+                // profile switch mid-move can never land these rules in the wrong file.
+                SaveRulesSnapshot(rulesSnapshot, rulesFilePathSnapshot);
 
                 if (SettingsManager.EnableAutoOrganizeNotifications)
                 {
@@ -369,6 +414,12 @@ namespace Desktop_Frames
                 catch (IOException)
                 {
                     await Task.Delay(500); // Wait half a second and try again
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Read-only/ACL-guarded file (e.g. AV scanner holding it): retry like a
+                    // lock instead of letting the exception kill the watcher's task.
+                    await Task.Delay(500);
                 }
             }
             return false; // Timed out

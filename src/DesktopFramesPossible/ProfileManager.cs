@@ -232,7 +232,7 @@ namespace Desktop_Frames
                     config["AutomationRules"] = JArray.FromObject(_automationRules);
                 }
 
-                File.WriteAllText(Path.Combine(_appBaseDir, PROFILE_CONFIG_FILE), config.ToString(Formatting.Indented));
+                AtomicFile.WriteAllText(Path.Combine(_appBaseDir, PROFILE_CONFIG_FILE), config.ToString(Formatting.Indented));
             }
             catch (Exception ex)
             {
