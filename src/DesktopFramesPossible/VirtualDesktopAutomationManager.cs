@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
-using WindowsDesktop;
+using System.Runtime.InteropServices;
+using System.Windows.Threading;
 
 namespace Desktop_Frames
 {
@@ -14,36 +15,49 @@ namespace Desktop_Frames
     ///
     /// Enabling the feature applies the mapping immediately for the current
     /// desktop; disabling it switches back to the Default profile.
+    ///
+    /// DETECTION: uses only build-stable surfaces — the documented shell COM API
+    /// IVirtualDesktopManager (to find which desktop the user is on, probed via
+    /// the visible top-level windows) and the Explorer registry keys under
+    /// HKCU\...\Explorer\VirtualDesktops (desktop order and user-given names).
+    /// The undocumented IVirtualDesktopManagerInternal interfaces (and wrapper
+    /// libraries around them) break on new Windows builds — do not reintroduce
+    /// them. Detection polls a DispatcherTimer on the UI thread, mirroring
+    /// AutomationManager's polling pattern, so no cross-thread marshaling is
+    /// needed.
     /// </summary>
     public static class VirtualDesktopAutomationManager
     {
         private const string DefaultProfileName = "Default";
+        private const string VirtualDesktopsKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops";
+        private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
 
-        private static bool _started = false;
-        private static bool _configured = false;
+        private static DispatcherTimer _timer;
+        private static IVirtualDesktopManager _manager;
+        private static Guid _lastDesktopId = Guid.Empty;
 
         public static void Start()
         {
-            // SAFETY: everything wrapped so a COM/interop failure can never take the app down.
+            // SAFETY: everything wrapped so a COM/registry failure can never take the app down.
             try
             {
-                if (_started) return;
+                if (_timer != null) return;
 
                 // Respect the Master Toggle
                 if (!SettingsManager.EnableVirtualDesktopAutomation) return;
 
-                // Virtual desktops are not available on all Windows builds.
-                if (!VirtualDesktop.IsSupported)
+                _manager = CreateManager();
+                if (_manager == null)
                 {
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
-                        "VirtualDesktopAutomation: virtual desktops not supported on this OS build. Automation disabled.");
+                        "VirtualDesktopAutomation: IVirtualDesktopManager unavailable on this system. Automation disabled.");
                     return;
                 }
 
-                if (!EnsureConfigured()) return;
-
-                VirtualDesktop.CurrentChanged += OnCurrentDesktopChanged;
-                _started = true;
+                _lastDesktopId = Guid.Empty; // force an immediate apply on the first tick
+                _timer = new DispatcherTimer { Interval = PollInterval };
+                _timer.Tick += (s, e) => Poll();
+                _timer.Start();
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                     "VirtualDesktopAutomation: started (following virtual desktops by name).");
@@ -51,7 +65,7 @@ namespace Desktop_Frames
                 // Apply immediately for the desktop we are on right now, so enabling the
                 // setting (or app startup with it enabled) takes effect without requiring
                 // a desktop switch first.
-                Dispatch(() => ApplyForDesktop(VirtualDesktop.Current));
+                Poll();
             }
             catch (Exception ex)
             {
@@ -68,65 +82,22 @@ namespace Desktop_Frames
         {
             try
             {
-                if (_started)
-                {
-                    VirtualDesktop.CurrentChanged -= OnCurrentDesktopChanged;
-                }
+                _timer?.Stop();
             }
             catch { }
-            _started = false;
+            _timer = null;
+            _manager = null;
+            _lastDesktopId = Guid.Empty;
 
             if (switchToDefault)
             {
-                Dispatch(() => PerformProfileSwitch(DefaultProfileName));
+                PerformProfileSwitch(DefaultProfileName);
             }
         }
 
-        /// <summary>
-        /// Ensures the VirtualDesktop library is initialized. The library requires
-        /// Configure() before first use (it compiles/caches the OS-build-specific
-        /// COM interop assembly). Returns false when virtual desktops are unavailable.
-        /// </summary>
-        public static bool EnsureConfigured()
-        {
-            try
-            {
-                if (!VirtualDesktop.IsSupported) return false;
-                if (!_configured)
-                {
-                    VirtualDesktop.Configure();
-                    _configured = true;
-                }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
-                    $"VirtualDesktopAutomation: Configure failed: {ex.Message}");
-                return false;
-            }
-        }
-
-        private static void OnCurrentDesktopChanged(object sender, VirtualDesktopChangedEventArgs args)
-        {
-            try
-            {
-                // THREADING: CurrentChanged is raised by the library's COM event sink and may
-                // arrive off the UI thread. ProfileManager.SwitchToProfile manipulates WPF
-                // windows, so the whole evaluation-and-switch is marshaled onto the dispatcher.
-                var desktop = args?.NewDesktop;
-                if (desktop == null) return;
-                Dispatch(() => ApplyForDesktop(desktop));
-            }
-            catch
-            {
-                // Swallow exceptions so the event subscription survives.
-            }
-        }
-
-        /// <summary>Runs on the UI thread. Resolves the desktop's name and activates
-        /// the matching profile (or Default when no profile matches).</summary>
-        private static void ApplyForDesktop(VirtualDesktop desktop)
+        /// <summary>Runs on the UI thread (DispatcherTimer). Detects desktop changes
+        /// and applies the name-based profile mapping.</summary>
+        private static void Poll()
         {
             try
             {
@@ -135,37 +106,88 @@ namespace Desktop_Frames
                     Stop();
                     return;
                 }
-                if (desktop == null) return;
 
-                string desktopName = GetDesktopDisplayName(desktop);
+                Guid current = GetCurrentDesktopId();
+                if (current == Guid.Empty || current == _lastDesktopId) return;
+                _lastDesktopId = current;
+
+                string desktopName = GetDesktopDisplayName(current);
                 if (string.IsNullOrWhiteSpace(desktopName)) return;
 
                 string target = ProfileManager.GetProfiles()
                     .FirstOrDefault(p => p.Name.Equals(desktopName, StringComparison.OrdinalIgnoreCase))?.Name
                     ?? DefaultProfileName;
 
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
+                    $"VirtualDesktopAutomation: now on desktop '{desktopName}' ({current}) -> profile '{target}'.");
+
                 PerformProfileSwitch(target);
             }
-            catch
+            catch (Exception ex)
             {
-                // Swallow exceptions so a bad profile/desktop can never crash the dispatcher.
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General,
+                    $"VirtualDesktopAutomation: poll failed: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// The desktop's user-given name, or "Desktop {position}" when unnamed
-        /// (matching the naming Windows shows in the Win+Tab switcher).
+        /// The current desktop's Guid, found by probing visible top-level windows with
+        /// the documented IVirtualDesktopManager API: the first window that is both
+        /// tracked (non-empty desktop id) and on the current desktop reveals the
+        /// current desktop's id. Returns Guid.Empty when undeterminable this tick
+        /// (e.g. only pinned/shell windows visible) — callers keep the last known id.
         /// </summary>
-        private static string GetDesktopDisplayName(VirtualDesktop desktop)
+        private static Guid GetCurrentDesktopId()
+        {
+            var mgr = _manager;
+            if (mgr == null) return Guid.Empty;
+
+            Guid found = Guid.Empty;
+            NativeMethods.EnumWindows((hwnd, lparam) =>
+            {
+                try
+                {
+                    if (!NativeMethods.IsWindowVisible(hwnd)) return true;
+                    if (mgr.GetWindowDesktopId(hwnd, out Guid id) == 0 && id != Guid.Empty &&
+                        mgr.IsWindowOnCurrentVirtualDesktop(hwnd, out int onCurrent) == 0 && onCurrent == 1)
+                    {
+                        found = id;
+                        return false; // stop enumerating
+                    }
+                }
+                catch { }
+                return true;
+            }, IntPtr.Zero);
+            return found;
+        }
+
+        /// <summary>
+        /// The desktop's user-given name (registry), or "Desktop {position}" when
+        /// unnamed — matching the naming Windows shows in the Win+Tab switcher.
+        /// </summary>
+        private static string GetDesktopDisplayName(Guid desktopId)
         {
             try
             {
-                if (!string.IsNullOrWhiteSpace(desktop.Name)) return desktop.Name;
-
-                var desktops = VirtualDesktop.GetDesktops();
-                for (int i = 0; i < desktops.Length; i++)
+                using (var desktopKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    $@"{VirtualDesktopsKeyPath}\Desktops\{{{desktopId}}}"))
                 {
-                    if (desktops[i].Id == desktop.Id) return $"Desktop {i + 1}";
+                    string name = desktopKey?.GetValue("Name") as string;
+                    if (!string.IsNullOrWhiteSpace(name)) return name;
+                }
+
+                // Unnamed: derive "Desktop {position}" from the ordered id list.
+                using (var rootKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(VirtualDesktopsKeyPath))
+                {
+                    if (rootKey?.GetValue("VirtualDesktopIDs") is byte[] ids && ids.Length >= 16)
+                    {
+                        for (int i = 0; i + 16 <= ids.Length; i += 16)
+                        {
+                            byte[] slice = new byte[16];
+                            Array.Copy(ids, i, slice, 0, 16);
+                            if (new Guid(slice) == desktopId) return $"Desktop {(i / 16) + 1}";
+                        }
+                    }
                 }
             }
             catch { }
@@ -188,15 +210,40 @@ namespace Desktop_Frames
             catch { }
         }
 
-        private static void Dispatch(Action action)
+        private static IVirtualDesktopManager CreateManager()
         {
             try
             {
-                var app = System.Windows.Application.Current;
-                if (app == null) return;
-                app.Dispatcher.BeginInvoke(action);
+                // Documented shell CLSID VirtualDesktopManager — stable across Windows builds.
+                var type = Type.GetTypeFromCLSID(new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A"));
+                if (type == null) return null;
+                return (IVirtualDesktopManager)Activator.CreateInstance(type);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
+                    $"VirtualDesktopAutomation: failed to create IVirtualDesktopManager: {ex.Message}");
+                return null;
+            }
+        }
+
+        [ComImport, Guid("A5CD92FF-29BE-454C-8D04-D82879FB3F1B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IVirtualDesktopManager
+        {
+            [PreserveSig] int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow, out int onCurrentDesktop);
+            [PreserveSig] int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
+            [PreserveSig] int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
+        }
+
+        private static class NativeMethods
+        {
+            public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lparam);
+
+            [DllImport("user32.dll")]
+            public static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lparam);
+
+            [DllImport("user32.dll")]
+            public static extern bool IsWindowVisible(IntPtr hwnd);
         }
     }
 }
