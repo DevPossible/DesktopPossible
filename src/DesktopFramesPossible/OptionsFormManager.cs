@@ -563,11 +563,12 @@ namespace Desktop_Frames
             };
             c.Children.Add(autoCb);
 
-            // Checkbox for Virtual Desktop Automation (Synchronized with Tray)
+            // Checkbox: follow Windows virtual desktops by name (profile "Work" activates
+            // on a desktop named "Work"; unmatched desktops fall back to Default).
             CheckBox vdAutoCb = new CheckBox
             {
                 Name = "EnableVirtualDesktopAutomation",
-                Content = "Enable Virtual Desktop Automation",
+                Content = "Automatically Switch Profiles with Virtual Desktop",
                 IsChecked = SettingsManager.EnableVirtualDesktopAutomation,
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 13,
@@ -578,9 +579,8 @@ namespace Desktop_Frames
                 bool isChecked = vdAutoCb.IsChecked == true;
                 SettingsManager.EnableVirtualDesktopAutomation = isChecked;
                 SettingsManager.SaveSettings(); // Force write to JSON immediately
-                TrayManager.Instance?.UpdateVirtualDesktopAutomationMenuCheck(isChecked);
-                if (isChecked) VirtualDesktopAutomationManager.Start();
-                else VirtualDesktopAutomationManager.Stop();
+                if (isChecked) VirtualDesktopAutomationManager.Start();   // applies current desktop immediately
+                else VirtualDesktopAutomationManager.Stop(switchToDefault: true);
             };
             c.Children.Add(vdAutoCb);
 

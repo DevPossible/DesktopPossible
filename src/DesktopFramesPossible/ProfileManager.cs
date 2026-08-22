@@ -704,30 +704,11 @@ namespace Desktop_Frames
     }
 
 
-    /// <summary>What causes an automation rule to fire.</summary>
-    public enum AutomationTriggerType
-    {
-        Process,        // Foreground process match (AutomationManager)
-        VirtualDesktop  // Windows virtual desktop switch (VirtualDesktopAutomationManager)
-    }
-
     public class AutomationRule
     {
         public string ProcessName { get; set; }
         public string TargetProfile { get; set; }
         public int DelaySeconds { get; set; } = 0;
         public bool IsPersisted { get; set; } = false;
-
-        // Trigger kind. Absent in legacy on-disk JSON, so the property default
-        // (Process) keeps old process-based rules working unchanged.
-        public AutomationTriggerType TriggerType { get; set; } = AutomationTriggerType.Process;
-
-        // Guid string of the Windows virtual desktop (null for process rules).
-        public string VirtualDesktopId { get; set; }
-
-        // Cached display name of the desktop; refreshed from the live desktop
-        // list when resolvable so renames show up, but kept as a fallback so a
-        // deleted desktop's rule can still be displayed (with a "missing" cue).
-        public string VirtualDesktopName { get; set; }
     }
 }

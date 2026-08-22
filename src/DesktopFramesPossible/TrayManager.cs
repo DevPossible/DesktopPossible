@@ -49,7 +49,6 @@ namespace Desktop_Frames
         private const int HT_CAPTION = 0x2;
 
         private ToolStripMenuItem _automationMenuItem; //
-        private ToolStripMenuItem _vdAutomationMenuItem; // Virtual desktop automation toggle
         private ToolStripMenuItem _autoOrganizeMenuItem; // NEW
 
         private class HiddenFrame
@@ -66,18 +65,6 @@ namespace Desktop_Frames
                 if (_automationMenuItem.Checked != isChecked)
                 {
                     _automationMenuItem.Checked = isChecked;
-                }
-            }
-        }
-
-        public void UpdateVirtualDesktopAutomationMenuCheck(bool isChecked)
-        {
-            if (_vdAutomationMenuItem != null)
-            {
-                // This prevents infinite loops by checking the value first
-                if (_vdAutomationMenuItem.Checked != isChecked)
-                {
-                    _vdAutomationMenuItem.Checked = isChecked;
                 }
             }
         }
@@ -274,17 +261,6 @@ namespace Desktop_Frames
             };
             trayMenu.Items.Add(_automationMenuItem);
 
-            // Standalone Virtual Desktop Automation Toggle with explicit Save
-            _vdAutomationMenuItem = new ToolStripMenuItem("Enable Virtual Desktop Automation") { CheckOnClick = true };
-            _vdAutomationMenuItem.Checked = SettingsManager.EnableVirtualDesktopAutomation;
-            _vdAutomationMenuItem.Click += (s, e) => {
-                SettingsManager.EnableVirtualDesktopAutomation = _vdAutomationMenuItem.Checked;
-                try { SettingsManager.SaveSettings(); } catch { }
-                if (SettingsManager.EnableVirtualDesktopAutomation) VirtualDesktopAutomationManager.Start();
-                else VirtualDesktopAutomationManager.Stop();
-            };
-            trayMenu.Items.Add(_vdAutomationMenuItem);
-
             var smartTopSeparator = new ToolStripSeparator();
             trayMenu.Items.Add(smartTopSeparator);
 
@@ -341,7 +317,6 @@ namespace Desktop_Frames
                 if (focusFrameItem.Visible) focusFrameItem.Text = $"Focus Frame... ({GetFocusFrameHotkeyString()})";
 
                 _automationMenuItem.Visible = SettingsManager.EnableProfileAutomation;
-                _vdAutomationMenuItem.Visible = SettingsManager.EnableVirtualDesktopAutomation;
 
                 bool autoOrg = SettingsManager.EnableAutoOrganize;
                 smartRulesItem.Visible = autoOrg;
