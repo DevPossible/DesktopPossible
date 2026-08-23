@@ -205,8 +205,47 @@ namespace Desktop_Frames
                 Foreground = new SolidColorBrush(Color.FromRgb(95, 99, 104))
             };
 
+            // Latest published release (from the background GitHub check); a link when it is newer.
+            TextBlock latestText = new TextBlock
+            {
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(95, 99, 104)),
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+            void RefreshLatest(bool checkFinished = false)
+            {
+                if (UpdateChecker.LatestVersion == null)
+                {
+                    latestText.Text = checkFinished ? "Latest release: unavailable (offline?)" : "Latest release: checking...";
+                    latestText.Cursor = null;
+                    latestText.TextDecorations = null;
+                    return;
+                }
+                string latest = $"v{UpdateChecker.LatestVersion.ToString(3)}";
+                bool newer = UpdateChecker.IsUpdateAvailable;
+                latestText.Text = newer ? $"Latest release: {latest} - update available" : $"Latest release: {latest} (up to date)";
+                latestText.Cursor = newer ? Cursors.Hand : null;
+                latestText.TextDecorations = newer ? TextDecorations.Underline : null;
+                latestText.Foreground = new SolidColorBrush(newer ? Color.FromRgb(26, 115, 232) : Color.FromRgb(95, 99, 104));
+            }
+            latestText.MouseLeftButtonDown += (s, e) =>
+            {
+                if (!UpdateChecker.IsUpdateAvailable) return;
+                e.Handled = true;
+                try { Process.Start(new ProcessStartInfo { FileName = UpdateChecker.ReleaseUrl, UseShellExecute = true }); }
+                catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Open release page failed: {ex.Message}"); }
+            };
+            RefreshLatest();
+            Action onFound = () => latestText.Dispatcher.BeginInvoke(new Action(() => RefreshLatest()));
+            UpdateChecker.UpdateFound += onFound;
+            latestText.Unloaded += (s, e) => UpdateChecker.UpdateFound -= onFound;
+            // Refresh once the check finishes even when no update exists (the "up to date" case).
+            _ = UpdateChecker.CheckAsync().ContinueWith(_ => latestText.Dispatcher.BeginInvoke(new Action(() => RefreshLatest(checkFinished: true))));
+
             titleArea.Children.Add(titleText);
             titleArea.Children.Add(versionText);
+            titleArea.Children.Add(latestText);
 
             // Close Button
             Button closeButton = new Button
