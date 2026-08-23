@@ -100,10 +100,12 @@ namespace Desktop_Frames
                 closeButton.Click += (s, e) => _optionsWindow.Close();
 
                 // Unobtrusive update notice: a link in the header, only when a newer release exists.
+                // Added after the title so it is on top: the title TextBlock fills the cell and
+                // would otherwise swallow the clicks.
                 TextBlock updateLink = CreateUpdateLink();
-                Grid.SetColumn(updateLink, 0); headerGrid.Children.Add(updateLink);
 
                 Grid.SetColumn(titleBlock, 0); headerGrid.Children.Add(titleBlock);
+                Grid.SetColumn(updateLink, 0); headerGrid.Children.Add(updateLink);
                 Grid.SetColumn(closeButton, 1); headerGrid.Children.Add(closeButton);
                 headerBorder.Child = headerGrid;
                 headerBorder.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) _optionsWindow.DragMove(); };
