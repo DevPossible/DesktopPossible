@@ -22,11 +22,29 @@ namespace Desktop_Frames
         public static event EventHandler WallpaperColorChanged;
 
         private static FileSystemWatcher _wallpaperWatcher;
-        private static DateTime _lastUpdate = DateTime.MinValue;
+
+        // Trailing-edge debounce: every wallpaper signal restarts this timer, so we only read the
+        // file once Windows has gone quiet (it fires several events while still writing the file).
+        private static System.Windows.Threading.DispatcherTimer _debounceTimer;
+
+        // Safety net for changes that raise no event we can catch (slideshow advance, Windows
+        // Spotlight, third-party wallpaper tools): a cheap path+timestamp check every few seconds.
+        private static System.Windows.Threading.DispatcherTimer _pollTimer;
+
+        // Path + last-write ticks of the wallpaper the current color was extracted from.
+        private static string _colorSignature;
 
         public static void Initialize()
         {
-            UpdateWallpaperColor();
+            if (UpdateWallpaperColor())
+                _colorSignature = GetWallpaperSignature();
+
+            _debounceTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
+            _debounceTimer.Tick += (s, e) => { _debounceTimer.Stop(); CheckForWallpaperChange(); };
+
+            _pollTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _pollTimer.Tick += (s, e) => CheckForWallpaperChange();
+            _pollTimer.Start();
 
             // Hook 1: Listen for Global Windows Theme changes
             SystemEvents.UserPreferenceChanged += SystemEvents_UserPreferenceChanged;
@@ -68,20 +86,53 @@ namespace Desktop_Frames
 
         private static void TriggerUpdate()
         {
-            // Debounce: If Windows fires 5 events in half a second, we only process it once!
-            if ((DateTime.Now - _lastUpdate).TotalMilliseconds < 500) return;
-            _lastUpdate = DateTime.Now;
-
-            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(async () =>
+            // Events arrive on watcher/SystemEvents threads; the timer lives on the UI thread.
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
             {
-                // Wait exactly 250ms for Windows to finish saving the file to the hard drive
-                await System.Threading.Tasks.Task.Delay(250);
-                UpdateWallpaperColor();
-                WallpaperColorChanged?.Invoke(null, EventArgs.Empty);
+                _debounceTimer.Stop();
+                _debounceTimer.Start();
             }));
         }
 
-        public static void UpdateWallpaperColor()
+        /// <summary>
+        /// Re-extracts the wallpaper color if the wallpaper differs from the one the current color
+        /// came from, and notifies listeners when the color actually changed. Cheap when nothing
+        /// changed (one SystemParametersInfo call and one file timestamp read). Safe to call from
+        /// the UI thread at any time, e.g. after Chameleon mode is switched on.
+        /// </summary>
+        public static void CheckForWallpaperChange()
+        {
+            if (!SettingsManager.EnableChameleonMode) return;
+
+            string signature = GetWallpaperSignature();
+            if (signature == null || signature == _colorSignature) return;
+
+            var previous = CurrentWallpaperColor;
+            // On a failed read (file still being written) the signature is left stale so the next
+            // poll retries instead of silently keeping a wrong color.
+            if (!UpdateWallpaperColor()) return;
+            _colorSignature = signature;
+
+            if (CurrentWallpaperColor != previous)
+                WallpaperColorChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        private static string GetWallpaperSignature()
+        {
+            try
+            {
+                string path = GetActiveWallpaperPath();
+                if (path == null) return null;
+                return path + "|" + File.GetLastWriteTimeUtc(path).Ticks;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Extracts the dominant color of the active wallpaper. Returns false if it could not be read.</summary>
+        public static bool UpdateWallpaperColor()
         {
             try
             {
@@ -89,14 +140,18 @@ namespace Desktop_Frames
 
                 if (!string.IsNullOrEmpty(wallpaperPath) && File.Exists(wallpaperPath))
                 {
-                    CurrentWallpaperColor = GetDominantColor(wallpaperPath);
+                    var color = GetDominantColor(wallpaperPath);
+                    if (color == null) return false;
+                    CurrentWallpaperColor = color.Value;
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, $"Chameleon updated color successfully from: {wallpaperPath}");
+                    return true;
                 }
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Chameleon Error: {ex.Message}");
             }
+            return false;
         }
 
         private static string GetActiveWallpaperPath()
@@ -115,7 +170,7 @@ namespace Desktop_Frames
             return null;
         }
 
-        private static System.Windows.Media.Color GetDominantColor(string imagePath)
+        private static System.Windows.Media.Color? GetDominantColor(string imagePath)
         {
             try
             {
@@ -182,7 +237,7 @@ namespace Desktop_Frames
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Chameleon image extraction failed: {ex.Message}");
-                return System.Windows.Media.Color.FromRgb(70, 90, 110);
+                return null;
             }
         }
 

@@ -1,4 +1,4 @@
-// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
 // file until it is annotated (annotations remain valid). New files are fully nullable-clean.
 #nullable disable warnings
 
@@ -71,7 +71,9 @@ namespace Desktop_Frames
         }
 
         private static string BuildTrayText(string profileName) =>
-            TruncateTrayText($"DesktopPossible ({profileName})");
+            TruncateTrayText(UpdateChecker.IsUpdateAvailable
+                ? $"DesktopPossible ({profileName}) - update v{UpdateChecker.LatestVersion?.ToString(3)} available"
+                : $"DesktopPossible ({profileName})");
 
         public void UpdateAutoOrganizeMenuCheck(bool isChecked)
         {
@@ -103,6 +105,10 @@ namespace Desktop_Frames
             // 2. Check status using the NEW logic (Registry check + Shortcut fallback)
             IsStartWithWindows = CheckIfStartWithWindowsEnabled();
 
+
+            // Redraw the icon (overlay dot + tooltip) when the background update check finds a release.
+            UpdateChecker.UpdateFound += () =>
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() => Instance?.UpdateTrayIcon()));
 
             // 3. Start Remote Info System (Runs 25s later)
             // DISABLED (fork): this phoned home to the UPSTREAM repo to check for a newer version,
@@ -907,6 +913,15 @@ namespace Desktop_Frames
                         var ts = g.MeasureString(text, font);
                         g.DrawString(text, font, textBrush, x + (d - ts.Width) / 2, y + (d - ts.Height) / 2);
                     }
+                }
+
+                if (UpdateChecker.IsUpdateAvailable)
+                {
+                    // Small green dot, bottom-right, with a dark ring so it reads on either taskbar theme.
+                    using (var ring = new SolidBrush(Color.FromArgb(200, 20, 20, 20)))
+                        g.FillEllipse(ring, 19, 19, 13, 13);
+                    using (var dot = new SolidBrush(Color.FromArgb(255, 46, 204, 113)))
+                        g.FillEllipse(dot, 21, 21, 9, 9);
                 }
             }
             IntPtr h = bitmap.GetHicon();
