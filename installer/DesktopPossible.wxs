@@ -26,8 +26,8 @@
                   DowngradeErrorMessage="A newer version of DesktopPossible is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Icon Id="AppIcon" SourceFile="$(RepoRoot)\src\DesktopPossible\Resources\logo2.ico" />
-    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Icon Id="AppIcon.ico" SourceFile="$(RepoRoot)\src\DesktopPossible\Resources\logo2.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/DevPossible/DesktopPossible" />
     <Property Id="ARPNOREPAIR" Value="1" />
 
@@ -43,7 +43,7 @@
                     Name="DesktopPossible"
                     Description="Desktop frames for Windows"
                     WorkingDirectory="INSTALLFOLDER"
-                    Icon="AppIcon"
+                    Icon="AppIcon.ico"
                     Advertise="yes" />
         </File>
       </Component>
