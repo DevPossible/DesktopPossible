@@ -1,4 +1,4 @@
-// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
+﻿// Inherited upstream code predates nullable reference types: nullable WARNINGS are off for this
 // file until it is annotated (annotations remain valid). New files are fully nullable-clean.
 #nullable disable warnings
 
@@ -1352,6 +1352,7 @@ namespace Desktop_Frames
 
                 if (tempPortalImageState != newPortalWatermarkState) _ = TrayManager.reloadallFrames(); // fire-and-forget reload
                 TrayManager.Instance?.UpdateTrayIcon();
+                WallpaperColorManager.CheckForWallpaperChange(); // wallpaper may have changed while Chameleon was off
                 Utility.UpdateFrameVisuals();
                 Framemanager.RefreshAllPortalDetails(); // apply global striping change to open portals
 
