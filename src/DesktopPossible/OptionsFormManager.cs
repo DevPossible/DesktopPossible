@@ -99,6 +99,10 @@ namespace Desktop_Frames
                 };
                 closeButton.Click += (s, e) => _optionsWindow.Close();
 
+                // Unobtrusive update notice: a link in the header, only when a newer release exists.
+                TextBlock updateLink = CreateUpdateLink();
+                Grid.SetColumn(updateLink, 0); headerGrid.Children.Add(updateLink);
+
                 Grid.SetColumn(titleBlock, 0); headerGrid.Children.Add(titleBlock);
                 Grid.SetColumn(closeButton, 1); headerGrid.Children.Add(closeButton);
                 headerBorder.Child = headerGrid;
@@ -140,6 +144,45 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error showing Options: {ex.Message}");
             }
+        }
+
+        private static TextBlock CreateUpdateLink()
+        {
+            var link = new TextBlock
+            {
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Foreground = Brushes.White,
+                TextDecorations = TextDecorations.Underline,
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 12, 0),
+                Visibility = Visibility.Collapsed
+            };
+            link.MouseLeftButtonDown += (s, e) =>
+            {
+                e.Handled = true; // don't start a window drag
+                try { Process.Start(new ProcessStartInfo { FileName = UpdateChecker.ReleaseUrl, UseShellExecute = true }); }
+                catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Open release page failed: {ex.Message}"); }
+            };
+
+            void Refresh()
+            {
+                if (!UpdateChecker.IsUpdateAvailable) return;
+                link.Text = $"Update available: v{UpdateChecker.LatestVersion?.ToString(3)}";
+                link.ToolTip = $"You are running v{UpdateChecker.CurrentVersion.ToString(3)}. Click to open the release page.";
+                link.Visibility = Visibility.Visible;
+            }
+
+            Refresh();
+            // If a check finishes while the window is open, reveal the link then.
+            Action onFound = () => link.Dispatcher.BeginInvoke(new Action(Refresh));
+            UpdateChecker.UpdateFound += onFound;
+            link.Unloaded += (s, e) => UpdateChecker.UpdateFound -= onFound;
+            _ = UpdateChecker.CheckAsync(); // no-op if checked recently
+
+            return link;
         }
 
         private static void CreateTabContent(Grid mainGrid)

@@ -92,6 +92,8 @@ namespace Desktop_Frames
                     WallpaperColorManager.Initialize();
                     // --- AUTO-ORGANIZE ENGINE ---
                     AutoOrganizeManager.Initialize();
+                    // Latest-release check (GitHub); surfaces as a link on the Options page.
+                    UpdateChecker.Start(TimeSpan.FromSeconds(30));
                     WallpaperColorManager.WallpaperColorChanged += (s, ev) =>
                     {
                         // Magically update all visuals live when Windows wallpaper changes
