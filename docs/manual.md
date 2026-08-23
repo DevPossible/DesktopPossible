@@ -17,8 +17,8 @@ DesktopPossible is a powerful desktop organization tool that creates virtual "Fr
 
 ### System Requirements
 
-- Windows 10 or Windows 11 operating system
-- .NET Framework support
+- Windows 10 or Windows 11
+- Nothing else: the download is self-contained (.NET 10 is bundled)
 
 
 ### First Launch
@@ -40,17 +40,22 @@ Frames are containers on your desktop that group related shortcuts and files tog
 **frame Types:**
 
 - **Frames (Data Frames)**: Regular containers for shortcuts targeting files or folders and web links
-- **Portal Frames**: Special Frames mirroring the contents of folders
-- **Note Frames**: Frames that display text.
+- **Portal Frames**: Special Frames mirroring the contents of folders, with navigation, filters and an Explorer-style Details view
+- **Note Frames**: Frames that display text
+- **Image Frames**: Frames that display a picture (pasted, or copied from / linked to a file)
+- **Text Frames**: Chromeless live text drawn straight onto the wallpaper, with tokens such as `{ComputerName}`, `{IP}`, `{CPUUsage}`, `{RAMUsage}`, `{Uptime}`, `{Date}`, `{Time}`, `{Profile}` (managed from Options → Text Frames)
 
 **How to Create a frame:**
 
 1. The first two Frames are created automatically on first run. Look on the top left corner of your screen.
-2. From there clicking the heart menu you can select New frame to create a new frame, New Portal frame to create a new Portal frame or New Note frame to crete a new note frame.
+2. From there, the heart ♥ menu offers *New Frame*, *New Portal Frame*, *New Note Frame*, *New Image Frame* and *New Text Frame*.
+3. Optionally enable *Show 'New Frame' in Desktop Context Menu* (Options → General) and draw a rectangle on the desktop where the frame should go.
+
+**Moving and resizing frames:** frames are locked in place by default. Turn on **Edit Frames Mode** (tray menu, or right-click a frame) to move and resize them, then turn it off again.
 
 **Rename a frame:**
 
-- ~~Double click~~ CTRL: + Click the frame title. Type your preferred name and click out of the edit area to finish. Changed on v2.5.2.125
+- CTRL + Click the frame title (or right-click the frame → *Rename Frame*). Type your preferred name and click out of the edit area to finish.
 
 ### 2. Adding Items to Frames
 
@@ -94,7 +99,9 @@ This will show the Customize frame window.
 
 **frame Settings:**
 
-- **Custom Color**: Choose from 13 preset colors (Red, Green, Teal, Blue, Bismark, White, Beige, Gray, Black, Purple, Fuchsia, Yellow, Orange)
+- **Custom Color**: Choose from 13 preset colors (Red, Green, Teal, Blue, Bismark, White, Beige, Gray, Black, Purple, Fuchsia, Yellow, Orange) or Transparent; leave on Default to follow the global colour (and Chameleon mode)
+- **Override default transparency**: per-frame tint instead of the global Frame Tint
+- **Focus Hotkey**: a key combination that brings this frame to the front
 - **Custom Launch Effect**: Customize the effect on icon click. See Launch Effects below
 - **Border Color**: Customize the frame border appearance
 - **Border Thickness**: Adjust border width (1-5 pixels)
@@ -102,6 +109,7 @@ This will show the Customize frame window.
 **Title**
 
 - **Title Text Color**: Change frame title color
+- **Title Bar Color**: Colour the title bar independently of the frame body
 - **Title Text Size**: Small, Medium, or Large
 - **Bold Title Text**: Make frame titles bold
 
@@ -159,13 +167,15 @@ The icons on the Frames which are targeting files and folders are getting contin
 
 **Hide frame**: Right click a frame an select "Hide frame". This sets the frame as hidden and the number of hidden Frames increases ion the tray icon. To show the frame again you can use the tray icon context menu where the hidden Frames are shown as items on "Show Hidden Frames" menu
 
-**Peek Behind**: Right click a frame an select "Hide frame". The frame hides for 10 second to help access the desktop behind the frame. This feature is helpful if for some reason you need to see behind the frame for a short time. A count down timer is shown in place.
+**Peek Behind**: Right click a frame and select "Peek Behind". The frame hides for 10 second to help access the desktop behind the frame. This feature is helpful if for some reason you need to see behind the frame for a short time. A count down timer is shown in place.
 
 **Hide/Unhide All Frames**: Double click the tray icon. All Frames will toggle. Note: This function doesn't change the status of hidden Frames with teh above mentioned "Hide frame" function.
 
-**Rollup/RollDown a frame**: ~~Ctrl + Click~~ Double click on frame title. The frame will rollup into its title. To Roll down again to frame previous height ~~Ctrl + Click~~ Double click again the title area. Changed on v2.5.2.125
+**Rollup/RollDown a frame**: Double click on frame title. The frame will roll up into its title; double click the title again to roll it back down. Options → Style & FX → *Idle Auto-Roll* can do this automatically after a period of inactivity.
 
-**frame Lock**: Click on the shield icon🛡️on top right corner of the frame. This locks frame position and size. Rollup/Rolldown is still available when locked.
+**Frame Lock**: Click the lock icon in the top-right corner of the frame to pin its position and size; the move handle next to it drags the frame, and the pin keeps it on top of other windows. Rollup/Rolldown is still available when locked. Note that all frames are unmovable unless **Edit Frames Mode** is on.
+
+**Content Lock**: Right-click → "Lock (prevent changes)" stops accidental edits — a Note becomes read-only, an Image frame refuses new pictures, and Data/Portal frames refuse drops.
 
 
 
@@ -184,13 +194,13 @@ Right clicking any shortcut the following usage options are available:
 
 
 
-## Search (v2.5.2.135)
-Double click ta any enpty arean on any frame or ``CTRL + ``` to see the search window. Search is performed on all data Frames and matching shortcuts are displayed below the search field.  
+## Search (SpotSearch)
+Press `` CTRL + ` `` (or double-click an empty area of a frame, if enabled in Options → Style & FX) to open the search window. Search is performed on all Data frames and matching shortcuts are displayed below the search field.
 
 
 ## Import/Export Frames
 
-Click on the heart ❤️ menu and select "Export this frame" to export a frame into a  *.frame file.  This file will be exported into "Exports" subfolder on program path.
+Click on the heart ❤️ menu and select "Export this frame" to export a frame into a  *.frame file.  The file is written to the "Exports" subfolder of the data folder (see File Locations).
 To import a frame exported previously click on the heart ❤️ menu and select "Import a frame", browse for a *.frame file and import it.
 
 
@@ -203,63 +213,51 @@ Access settings through the system tray icon → "Options":
 
 ### General Tab
 
-**Startup:**
+**Startup:** Start with Windows.
 
-- **Start with Windows**: Automatically launch with system startup
+**Selections:** Single Click to Launch (restart required) · Enable Snap Near Frames · Enable Dimension Snap · Snap frames to grid · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars · Enable Sounds.
 
-  
+**Virtual Desktops:** Automatically Switch Profiles with Virtual Desktop.
 
-**Selections:**
+### Style & FX Tab
 
-- **Single Click to Launch:** Enables single click on icons, otherwise double click is needed. Change requires program restart. 
+**Appearance:** Enable Chameleon Mode (frames take the dominant colour of your wallpaper and follow it when the wallpaper changes) · Frame Tint and Menu Tint sliders · default Color and Launch Effect.
 
-- **Enable Snap Near Frames**: Automatically align Frames to each other
+**Auto-Hide Frames / Idle Fade-Out / Idle Auto-Roll:** hide, fade or roll frames up after a period of inactivity, with a configurable wake-up hover delay.
 
-- **Enable Dimension Snap**: Automatically snaps size to the closest value of multiple of 10
+**Desktop Icon Visibility:** hide the native desktop icons while the program runs or while frames are hidden; double-click the empty desktop to show/hide them.
 
-- **Enable Tray Icon**: Display icon in system notification area
+**Frames:** Enable Show/Hide all frames hotkey · Double-click a frame to open search · Striped rows in Portal Details view.
 
-- **Use Recycle Bin on Portal Frames 'Delete Item' command:** Send files to recycle bin instead of deleting them
-  
-  
-
-**Style:**
-
-- **Enable Portal Frames Watermark:** Enables the "portal" watermark image on portal Frames
-- **Enable Note Frames Watermark:** To be added
-- **Disable Frames Scrollbars:** Hides scrollbars from Frames when contents exceed the available display area
-- **Enable Sounds:**  Toggles program ability to make sound on message boxes 
-
-- **frame Tint **: Adjust overall Frames tint (0-100%)
-- **Menu Tint **: Adjust menu icons base tint (0-100%)
-- **Color**: Sets the default Frames color
-- **Launch Effect**: Sets the default launch effect
-
-
-- **Menu Icon**: Select the  menu icon
-- **Lock Icon**: Select the lock icon
+**Icons:** pick the menu, position-lock and filter glyphs and the tray icon style.
 
 ### Tools Tab
 
-**Backup and Restore:**
+**Backup:** Backup · Restore... · Open Backups Folder · Automatic Backup (Daily).
 
-- **Backup Data**: Create timestamped backups of all Frames and shortcuts
-- **Import Backup**: Restore from previous backup files
-- **Open Backups Folder:** Opens backups folder in file explorer
+**Maintenance:** Screen Bound Frames (pull every frame back onto a visible monitor).
 
+**Reset:** Reset Styles · Clear All Data.
 
+### Profiles Tab
+
+Create, rename, reorder and delete profiles, and *Empty Frames to Desktop* for frames that store files.
+
+### Hotkeys Tab
+
+Profile switching hotkeys (direct profile 0–9, previous, next), Focus Frame hotkey, Spot Search hotkey. Changes take effect after a restart.
+
+### Smart Desktop Tab
+
+Enable Auto-Organize · Show execution toast notifications · Arrange Now · Arrange Frames. See [Tips & Tricks](tips.md#smart-desktop-auto-organize).
+
+### Text Frames Tab
+
+Add, edit and remove Text frames and their templates.
 
 ### Look Deeper Tab
 
-- **Enable Logging **: Enable detailed logging
-
-- **Open Log **: Open log file for viewing
-
-  
-
----
-
-
+Enable logging · Open Log · log level and per-category switches.
 
 ---
 
@@ -285,14 +283,14 @@ Access settings through the system tray icon → "Options":
 
 **Configuration Issues**
 
-1. Reset the program! Delete options.json and Frames.json from progarm fodler and try again
+1. Reset the program: Options → Tools → *Reset Styles* (keeps your frames) or *Clear All Data* (factory reset)
 
 
 
 **Portal Frames Issues**
 
-1. Delete portal frame from Frames.json and try creating again
-2. Verify the path exists and it is accessible
+1. Verify the path exists and is accessible
+2. Delete the Portal frame and create it again
 
 
 
@@ -328,28 +326,21 @@ Access settings through the system tray icon → "Options":
 
 ### File Locations
 
-**Configuration Files:**
+**Data root:** beside `DesktopPossible.exe` for the portable zip; `%LocalAppData%\DesktopPossible\Data` for the MSI install.
 
-- `Frames.json`: Main frame configuration and layout
-- `Desktop_Frames.log`: Application log file
-- `Shortcuts/`: Folder containing frame shortcut files
+Inside the data root:
 
-**Backup Structure:**
+- `ProfileOptions.json`: the list of profiles and which one is active
+- `Profiles\<name>\frames.json`: that profile's frames and layout
+- `Profiles\<name>\options.json`: that profile's settings (see [Tweaks](tweaks.md))
+- `Profiles\<name>\Shortcuts\`: the shortcut files held by Data frames
+- `Profiles\<name>\Backups\`: timestamped backups
+- `Exports\`: exported `.frame` files
+- `Desktop_Frames.log`: application log file
 
-- `Backups/[TIMESTAMP]_backup/`: Timestamped backup folders
-- Contains both configuration and shortcut files
-- Compressed archives for easy storage and transfer
-
-**Dependencies:**
-
-- .NET Framework
-- Windows Forms and WPF libraries
-- Icon extraction libraries
-- JSON processing components
+**Dependencies:** none to install — .NET 10 (WPF + Windows Forms) is bundled in the executable.
 
 ---
-
-
 
 ### Version Information
 
@@ -362,6 +353,5 @@ The application version is displayed in the About dialog, accessible through the
 *Ctrl + Click is your friend* <br>
 
 
-Nov 2025 Nikos Georgousis
-Hand Water Pump
+Originally written by Nikos Georgousis (Desktop Frames +, Nov 2025); updated for DesktopPossible.
 

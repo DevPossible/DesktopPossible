@@ -6,6 +6,11 @@
   <img width="150" height="150" alt="DesktopPossible logo" src="docs/images/logo.png" />
 </p>
 
+<p align="center">
+  <img alt="A DesktopPossible frame holding developer-tool shortcuts on a Windows 11 desktop" src="docs/images/screenshot-frame.png" />
+  <br /><sub>A Data frame on the desktop — title bar with the ♥ menu, position lock, move handle and keep-on-top pin. <a href="docs/images/screenshot-desktop.png">Full-desktop view</a>.</sub>
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/DevPossible/DesktopPossible)](https://github.com/DevPossible/DesktopPossible/releases)
 
@@ -26,9 +31,10 @@ DesktopPossible creates **virtual frames** on your desktop, letting you group an
 
 ### Core
 
-- **Multiple frame types:** Data frames (custom shortcuts), Portal frames (live mirror of a folder, with navigation and filters), Note frames (quick text), and Image frames.
-- **Tabs, workspace profiles, and a smart-desktop auto-sort engine.**
-- **Dynamic visibility:** peek-behind, roll-up, auto-hide, focus mode, and keep-on-top pinning.
+- **Multiple frame types:** Data frames (custom shortcuts), Portal frames (live mirror of a folder, with navigation and filters), Note frames (quick text), Image frames, and Text frames (live system-info text drawn straight onto the wallpaper).
+- **Tabs, workspace profiles, and a smart-desktop auto-sort engine** (one-click *Sort Desktop into Categories*, optional continuous Auto-Organize).
+- **Edit Frames Mode:** frames are locked in place by default; flip the mode on to move and resize them, off to make them unmovable again.
+- **Dynamic visibility:** peek-behind, roll-up, auto-hide, idle fade-out, keep-on-top pinning, and a *Focus Frame* hotkey that finds a frame by name and raises it.
 - **Broad launch support:** files, folders, web links, Store apps, Steam games, Spotify URIs, run-as-admin / run-as-different-user.
 - **Theming:** per-frame colours, global tint, and a wallpaper-matching "Chameleon" mode.
 - **Portable or installed, your choice:** a zip that keeps its configuration beside the executable, or an MSI that installs to Program Files and keeps data in `%LocalAppData%`.
@@ -43,10 +49,11 @@ A Windows Explorer–style list view for Portal frames, as an alternative to the
 - **Native shell context menu** on right-click (Open with, Send to, cut/copy/paste, Properties, shell extensions), lazily loaded so the first right-click stays fast.
 - **Zebra striping** (global default + per-frame override), and chrome (headers, scrollbars, selection) themed to the frame's colour.
 
-### Icon view
+### Portal icon view
 
 - **Sort by** menu (Name / Date / Type / Size) with ascending/descending order, plus a "Sorted by …" heading.
-- Themed scrollbar to match the frame.
+- Data frames instead offer **Free arrange** — place each icon in exactly the cell you want.
+- Themed scrollbar to match the frame (all frame types).
 
 ### Frames and title bar
 
@@ -54,12 +61,16 @@ A Windows Explorer–style list view for Portal frames, as an alternative to the
 - **Rename Frame** from the context menu; hotkey shown in the title.
 - **Per-frame transparency** override (Customize dialog) on top of the global Frame Tint.
 - **Content lock** for Note and Image frames to prevent accidental edits.
+- **Per-frame launch effects** (15 animations) and an optional **Create New Frame** entry in the desktop's right-click menu — draw a rectangle where the frame should go.
+- **Frame housekeeping:** Export / Import a frame, Send to Profile, Restore Last Deleted Frame, Clear Dead Shortcuts, spacers, and an *Empty Frames to Desktop* safety tool for frames that store files.
 
 ### Hotkeys
 
 - **Show / Hide all frames** (default `Ctrl + Alt + H`, customizable).
-- **Per-frame focus** hotkey (press-to-capture; supports groups and the Windows key).
+- **SpotSearch** (default `` Ctrl + ` ``) — type to find any icon in any frame and launch it.
+- **Per-frame focus** hotkey (press-to-capture; supports groups and the Windows key) and **profile-switch** hotkeys (direct, previous, next).
 - Optional **double-click empty desktop** to toggle native desktop icons.
+- **Virtual desktops:** switch profiles automatically when Windows switches virtual desktop.
 
 ### Dark mode and theming
 
@@ -69,6 +80,7 @@ A Windows Explorer–style list view for Portal frames, as an alternative to the
 
 - **Extension-based caching** of shell icons and type names for fast Portal loads.
 - **Lazy context menus**, batched Portal reconciler, working-set trimming, and pre-warmed shell caches for a fast first right-click.
+- **Update check:** the app quietly checks GitHub for a newer release and shows a link in Options and a dot on the tray icon — never a pop-up.
 
 ## Installation
 
