@@ -229,7 +229,9 @@ Access settings through the system tray icon → "Options":
 
 ### Tools Tab
 
-**Backup:** Backup · Restore... · Open Backups Folder · Automatic Backup (Daily).
+**Backup:** Backup · Restore... · Open Backups Folder · Automatic Backup (Daily) · Keep last automatic backups (default 7) · Max backup size in MB (default 100 — a larger backup is refused with an error until you raise the limit).
+
+Backups are zip archives containing the application settings and **all** profiles (frames, positions, stored files). Restore accepts these archives; older plain-folder backups still restore by switching the file filter to "All files" and picking any file inside the backup folder.
 
 **Maintenance:** Screen Bound Frames (pull every frame back onto a visible monitor).
 

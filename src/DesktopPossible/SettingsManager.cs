@@ -27,6 +27,10 @@ namespace Desktop_Frames
         // --- Properties ---
         public static bool EnableAutoBackup { get; set; } = true;
         public static DateTime LastAutoBackupDate { get; set; } = DateTime.MinValue;
+        // Automatic backups kept before the oldest are deleted (manual backups are never auto-deleted).
+        public static int MaxBackupCount { get; set; } = 7;
+        // A backup archive larger than this is refused with an error (raise the limit to allow it).
+        public static int MaxBackupSizeMB { get; set; } = 100;
         public static bool ShowPortalExtensions { get; set; } = false;
         public static bool NoWildcardsOnPortalFilter { get; set; } = false;
         public static bool IsSnapEnabled { get; set; } = true;
@@ -277,6 +281,8 @@ namespace Desktop_Frames
                 ShowPortalExtensions,
                 EnableAutoBackup,
                 LastAutoBackupDate,
+                MaxBackupCount,
+                MaxBackupSizeMB,
                 AutoRollTime,
 
                 AllowAutoReposition,
@@ -331,6 +337,10 @@ namespace Desktop_Frames
         {
             try { EnableAutoBackup = data.EnableAutoBackup ?? true; } catch { EnableAutoBackup = true; }
             try { LastAutoBackupDate = data.LastAutoBackupDate ?? DateTime.MinValue; } catch { LastAutoBackupDate = DateTime.MinValue; }
+            try { MaxBackupCount = data.MaxBackupCount ?? 7; } catch { MaxBackupCount = 7; }
+            if (MaxBackupCount < 1 || MaxBackupCount > 999) MaxBackupCount = 7;
+            try { MaxBackupSizeMB = data.MaxBackupSizeMB ?? 100; } catch { MaxBackupSizeMB = 100; }
+            if (MaxBackupSizeMB < 1 || MaxBackupSizeMB > 100000) MaxBackupSizeMB = 100;
             try { IsSnapEnabled = data.IsSnapEnabled ?? true; } catch { IsSnapEnabled = true; }
             try { ShowBackgroundImageOnPortalFrames = data.ShowBackgroundImageOnPortalFrames ?? true; } catch { ShowBackgroundImageOnPortalFrames = true; }
             try { ShowInTray = data.ShowInTray ?? true; } catch { ShowInTray = true; }

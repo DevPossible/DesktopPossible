@@ -506,7 +506,26 @@ namespace Desktop_Frames
 
             CreateCheckBox(c, "Automatic Backup (Daily)", "EnableAutoBackup", SettingsManager.EnableAutoBackup);
 
+            // Backup limits: automatic-backup retention count and the per-backup size cap.
+            Grid backupCfg = new Grid { Margin = new Thickness(15, 4, 0, 4) };
+            backupCfg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(230) });
+            backupCfg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+            backupCfg.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            backupCfg.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+            TextBlock lblCount = new TextBlock { Text = "Keep last automatic backups:", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
+            TextBox tbCount = new TextBox { Name = "MaxBackupCountBox", Text = SettingsManager.MaxBackupCount.ToString(), Height = 24, VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
+            Grid.SetRow(lblCount, 0); Grid.SetColumn(lblCount, 0);
+            Grid.SetRow(tbCount, 0); Grid.SetColumn(tbCount, 1);
+
+            TextBlock lblSize = new TextBlock { Text = "Max backup size (MB):", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+            TextBox tbSize = new TextBox { Name = "MaxBackupSizeBox", Text = SettingsManager.MaxBackupSizeMB.ToString(), Height = 24, VerticalContentAlignment = VerticalAlignment.Center };
+            Grid.SetRow(lblSize, 1); Grid.SetColumn(lblSize, 0);
+            Grid.SetRow(tbSize, 1); Grid.SetColumn(tbSize, 1);
+
+            backupCfg.Children.Add(lblCount); backupCfg.Children.Add(tbCount);
+            backupCfg.Children.Add(lblSize); backupCfg.Children.Add(tbSize);
+            c.Children.Add(backupCfg);
 
             // --- Maintenance Section ---
             Color darkPink = Color.FromRgb(199, 21, 133); // MediumVioletRed
@@ -1211,7 +1230,19 @@ namespace Desktop_Frames
 
                 // 3. Tools
                 var toolsContent = (StackPanel)((TabItem)_tabControl.Items[2]).Content;
-                foreach (var child in toolsContent.Children) if (child is CheckBox cb && cb.Name == "EnableAutoBackup") SettingsManager.EnableAutoBackup = cb.IsChecked == true;
+                foreach (var child in toolsContent.Children)
+                {
+                    if (child is CheckBox cb && cb.Name == "EnableAutoBackup") SettingsManager.EnableAutoBackup = cb.IsChecked == true;
+                    else if (child is Grid toolsGrid)
+                    {
+                        var cntBox = toolsGrid.Children.OfType<TextBox>().FirstOrDefault(t => t.Name == "MaxBackupCountBox");
+                        if (cntBox != null && int.TryParse(cntBox.Text, out int cnt))
+                            SettingsManager.MaxBackupCount = Math.Max(1, Math.Min(999, cnt));
+                        var sizeBox = toolsGrid.Children.OfType<TextBox>().FirstOrDefault(t => t.Name == "MaxBackupSizeBox");
+                        if (sizeBox != null && int.TryParse(sizeBox.Text, out int mb))
+                            SettingsManager.MaxBackupSizeMB = Math.Max(1, Math.Min(100000, mb));
+                    }
+                }
 
                 // 4. Hotkeys (NEW)
                 var hotkeysContent = (StackPanel)((ScrollViewer)((TabItem)_tabControl.Items[4]).Content).Content;
@@ -1369,18 +1400,23 @@ namespace Desktop_Frames
         {
             try
             {
-                using (var d = new System.Windows.Forms.FolderBrowserDialog())
+                // Backups are zip archives now. Legacy plain-folder backups still restore:
+                // switch the filter to "All files" and pick any file inside the old backup
+                // folder (e.g. its frames.json) — RestoreFromBackup uses its parent folder.
+                var d = new Microsoft.Win32.OpenFileDialog
                 {
-                    // FIX: Use the Profile-Aware path helper
-                    d.SelectedPath = BackupManager.GetBackupsFolderPath();
-                    d.Description = "Select a backup folder to restore from";
+                    Filter = "Backup archives (*.zip)|*.zip|All files (*.*)|*.*",
+                    DefaultExt = ".zip",
+                    InitialDirectory = BackupManager.GetBackupsFolderPath(),
+                    Title = "Select a backup to restore",
+                    RestoreDirectory = true
+                };
 
-                    if (d.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                    {
-                        BackupManager.RestoreFromBackup(d.SelectedPath);
-                        _optionsWindow.Close();
-                        _ = TrayManager.reloadallFrames(); // fire-and-forget reload
-                    }
+                if (d.ShowDialog() == true)
+                {
+                    BackupManager.RestoreFromBackup(d.FileName);
+                    _optionsWindow.Close();
+                    _ = TrayManager.reloadallFrames(); // fire-and-forget reload
                 }
             }
             catch (Exception ex)
