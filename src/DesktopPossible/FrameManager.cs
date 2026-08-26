@@ -6969,6 +6969,27 @@ namespace Desktop_Frames
                         // frames are only movable while the user has explicitly enabled editing.
                         if (!SettingsManager.FrameEditMode)
                         {
+                            // Hint only on real drag intent: the press must travel a few pixels while
+                            // held. A plain click — including the first press of the roll-up
+                            // double-click — stays silent.
+                            var pressOrigin = e.GetPosition(win);
+                            System.Windows.Input.MouseEventHandler dragProbe = null;
+                            MouseButtonEventHandler releaseProbe = null;
+                            void DetachProbes() { win.MouseMove -= dragProbe; win.MouseLeftButtonUp -= releaseProbe; }
+                            dragProbe = (ps, pe) =>
+                            {
+                                if (pe.LeftButton != MouseButtonState.Pressed) { DetachProbes(); return; }
+                                var p = pe.GetPosition(win);
+                                if (Math.Abs(p.X - pressOrigin.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+                                    Math.Abs(p.Y - pressOrigin.Y) >= SystemParameters.MinimumVerticalDragDistance)
+                                {
+                                    DetachProbes();
+                                    SmartToast.ShowEditModeHint();
+                                }
+                            };
+                            releaseProbe = (ps, pe) => DetachProbes();
+                            win.MouseMove += dragProbe;
+                            win.MouseLeftButtonUp += releaseProbe;
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"DragMove blocked for frame '{currentFrame.Title}' (Frame Edit Mode is off)");
                         }
                         else if (!isLocked)
