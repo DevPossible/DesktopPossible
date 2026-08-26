@@ -130,8 +130,6 @@ namespace Desktop_Frames
         private static readonly Dictionary<dynamic, TextBlock> _heartTextBlocks = new Dictionary<dynamic, TextBlock>();
 
         //resize feedback
-        private static Window _sizeFeedbackWindow;
-        private static System.Windows.Threading.DispatcherTimer _hideTimer;
 
         // Add near other static fields
         private static TargetChecker _currentTargetChecker;
@@ -7940,10 +7938,6 @@ namespace Desktop_Frames
 
 
 
-            if (SettingsManager.EnableDimensionSnap)
-            {
-                win.SizeChanged += UpdateSizeFeedback;
-            }
             win.LocationChanged += (s, e) =>
             {
                 // Get current frame reference by ID to avoid stale references
@@ -11332,69 +11326,6 @@ namespace Desktop_Frames
 
 
 
-        // Size feedback during resizing
-        private static void ShowSizeFeedback(double width, double height)
-        {
-            if (_sizeFeedbackWindow == null)
-            {
-                _sizeFeedbackWindow = new Window
-                {
-                    WindowStyle = WindowStyle.None,
-                    AllowsTransparency = true,
-                    Background = System.Windows.Media.Brushes.Transparent,
-                    Width = 100,
-                    Height = 30,
-                    ShowInTaskbar = false,
-                    Topmost = true
-                };
-
-                var label = new Label
-                {
-                    Content = "",
-                    Foreground = System.Windows.Media.Brushes.White,
-                    Background = System.Windows.Media.Brushes.Black,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                _sizeFeedbackWindow.Content = label;
-            }
-
-            var labelContent = (Label)_sizeFeedbackWindow.Content;
-            labelContent.Content = $"{Math.Round(width)} x {Math.Round(height)}";
-
-            var mousePos = System.Windows.Forms.Cursor.Position;
-            _sizeFeedbackWindow.Left = mousePos.X + 10;
-            _sizeFeedbackWindow.Top = mousePos.Y + 10;
-
-            _sizeFeedbackWindow.Show();
-
-            // --- BUG FIX: Unified Debounce Timer ---
-            // This guarantees the indicator will ALWAYS disappear 1.5 seconds 
-            // after the last call, preventing orphaned windows on screen.
-            if (_hideTimer == null)
-            {
-                _hideTimer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromMilliseconds(1500)
-                };
-                _hideTimer.Tick += (s, e) => HideSizeFeedback();
-            }
-            _hideTimer.Stop();
-            _hideTimer.Start();
-        }
-
-        private static void HideSizeFeedback()
-        {
-            if (_sizeFeedbackWindow != null)
-            {
-                _sizeFeedbackWindow.Hide();
-            }
-            if (_hideTimer != null)
-            {
-                _hideTimer.Stop();
-            }
-        }
-
         // Size when the current move/resize gesture began (WM_ENTERSIZEMOVE), so the grid
         // size-snap only runs after an actual resize — a plain drag never re-sizes the frame.
         private static readonly Dictionary<NonActivatingWindow, (double W, double H)> _sizeAtGestureStart = new();
@@ -11402,11 +11333,6 @@ namespace Desktop_Frames
         public static void OnResizingStarted(NonActivatingWindow frame)
         {
             try { _sizeAtGestureStart[frame] = (frame.Width, frame.Height); } catch { }
-            if (SettingsManager.EnableDimensionSnap)
-            {
-                frame.SizeChanged += UpdateSizeFeedback;
-                ShowSizeFeedback(frame.Width, frame.Height);
-            }
         }
 
         /// <summary>
@@ -11500,8 +11426,6 @@ namespace Desktop_Frames
 
             if (SettingsManager.EnableDimensionSnap)
             {
-                frame.SizeChanged -= UpdateSizeFeedback;
-
                 double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
                 double snappedHeight = Math.Round(frame.Height / 10.0) * 10;
 
@@ -11523,9 +11447,6 @@ namespace Desktop_Frames
                     FrameData.Height = snappedHeight;
                     FrameDataManager.SaveFrameData();
                 }
-
-                // Show one last time. The unified timer in ShowSizeFeedback will clean it up automatically.
-                ShowSizeFeedback(snappedWidth, snappedHeight);
             }
             else if (SettingsManager.SnapFramesToGrid && sizeChanged)
             {
@@ -11670,21 +11591,6 @@ namespace Desktop_Frames
             catch { return ""; }
         }
 
-
-
-        private static void UpdateSizeFeedback(object sender, SizeChangedEventArgs e)
-        {
-            var frame = sender as NonActivatingWindow;
-            if (frame != null)
-            {
-                // --- BUG FIX: Ignore programmatic animations ---
-                // Do not show the resizing indicator if the frame is just rolling up or down
-                string frameId = frame.Tag?.ToString();
-                if (!string.IsNullOrEmpty(frameId) && _framesInTransition.Contains(frameId)) return;
-
-                ShowSizeFeedback(frame.Width, frame.Height);
-            }
-        }
 
 
     }

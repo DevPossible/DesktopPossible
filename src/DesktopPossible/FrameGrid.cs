@@ -23,12 +23,16 @@ namespace Desktop_Frames
         public const string DefaultIconSize = "Medium";
 
         /// <summary>
-        /// One label line: icon labels are 10pt Segoe UI (IconManager.CreateIconLabel) — a
-        /// 13.3 DIP line box, rounded up. Labels wrap at 60 DIPs, so a typical row holds a
-        /// two-line label; the cell height budgets <see cref="LabelLines"/> lines.
+        /// One label line: icons render through Framemanager.AddIcon, whose label is a
+        /// default-size (12 DIP) wrapped TextBlock — a ~15.96 DIP Segoe UI line box,
+        /// rounded up. The cell height budgets <see cref="LabelLines"/> lines so a row
+        /// fits an icon with a two-to-three-line label without clipping.
         /// </summary>
-        public const double LabelLineHeight = 14;
-        public const int LabelLines = 2;
+        public const double LabelLineHeight = 16;
+        public const int LabelLines = 3;
+
+        /// <summary>The icon Image's own Margin(5) top+bottom (Framemanager.AddIcon).</summary>
+        public const double IconImageMargin = 10;
 
         /// <summary>Frame border thickness per side (CreateFrame default FrameBorderThickness = 2).</summary>
         public const double BorderThickness = 2;
@@ -59,17 +63,17 @@ namespace Desktop_Frames
         public static double UnitWidthFor(int iconSpacing) => IconPanelWidth + 4 * Math.Max(0, iconSpacing);
 
         /// <summary>
-        /// Height of one icon cell: what FreeGridPanel measures for the tallest icon panel —
-        /// icon image + label lines + the panel's top/bottom Margin(spacing).
-        /// Default (Medium 32px, spacing 5) → 32 + 2*14 + 10 = 70.
+        /// Height of one icon cell: icon image (plus its own margins) + budgeted label
+        /// lines + the panel's top/bottom Margin(spacing).
+        /// Default (Medium 32px, spacing 5) → 32 + 10 + 3*16 + 10 = 100.
         /// </summary>
         public static double UnitHeightFor(int iconSizePixels, int iconSpacing) =>
-            Math.Max(1, iconSizePixels) + LabelLines * LabelLineHeight + 2 * Math.Max(0, iconSpacing);
+            Math.Max(1, iconSizePixels) + IconImageMargin + LabelLines * LabelLineHeight + 2 * Math.Max(0, iconSpacing);
 
         /// <summary>Grid unit width for the default frame settings (80).</summary>
         public static double UnitWidth => UnitWidthFor(DefaultIconSpacing);
 
-        /// <summary>Grid unit height for the default frame settings (70).</summary>
+        /// <summary>Grid unit height for the default frame settings (100).</summary>
         public static double UnitHeight => UnitHeightFor(CoreUtilities.GetIconSizePixels(DefaultIconSize), DefaultIconSpacing);
 
         /// <summary>
