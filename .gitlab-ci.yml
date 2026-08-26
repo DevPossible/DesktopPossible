@@ -144,11 +144,14 @@ version:
       echo "Tags at HEAD: $(git tag --points-at HEAD | tr '\n' ' ')"
       echo "PRERELEASE: ${PRERELEASE:-false}"
 
+      # "|| true": the runner executes this script with pipefail, so grep finding NO
+      # matching tag (exit 1) would otherwise kill the job under set -e. Every pre-1.0
+      # release happened to have a tag at HEAD, which is why this never fired before.
       if [ "${PRERELEASE:-}" = "true" ]; then
         # A prerelease run may also reuse an rc tag already on HEAD (pipeline retry).
-        existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1)"
+        existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1 || true)"
       else
-        existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+        existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
       fi
 
       tag_exists="false"
