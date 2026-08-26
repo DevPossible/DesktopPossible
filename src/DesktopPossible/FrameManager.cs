@@ -5082,14 +5082,6 @@ namespace Desktop_Frames
             CnMnFramemanager.Items.Add(new Separator());
             CnMnFramemanager.Opened += (s, e) => miContentLock.IsChecked = IsContentLocked(LiveMenuFrame());
 
-            // --- Text frame: the editor (template, font, colour, draw mode, refresh). ---
-            if (TextFramemanager.IsTextFrame(frame))
-            {
-                var miEditText = new MenuItem { Header = "Edit Text Frame..." };
-                miEditText.Click += (s, e) => TextFrameEditorDialog.Show(frame.Id?.ToString());
-                CnMnFramemanager.Items.Add(miEditText);
-            }
-
             // --- Image frame controls (set / clear / copy) for the single displayed image. ---
             if (frame.ItemsType?.ToString() == "Image")
             {

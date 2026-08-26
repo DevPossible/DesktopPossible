@@ -251,7 +251,7 @@ Enable Auto-Organize · Show execution toast notifications · Arrange Now · Arr
 
 ### Text Frames Tab
 
-Add, edit and remove Text frames and their templates.
+Add and remove Text frames. Editing (template, font, colour, draw mode, refresh, opacity) happens in the shared Customize dialog — open it from this tab's *Customize...* button, or right-click the Text frame in Edit Frames Mode → *Customize...*.
 
 ### Look Deeper Tab
 

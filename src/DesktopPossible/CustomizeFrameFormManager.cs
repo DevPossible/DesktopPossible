@@ -52,6 +52,24 @@ namespace Desktop_Frames
         private CheckBox _chkDisableTextShadow;
         private CheckBox _chkGrayscaleIcons;
 
+        // --- Text frame mode: the dialog shows ONLY the text controls (template, font, style).
+        // Text frames have no chrome, title bar, icons, tint or launch effect, so every generic
+        // section is meaningless for them; the former TextFrameEditorDialog lives here now. ---
+        private bool _isTextFrame;
+        private TextBox _txtTemplate;
+        private ComboBox _cmbTextFont;
+        private Slider _sldTextSize;
+        private TextBlock _lblTextSizeValue;
+        private CheckBox _chkTextBold;
+        private CheckBox _chkTextItalic;
+        private TextBox _txtTextColorHex;
+        private Border _textColorSwatch;
+        private ComboBox _cmbTextAlign;
+        private ComboBox _cmbTextDrawMode;
+        private NumericTextBox _nudTextRefresh;
+        private Slider _sldTextOpacity;
+        private TextBlock _lblTextOpacityValue;
+
         // --- NEW: Global Action Tracking ---
         private Button _btnApply;
         private Button _btnSave;
@@ -79,6 +97,7 @@ namespace Desktop_Frames
         {
 			// Get the most current frame data from Framemanager to avoid stale references
 			_frame = GetCurrentFrameData(frame);
+            _isTextFrame = TextFramemanager.IsTextFrame(_frame);
             CaptureOriginalTintAndColor();
             InitializeComponent();
             LoadCurrentValues();
@@ -122,7 +141,9 @@ namespace Desktop_Frames
         {
             base.OnClosed(e);
             // Cancel/close without Save or Apply: undo any live tint/color preview.
-            if (!_result) RestoreTintPreview();
+            // (Text frames have no tint preview — repainting one would put a background
+            // on a window that must stay transparent.)
+            if (!_result && !_isTextFrame) RestoreTintPreview();
         }
         #endregion
 
@@ -144,7 +165,7 @@ namespace Desktop_Frames
                 _userAccentColor = mediaColor;
 
                 // Modern WPF window setup with DPI awareness
-                this.Title = "Customize Frame";
+                this.Title = _isTextFrame ? "Customize Text Frame" : "Customize Frame";
                 this.Width = 500;
                 this.Height = 675;
                 this.WindowStartupLocation = WindowStartupLocation.Manual;
@@ -233,6 +254,7 @@ namespace Desktop_Frames
 
         private void UpdateButtonsState(bool ctrlPressed)
         {
+            if (_isTextFrame) return; // "Apply/Save to all" pushes generic props — meaningless for text frames
             if (_btnApply == null || _btnSave == null) return;
             if (_isCtrlPressed == ctrlPressed) return;
 
@@ -296,7 +318,7 @@ namespace Desktop_Frames
             // Title label
             TextBlock titleBlock = new TextBlock
             {
-                Text = "Customize Frame",
+                Text = _isTextFrame ? "Customize Text Frame" : "Customize Frame",
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 18,
                 FontWeight = FontWeights.Bold,
@@ -362,9 +384,17 @@ namespace Desktop_Frames
                 Orientation = Orientation.Vertical
             };
 
-            CreateFrameSection(contentStack);
-            CreateTitleSection(contentStack);
-            CreateIconsSection(contentStack);
+            if (_isTextFrame)
+            {
+                // Text frames: only the text controls apply (no chrome/title/icons).
+                CreateTextSection(contentStack);
+            }
+            else
+            {
+                CreateFrameSection(contentStack);
+                CreateTitleSection(contentStack);
+                CreateIconsSection(contentStack);
+            }
 
             scrollViewer.Content = contentStack;
             parent.Children.Add(scrollViewer);
@@ -769,6 +799,200 @@ namespace Desktop_Frames
             parent.Children.Add(iconsGroupBox);
         }
 
+        /// <summary>
+        /// Text-frame mode content (moved here from the retired TextFrameEditorDialog):
+        /// template + token chips, then the text appearance controls. Values are collected
+        /// and committed through the shared Apply/Save flow like every other frame type.
+        /// </summary>
+        private void CreateTextSection(StackPanel parent)
+        {
+            GroupBox MakeGroup(string header) => new GroupBox
+            {
+                Header = header,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_userAccentColor),
+                Margin = new Thickness(0, 0, 0, 10),
+                Padding = new Thickness(8)
+            };
+
+            TextBlock MakeLabel(string text) => new TextBlock
+            {
+                Text = text,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(95, 99, 104)),
+                Margin = new Thickness(16, 8, 0, 3)
+            };
+
+            // ---- Template group ----
+            GroupBox templateGroup = MakeGroup("Text");
+            StackPanel templateStack = new StackPanel();
+
+            templateStack.Children.Add(MakeLabel("Template"));
+            _txtTemplate = new TextBox
+            {
+                AcceptsReturn = true,
+                AcceptsTab = true,
+                TextWrapping = TextWrapping.Wrap,
+                Height = 130,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 13,
+                Padding = new Thickness(6),
+                Margin = new Thickness(16, 0, 8, 4)
+            };
+            templateStack.Children.Add(_txtTemplate);
+
+            templateStack.Children.Add(MakeLabel("Tokens (click to insert)"));
+            WrapPanel tokens = new WrapPanel { Margin = new Thickness(16, 0, 8, 4) };
+            foreach (var (token, description) in SystemInfoTokens.Reference)
+            {
+                var chip = new Button
+                {
+                    Content = token,
+                    ToolTip = description,
+                    Margin = new Thickness(0, 0, 4, 4),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    FontFamily = new FontFamily("Consolas"),
+                    FontSize = 11,
+                    Background = new SolidColorBrush(Color.FromRgb(241, 243, 244)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand
+                };
+                string insert = token;
+                chip.Click += (s, e) =>
+                {
+                    int at = _txtTemplate.CaretIndex;
+                    _txtTemplate.Text = _txtTemplate.Text.Insert(at, insert);
+                    _txtTemplate.CaretIndex = at + insert.Length;
+                    _txtTemplate.Focus();
+                };
+                tokens.Children.Add(chip);
+            }
+            templateStack.Children.Add(tokens);
+
+            templateGroup.Content = templateStack;
+            parent.Children.Add(templateGroup);
+
+            // ---- Appearance group ----
+            GroupBox styleGroup = MakeGroup("Appearance");
+            StackPanel styleStack = new StackPanel();
+
+            styleStack.Children.Add(MakeLabel("Font"));
+            var fonts = Fonts.SystemFontFamilies.Select(f => f.Source).OrderBy(n => n).ToList();
+            _cmbTextFont = new ComboBox
+            {
+                ItemsSource = fonts,
+                IsEditable = true,
+                Height = 26,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Width = 220,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(16, 0, 0, 4)
+            };
+            styleStack.Children.Add(_cmbTextFont);
+
+            // Size slider + bold/italic on one row
+            Grid sizeRow = new Grid { Margin = new Thickness(16, 0, 8, 4) };
+            sizeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            sizeRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var sizeCol = new StackPanel();
+            var sizeLbl = MakeLabel("Size"); sizeLbl.Margin = new Thickness(0, 8, 0, 3);
+            sizeCol.Children.Add(sizeLbl);
+            var sizeSliderRow = new DockPanel();
+            _lblTextSizeValue = new TextBlock { FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Width = 28, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Right };
+            DockPanel.SetDock(_lblTextSizeValue, Dock.Right);
+            _sldTextSize = new Slider { Minimum = 8, Maximum = 96, TickFrequency = 1, IsSnapToTickEnabled = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            _sldTextSize.ValueChanged += (s, e) => { if (_lblTextSizeValue != null) _lblTextSizeValue.Text = ((int)e.NewValue).ToString(); };
+            sizeSliderRow.Children.Add(_lblTextSizeValue);
+            sizeSliderRow.Children.Add(_sldTextSize);
+            sizeCol.Children.Add(sizeSliderRow);
+            Grid.SetColumn(sizeCol, 0);
+            sizeRow.Children.Add(sizeCol);
+
+            var styleCol = new StackPanel { Margin = new Thickness(16, 22, 0, 0) };
+            _chkTextBold = new CheckBox { Content = "Bold", FontFamily = new FontFamily("Segoe UI"), FontSize = 12 };
+            _chkTextItalic = new CheckBox { Content = "Italic", FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Margin = new Thickness(0, 4, 0, 0) };
+            styleCol.Children.Add(_chkTextBold);
+            styleCol.Children.Add(_chkTextItalic);
+            Grid.SetColumn(styleCol, 1);
+            sizeRow.Children.Add(styleCol);
+            styleStack.Children.Add(sizeRow);
+
+            styleStack.Children.Add(MakeLabel("Colour (hex)"));
+            DockPanel colorRow = new DockPanel { Margin = new Thickness(16, 0, 8, 2) };
+            _textColorSwatch = new Border
+            {
+                Width = 24, Height = 24,
+                Margin = new Thickness(6, 0, 0, 0),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(218, 220, 224)),
+                BorderThickness = new Thickness(1)
+            };
+            DockPanel.SetDock(_textColorSwatch, Dock.Right);
+            _txtTextColorHex = new TextBox { Height = 24, VerticalContentAlignment = VerticalAlignment.Center, FontFamily = new FontFamily("Consolas"), FontSize = 12 };
+            _txtTextColorHex.TextChanged += (s, e) =>
+            {
+                try { _textColorSwatch.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_txtTextColorHex.Text)); }
+                catch { /* invalid hex — swatch keeps its last valid color */ }
+            };
+            colorRow.Children.Add(_textColorSwatch);
+            colorRow.Children.Add(_txtTextColorHex);
+            styleStack.Children.Add(colorRow);
+
+            WrapPanel presets = new WrapPanel { Margin = new Thickness(16, 4, 0, 4) };
+            foreach (string hex in new[] { "#FFFFFFFF", "#FF000000", "#FFFFD54F", "#FF4FC3F7", "#FF81C784", "#FFFF8A65", "#FFB0BEC5" })
+            {
+                var b = new Border
+                {
+                    Width = 20, Height = 20,
+                    Margin = new Thickness(0, 0, 4, 0),
+                    Background = new SolidColorBrush(TextFramemanager.ParseColor(hex)),
+                    BorderBrush = Brushes.Gray,
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand
+                };
+                string h = hex;
+                b.MouseLeftButtonDown += (s, e) => _txtTextColorHex.Text = h;
+                presets.Children.Add(b);
+            }
+            styleStack.Children.Add(presets);
+
+            styleStack.Children.Add(MakeLabel("Alignment"));
+            _cmbTextAlign = new ComboBox { ItemsSource = TextFramemanager.Alignments, Height = 26, Width = 220, HorizontalAlignment = HorizontalAlignment.Left, FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Margin = new Thickness(16, 0, 0, 4) };
+            styleStack.Children.Add(_cmbTextAlign);
+
+            styleStack.Children.Add(MakeLabel("Draw mode"));
+            _cmbTextDrawMode = new ComboBox { ItemsSource = TextFramemanager.DrawModes, Height = 26, Width = 220, HorizontalAlignment = HorizontalAlignment.Left, FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Margin = new Thickness(16, 0, 0, 4) };
+            styleStack.Children.Add(_cmbTextDrawMode);
+
+            styleStack.Children.Add(MakeLabel("Refresh every (seconds, 0 = never)"));
+            _nudTextRefresh = new NumericTextBox
+            {
+                Minimum = 0, Maximum = 86400, Value = 60,
+                FontFamily = new FontFamily("Segoe UI"), FontSize = 12,
+                Width = 80, HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(16, 0, 0, 4)
+            };
+            styleStack.Children.Add(_nudTextRefresh);
+
+            styleStack.Children.Add(MakeLabel("Opacity"));
+            var opacityRow = new DockPanel { Margin = new Thickness(16, 0, 8, 4) };
+            _lblTextOpacityValue = new TextBlock { FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Width = 36, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Right };
+            DockPanel.SetDock(_lblTextOpacityValue, Dock.Right);
+            _sldTextOpacity = new Slider { Minimum = 5, Maximum = 100, TickFrequency = 5, IsSnapToTickEnabled = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            _sldTextOpacity.ValueChanged += (s, e) => { if (_lblTextOpacityValue != null) _lblTextOpacityValue.Text = $"{(int)e.NewValue}%"; };
+            opacityRow.Children.Add(_lblTextOpacityValue);
+            opacityRow.Children.Add(_sldTextOpacity);
+            styleStack.Children.Add(opacityRow);
+
+            styleGroup.Content = styleStack;
+            parent.Children.Add(styleGroup);
+        }
+
         #region Helper Methods for Control Creation
         private void CreateDropdownField(StackPanel parent, string labelText, string[] items, out ComboBox comboBox)
         {
@@ -892,6 +1116,21 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, $"Default button clicked for frame '{_frame.Title}' - resetting all controls to defaults");
 
+                if (_isTextFrame)
+                {
+                    // Reset STYLING only — wiping the template would destroy the user's content.
+                    _cmbTextFont.Text = "Segoe UI";
+                    _sldTextSize.Value = 14;
+                    _chkTextBold.IsChecked = false;
+                    _chkTextItalic.IsChecked = false;
+                    _txtTextColorHex.Text = "#FFFFFFFF";
+                    _cmbTextAlign.SelectedItem = "Left";
+                    _cmbTextDrawMode.SelectedItem = "Shadow";
+                    _nudTextRefresh.Value = 60;
+                    _sldTextOpacity.Value = 100;
+                    return;
+                }
+
                 // Reset all dropdown controls to "Default" (index 0)
                 _cmbCustomColor.SelectedIndex = 0;
                 _cmbCustomLaunchEffect.SelectedIndex = 0;
@@ -940,7 +1179,7 @@ namespace Desktop_Frames
         {
             try
             {
-                if (_isCtrlPressed)
+                if (_isCtrlPressed && !_isTextFrame)
                 {
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, "Save to all clicked");
                     ApplyChangesToAll();
@@ -963,7 +1202,7 @@ namespace Desktop_Frames
         {
             try
             {
-                if (_isCtrlPressed)
+                if (_isCtrlPressed && !_isTextFrame)
                 {
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, "Apply to all clicked");
                     ApplyChangesToAll();
@@ -1092,11 +1331,50 @@ namespace Desktop_Frames
         /// </summary>
         private void ApplyChanges()
         {
+            if (_isTextFrame)
+            {
+                // Save first, then refresh — the text renderer reads the persisted properties.
+                SaveTextFramePropertiesToJson();
+                try
+                {
+                    dynamic live = FrameDataManager.FindFrameById(_frame.Id?.ToString());
+                    if (live != null) TextFramemanager.Refresh(live);
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error refreshing text frame: {ex.Message}");
+                }
+                _result = true;
+                return;
+            }
+
             ApplyRuntimeChanges(); // --- SPEED FIX: Update visuals instantly first ---
             SaveAllPropertiesToJson(); // Then save to JSON
             // Refresh the frame title so its hotkey suffix reflects any change (after save).
             try { Framemanager.RefreshFrameTitle(_frame.Id?.ToString()); } catch { }
             _result = true; // Mark as successful so if they close later, it counts as saved
+        }
+
+        /// <summary>Persists the text-frame controls to the frame record (text mode only).</summary>
+        private void SaveTextFramePropertiesToJson()
+        {
+            string font = string.IsNullOrWhiteSpace(_cmbTextFont.Text) ? "Segoe UI" : _cmbTextFont.Text;
+
+            // Keep the last saved colour when the typed hex doesn't parse.
+            string colorHex = _txtTextColorHex.Text?.Trim();
+            try { ColorConverter.ConvertFromString(colorHex); }
+            catch { colorHex = TextFramemanager.ColorHex(_frame); }
+
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyTemplate, _txtTemplate.Text, "Text template updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyFont, font, $"Text font updated to '{font}'");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeySize, ((int)_sldTextSize.Value).ToString(), "Text size updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyBold, (_chkTextBold.IsChecked == true).ToString().ToLower(), "Text bold updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyItalic, (_chkTextItalic.IsChecked == true).ToString().ToLower(), "Text italic updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyColor, colorHex, $"Text colour updated to '{colorHex}'");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyAlign, _cmbTextAlign.SelectedItem?.ToString() ?? "Left", "Text alignment updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyDrawMode, _cmbTextDrawMode.SelectedItem?.ToString() ?? "Shadow", "Text draw mode updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyRefresh, _nudTextRefresh.Value.ToString(), "Text refresh interval updated");
+            Framemanager.UpdateFrameProperty(_frame, TextFramemanager.KeyOpacity, ((int)_sldTextOpacity.Value).ToString(), "Text opacity updated");
         }
 
         /// <summary>
@@ -1136,6 +1414,10 @@ namespace Desktop_Frames
                 {
                     string frameId = targetFrame.Id?.ToString();
                     if (string.IsNullOrEmpty(frameId)) continue;
+
+                    // Text frames have none of these generic properties — a global apply must
+                    // not stomp their chrome-less setup (transparent color, 0 border).
+                    if (TextFramemanager.IsTextFrame(targetFrame)) continue;
 
                     var win = windows.FirstOrDefault(w => w.Tag?.ToString() == frameId);
                     if (win != null)
@@ -1184,6 +1466,24 @@ namespace Desktop_Frames
             try
             {
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, $"Loading current values for frame '{_frame.Title}'");
+
+                if (_isTextFrame)
+                {
+                    // Text mode: only the text controls exist — the generic fields are null.
+                    _txtTemplate.Text = TextFramemanager.Template(_frame);
+                    _cmbTextFont.Text = TextFramemanager.Font(_frame);
+                    _sldTextSize.Value = TextFramemanager.Size(_frame);
+                    _lblTextSizeValue.Text = ((int)_sldTextSize.Value).ToString();
+                    _chkTextBold.IsChecked = TextFramemanager.Bold(_frame);
+                    _chkTextItalic.IsChecked = TextFramemanager.Italic(_frame);
+                    _txtTextColorHex.Text = TextFramemanager.ColorHex(_frame);
+                    _cmbTextAlign.SelectedItem = TextFramemanager.Align(_frame);
+                    _cmbTextDrawMode.SelectedItem = TextFramemanager.DrawMode(_frame);
+                    _nudTextRefresh.Value = TextFramemanager.RefreshSeconds(_frame);
+                    _sldTextOpacity.Value = TextFramemanager.Opacity(_frame) * 100;
+                    _lblTextOpacityValue.Text = $"{(int)_sldTextOpacity.Value}%";
+                    return;
+                }
 
                 bool isPortalFrame = _frame.ItemsType?.ToString() == "Portal";
                 bool isnoteFrame = _frame.ItemsType?.ToString() == "Note";

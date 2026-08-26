@@ -845,11 +845,21 @@ namespace Desktop_Frames
             Grid buttons = new Grid { Margin = new Thickness(15, 0, 15, 10), Height = 34 };
             for (int i = 0; i < 3; i++) buttons.ColumnDefinitions.Add(new ColumnDefinition());
             Button bAdd = CreateStyledButton("Add Text Frame", ColorTextFrames); bAdd.Margin = new Thickness(0, 0, 5, 0);
-            Button bEdit = CreateStyledButton("Edit...", Color.FromRgb(0, 123, 191)); bEdit.Margin = new Thickness(5, 0, 5, 0);
+            Button bEdit = CreateStyledButton("Customize...", Color.FromRgb(0, 123, 191)); bEdit.Margin = new Thickness(5, 0, 5, 0);
             Button bRemove = CreateStyledButton("Remove", Color.FromRgb(234, 67, 53)); bRemove.Margin = new Thickness(5, 0, 0, 0);
             Grid.SetColumn(bAdd, 0); Grid.SetColumn(bEdit, 1); Grid.SetColumn(bRemove, 2);
             buttons.Children.Add(bAdd); buttons.Children.Add(bEdit); buttons.Children.Add(bRemove);
             c.Children.Add(buttons);
+
+            // Text frames now share the common Customize dialog (text-mode controls only).
+            void CustomizeTextFrame(string? id)
+            {
+                if (id == null) return;
+                dynamic? frame = FrameDataManager.FindFrameById(id);
+                if (frame == null) return;
+                try { new CustomizeFrameFormManager(frame).ShowDialog(); }
+                catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Text frame customize failed: {ex.Message}"); }
+            }
 
             bAdd.Click += (s, e) =>
             {
@@ -857,17 +867,15 @@ namespace Desktop_Frames
                 dynamic frame = Framemanager.CreateTextFrame(wa.Left + 40, wa.Top + 40);
                 Reload();
                 foreach (ListBoxItem item in list.Items) if (item.Tag?.ToString() == frame.Id?.ToString()) list.SelectedItem = item;
-                TextFrameEditorDialog.Show(frame.Id?.ToString());
+                CustomizeTextFrame(frame.Id?.ToString());
                 Reload();
             };
             bEdit.Click += (s, e) =>
             {
-                string? id = SelectedId();
-                if (id == null) return;
-                TextFrameEditorDialog.Show(id);
+                CustomizeTextFrame(SelectedId());
                 Reload();
             };
-            list.MouseDoubleClick += (s, e) => { string? id = SelectedId(); if (id != null) { TextFrameEditorDialog.Show(id); Reload(); } };
+            list.MouseDoubleClick += (s, e) => { string? id = SelectedId(); if (id != null) { CustomizeTextFrame(id); Reload(); } };
             bRemove.Click += (s, e) =>
             {
                 string? id = SelectedId();
