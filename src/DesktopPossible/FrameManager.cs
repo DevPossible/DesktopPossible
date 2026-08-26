@@ -1314,14 +1314,6 @@ namespace Desktop_Frames
             };
             menu.Items.Add(newPortalFrameItem);
 
-            MenuItem newNoteFrameItem = new MenuItem { Header = "New Note Frame" };
-            newNoteFrameItem.Click += (s, e) =>
-            {
-                var mousePosition = System.Windows.Forms.Cursor.Position;
-                CreateNewFrame("", "Note", mousePosition.X, mousePosition.Y);
-            };
-            menu.Items.Add(newNoteFrameItem);
-
             MenuItem newImageFrameItem = new MenuItem { Header = "New Image Frame" };
             newImageFrameItem.Click += (s, e) =>
             {
@@ -4181,6 +4173,40 @@ namespace Desktop_Frames
                     IDictionary<string, object> frameDict = frame is IDictionary<string, object> dict
                         ? dict : ((JObject)frame).ToObject<IDictionary<string, object>>();
 
+                    // --- 0. NOTE FRAME RETIREMENT ---
+                    // The Note frame feature was removed. A leftover Note frame's text is the
+                    // user's content: export it to a .txt on the Desktop (never delete it),
+                    // then drop the frame. The app-authored welcome note is dropped silently.
+                    if (frame.ItemsType?.ToString() == "Note")
+                    {
+                        try
+                        {
+                            string content = frameDict.TryGetValue("NoteContent", out object nc) ? nc?.ToString() : null;
+                            bool isWelcomeNote = content != null && content.StartsWith("WELCOME TO DesktopPossible", StringComparison.Ordinal);
+                            if (!string.IsNullOrWhiteSpace(content) && !isWelcomeNote)
+                            {
+                                string title = frameDict.TryGetValue("Title", out object t) ? t?.ToString() : null;
+                                if (string.IsNullOrWhiteSpace(title)) title = "Note";
+                                foreach (char c in System.IO.Path.GetInvalidFileNameChars()) title = title.Replace(c, '_');
+                                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                                string dest = FrameStore.UniqueDestinationPath(desktop, title.TrimEnd(' ', '.') + ".txt");
+                                System.IO.File.WriteAllText(dest, content);
+                                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameCreation,
+                                    $"Note frames retired: exported note '{title}' to '{dest}'.");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
+                                $"Note frames retired: failed to export note content: {ex.Message}");
+                        }
+
+                        FrameDataManager.FrameData.RemoveAt(i);
+                        i--;
+                        jsonModified = true;
+                        continue;
+                    }
+
                     // --- 1. CORE VALIDATION (VITAL) ---
                     // Add GUID if missing
                     if (!frameDict.ContainsKey("Id"))
@@ -4700,8 +4726,9 @@ namespace Desktop_Frames
 
 
         /// <summary>
-        /// Seeds the one-time instructional "Startup Tips" Note frame at the bottom-right of the
-        /// primary work area. Caller gates this (Default profile + InstructionalFrameCreated flag).
+        /// Seeds the one-time instructional "Startup Tips" frame (a chrome-less Text frame)
+        /// at the bottom-right of the primary work area. Caller gates this (Default profile
+        /// + InstructionalFrameCreated flag).
         /// </summary>
         private static void InitializeDefaultFrame()
         {
@@ -4717,8 +4744,8 @@ namespace Desktop_Frames
                 }
                 catch { }
 
-                // The "Startup Tips" Note Frame
-                var noteFrame = new
+                // The "Startup Tips" Text frame (wallpaper text; auto-sizes to its content).
+                var tipsFrame = new
                 {
                     Id = Guid.NewGuid().ToString(), // Unique ID
                     Title = "DesktopPossible Startup Tips", // Explicit Name
@@ -4726,46 +4753,41 @@ namespace Desktop_Frames
                     Y = tipsY,
                     Width = tipsWidth,
                     Height = tipsHeight,
-                    ItemsType = "Note",
+                    ItemsType = TextFramemanager.Type,
                     Items = new JArray(),
 
-                    // Visuals from your spec
-                    CustomColor = (string)null, // Default
-                    TextColor = "Teal",         // Teal text
-
-                    // Note Settings
-                    NoteContent = "WELCOME TO DesktopPossible\r\n" +
-                                  "---------------------------------\r\n" +
-                                  "• Roll Up/Down: Double-click the frame title bar.\r\n" +
-                                  "• Rename: Ctrl + Click the title bar (Enter to save).\r\n" +
-                                  "• Options: Click the '♥' menu icon (top-left).\r\n" +
-                                  "• Reorder Icons on a frame: Ctrl + Drag icon to new position.\r\n" +
-                                  "• Context Menu: Right-click icons or Frames for more options.\r\n" +
-                                  " \r\n" +
-                                  "TIP: Ctrl + Click or Ctrl + Right-click, gives even more options.\r\n\r\n" +
-                                  "Try customizing this frame! Right-click the title bar -> Customize...",
-
-                    NoteFontSize = "Medium",
-                    NoteFontFamily = "Segoe UI",
-                    WordWrap = "true",
-                    SpellCheck = "false",
+                    // Text frame settings (see TextFramemanager property keys)
+                    TextTemplate = "WELCOME TO DesktopPossible\n" +
+                                   "---------------------------------\n" +
+                                   "• Roll Up/Down: Double-click a frame's title bar.\n" +
+                                   "• Rename: Ctrl + Click a frame's title bar (Enter to save).\n" +
+                                   "• Options: Click the '♥' menu icon (top-left of a frame).\n" +
+                                   "• Reorder Icons: Ctrl + Drag an icon to a new position.\n" +
+                                   "• Move/Resize frames: enable 'Edit Frames Mode' (tray menu).\n" +
+                                   "• Context Menu: Right-click icons or frames for more options.\n" +
+                                   "\n" +
+                                   "TIP: This welcome text is a Text frame - edit or remove it in Options → Text Frames.",
+                    TextFont = "Segoe UI",
+                    TextSize = "13",
+                    TextColor = "#FF20B2AA", // light sea green, readable on most wallpapers
+                    TextAlign = "Left",
+                    TextDrawMode = "Shadow",
+                    TextRefreshSeconds = "0", // static text, no refresh timer
+                    TextOpacity = "100",
 
                     // Standard Properties
                     IsHidden = "false",
                     IsLocked = "false",
                     IsRolled = "false",
-                    AutoRoll = "false", // --- NEW: Auto Roll ---
-                    AlwaysOnTop = "false", // --- NEW ---
+                    AutoRoll = "false",
+                    AlwaysOnTop = "false",
                     UnrolledHeight = 318.0,
-                    BoldTitleText = "false",
-                    DisableTextShadow = "false",
-                    IconSize = "Medium",
-                    IconSpacing = 5,
-                    FrameBorderThickness = 2
+                    CustomColor = "Transparent",
+                    FrameBorderThickness = 0
                 };
 
                 // Save
-                var frames = new List<object> { noteFrame };
+                var frames = new List<object> { tipsFrame };
                 string defaultJson = JsonConvert.SerializeObject(frames, Formatting.Indented);
 
                 System.IO.File.WriteAllText(FrameDataManager.JsonFilePath, defaultJson);
@@ -5096,7 +5118,7 @@ namespace Desktop_Frames
             CnMnFramemanager.Items.Add(miRenameFrame);
             CnMnFramemanager.Items.Add(new Separator());
 
-            // --- Content lock (prevents changes): Note = read-only, Data/Portal = no drops,
+            // --- Content lock (prevents changes): Data/Portal = no drops,
             //     Image = no set/clear/paste. Separate from the position lock (title-bar icon). ---
             MenuItem miContentLock = new MenuItem { Header = "Lock (prevent changes)", IsCheckable = true, IsChecked = IsContentLocked(frame) };
             miContentLock.Click += (s, e) => SetContentLocked(LiveMenuFrame(), miContentLock.IsChecked);
@@ -5144,8 +5166,6 @@ namespace Desktop_Frames
                     miSaveImg.IsEnabled = has;
                 };
             }
-
-            MenuItem miNewnoteFrame = new MenuItem { Header = "New Note Frame" };
 
             // --- NEW: Auto Roll Menu Item ---
             MenuItem miAutoRoll = new MenuItem { Header = "Auto roll", IsCheckable = true };
@@ -5206,14 +5226,6 @@ namespace Desktop_Frames
             MenuItem miHide = new MenuItem { Header = "Hide Frame" }; // New Hide Frame item
                                                                    
             CnMnFramemanager.Items.Add(miHide); // Add Hide Frame
-                                                // Add Note Frame specific context menu items if this is a Note Frame
-            if (frame.ItemsType?.ToString() == "Note")
-            {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                    $"Adding Note frame context menu items for '{frame.Title}'");
-                // We'll add the TextBox reference after the window is created
-                // For now, just mark that this will need Note menu items
-            }
             NonActivatingWindow win = new NonActivatingWindow
             {
                 ContextMenu = CnMnFramemanager,
@@ -5238,12 +5250,6 @@ namespace Desktop_Frames
                 Left = (double)frame.X,
                 Tag = frame.Id?.ToString() ?? Guid.NewGuid().ToString() // Ensure ID exists
             };
-            // Add Note frame specific context menu items after window creation
-            if (frame.ItemsType?.ToString() == "Note")
-            {
-                // The TextBox will be created in InitContent(), so we need to add menu items after that
-                // We'll modify the context menu after InitContent() is called
-            }
             //Peek behind frame
             MenuItem miPeekBehind = new MenuItem { Header = "Peek Behind" };
             CnMnFramemanager.Items.Add(miPeekBehind);
@@ -6034,7 +6040,7 @@ namespace Desktop_Frames
             try { string tId = frame.Id?.ToString(); if (!string.IsNullOrEmpty(tId)) _frameTitles[tId] = (titlelabel, titleTextBrush, titleFontSize); } catch { }
 
             // Portal indicator: a small badge (the portal watermark scaled down) at the far-left of
-            // the title bar so Portal frames are visually distinct from Data/Note frames.
+            // the title bar so Portal frames are visually distinct from Data frames.
             // The per-type title glyph (folder / note / shortcut) is rendered inside BuildTitleContent,
             // just to the left of the title text.
 
@@ -7228,19 +7234,7 @@ namespace Desktop_Frames
 
             void InitContent()
             {
-                // 1. Handle Note frames - they don't use WrapPanel
-                if (frame.ItemsType?.ToString() == "Note")
-                {
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Creating Note frame content for '{frame.Title}'");
-                    dp.Children.Remove(wpcontscr); // Remove ScrollViewer
-                    TextBox noteTextBox = NoteFramemanager.CreateNoteContent(frame, dp);
-
-                    bool isNoteRolled = frame.IsRolled?.ToString().ToLower() == "true";
-                    noteTextBox.Visibility = isNoteRolled ? Visibility.Collapsed : Visibility.Visible;
-                    return;
-                }
-
-                // 1a. Image frames - a single image filling the frame (like a Note, but a picture).
+                // 1a. Image frames - a single image filling the frame.
                 if (frame.ItemsType?.ToString() == "Image")
                 {
                     dp.Children.Remove(wpcontscr); // no WrapPanel; the image fills the content
@@ -7970,49 +7964,6 @@ namespace Desktop_Frames
                 _heartTextBlocks.Remove(frame);
                 try { win.Close(); } catch { }
                 return;
-            }
-            // Add Note frame specific context menu items after content is initialized
-            if (frame.ItemsType?.ToString() == "Note")
-            {
-                // Use a small delay to ensure the TextBox is fully created and added to the visual tree
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        // Find the TextBox that was created in InitContent()
-                        var border = win.Content as Border;
-                        var dockPanel = border?.Child as DockPanel;
-                        var noteTextBox = dockPanel?.Children.OfType<TextBox>().FirstOrDefault();
-                        if (noteTextBox != null)
-                        {
-                            NoteFramemanager.AddNoteContextMenuItems(CnMnFramemanager, frame, noteTextBox);
-                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                                $"Added Note context menu items for frame '{frame.Title}'");
-                        }
-                        else
-                        {
-                            LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
-                                $"CRITICAL: Could not find TextBox for Note frame '{frame.Title}' - checking DockPanel children");
-                            // Debug: Log what children actually exist
-                            if (dockPanel != null)
-                            {
-                                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                                    $"DockPanel has {dockPanel.Children.Count} children:");
-                                for (int i = 0; i < dockPanel.Children.Count; i++)
-                                {
-                                    var child = dockPanel.Children[i];
-                                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                                        $" Child {i}: {child.GetType().Name}");
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
-                            $"Error adding Note context menu: {ex.Message}");
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             win.Show();
             SendFrameToBottom(win); // desktop furniture: start behind the user's apps
@@ -10340,10 +10291,10 @@ namespace Desktop_Frames
 
         // ===================== Content lock (prevent changes) =====================
         // Separate from the position "Pin" (IsLocked). ContentLocked blocks edits/additions:
-        // Note = read-only, Data/Portal = no drops, Image = no set/clear/paste.
+        // Data/Portal = no drops, Image = no set/clear/paste.
 
         /// <summary>True if the frame's content is locked. Missing key defaults to locked only for
-        /// Image frames (set-once), unlocked for Note/Data/Portal so they stay editable by default.</summary>
+        /// Image frames (set-once), unlocked for Data/Portal so they stay editable by default.</summary>
         public static bool IsContentLocked(dynamic frame)
         {
             try { string v = frame.ContentLocked?.ToString(); if (!string.IsNullOrEmpty(v)) return v.ToLower() != "false"; } catch { }
@@ -10364,7 +10315,7 @@ namespace Desktop_Frames
         }
 
         /// <summary>Applies the current content-lock state to the live frame (title-bar button glyph,
-        /// Note read-only, Image refresh). Data/Portal are enforced at drop time.</summary>
+        /// Image refresh). Data/Portal are enforced at drop time.</summary>
         public static void ApplyContentLock(dynamic frame)
         {
             try
@@ -10388,20 +10339,6 @@ namespace Desktop_Frames
 
                 if (type == "Image") { ImageFramemanager.Refresh(frame); return; }
                 if (type == "Text") { TextFramemanager.Refresh(frame); return; }
-                if (type == "Note")
-                {
-                    // Walk the whole visual tree — the note's Border.Child is swapped to an overlay Grid
-                    // after the first focus, so a fixed Border→DockPanel path would miss the TextBox.
-                    if (win != null && FindDescendantByName(win, "NoteEditBox") is TextBox tb)
-                    {
-                        tb.IsReadOnly = locked;
-                        // Locking mid-edit: force the note out of edit mode directly (saves the text,
-                        // restores visuals, re-enables focus prevention). Deliberately NOT done by moving
-                        // focus — Window.Focus()/ClearFocus are unreliable on non-activating windows and
-                        // previously left notes stuck in or out of edit mode.
-                        if (locked) NoteFramemanager.ForceEndEdit(tb);
-                    }
-                }
                 // Data/Portal: enforced at drop time (see win.Drop).
             }
             catch { }
@@ -10483,7 +10420,6 @@ namespace Desktop_Frames
 
         private static string GlyphForType(string type) => type switch
         {
-            "Note" => "✎",   // ✎ pencil
             "Data" => "↗",   // ↗ shortcut/launch arrow
             "Image" => "\U0001F5BC", // 🖼 monochrome frame-with-picture
             "Text" => "T",           // text frame
@@ -10493,7 +10429,7 @@ namespace Desktop_Frames
         /// <summary>
         /// Builds the per-type title icon, coloured with the frame's title brush and muted to the same
         /// opacity as the other title-bar icons (Menu Tint). Portal = a drawn spiral (themeable swirl);
-        /// Note/Data = monochrome glyphs.
+        /// Data = monochrome glyph.
         /// </summary>
         private static FrameworkElement BuildTypeIcon(string frameType, System.Windows.Media.Brush baseBrush, double baseFontSize, string tooltip)
         {

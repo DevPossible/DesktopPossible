@@ -286,8 +286,6 @@ namespace Desktop_Frames
 
             // Moved from Style Tab (Choices)
             CreateCheckBox(c, "Enable Portal Frames Watermark", "EnablePortalWatermark", SettingsManager.ShowBackgroundImageOnPortalFrames);
-            var n = CreateCheckBoxReturn(c, "Enable Note Frames Watermark (Coming Soon)", "EnableNoteWatermark", false);
-            n.IsEnabled = false; n.Foreground = Brushes.Gray;
             CreateCheckBox(c, "Disable Frame Scrollbars", "DisableFrameScrollbars", SettingsManager.DisableFrameScrollbars);
 
             // --- Virtual Desktops ---

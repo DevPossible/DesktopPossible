@@ -436,26 +436,6 @@ namespace Desktop_Frames
                         onTopIcon.Foreground = isOnTop ? System.Windows.Media.Brushes.DeepPink : System.Windows.Media.Brushes.White;
                     }
 
-                    // 5. Update Note Text Contrast (if applicable)
-                    try
-                    {
-                        string type = null;
-                        if (FrameData is Newtonsoft.Json.Linq.JObject j) type = j["ItemsType"]?.ToString();
-                        else try { type = FrameData.ItemsType?.ToString(); } catch { }
-
-                        if (type == "Note" && FrameData != null)
-                        {
-                            var border = win.Content as Border;
-                            var dockPanel = border?.Child as DockPanel;
-                            var noteTextBox = dockPanel?.Children.OfType<TextBox>().FirstOrDefault();
-
-                            if (noteTextBox != null)
-                            {
-                                NoteFramemanager.RefreshNoteVisuals(FrameData, noteTextBox);
-                            }
-                        }
-                    }
-                    catch { }
                 }
             });
         }

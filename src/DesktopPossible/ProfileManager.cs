@@ -468,12 +468,11 @@ namespace Desktop_Frames
             LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General, $"SWITCHING PROFILE: {_currentProfileName} -> {profileName}");
 
             // --- FLUSH BEFORE TEARDOWN ---
-            // End all note edits (saves text + stops their autosave timers) and persist the
-            // outgoing profile's frame data while FrameDataManager still points at the OLD
-            // profile, so no late save can land old-profile data on the new profile's file.
+            // Persist the outgoing profile's frame data while FrameDataManager still points
+            // at the OLD profile, so no late save can land old-profile data on the new
+            // profile's file.
             try
             {
-                NoteFramemanager.ForceEndAllEdits();
                 if (FrameDataManager.FrameData != null) FrameDataManager.SaveFrameData();
             }
             catch (Exception ex)
@@ -490,7 +489,6 @@ namespace Desktop_Frames
                     // List of window types to close
                     var ghostWindows = new HashSet<string>
                     {
-                        "TextFormatFormManager",
                         "IconPickerDialog",
                         "EditShortcutWindow",
                         "CustomizeFrameFormManager"

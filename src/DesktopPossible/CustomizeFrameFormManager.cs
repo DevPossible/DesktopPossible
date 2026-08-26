@@ -1425,16 +1425,7 @@ namespace Desktop_Frames
                         ApplyFrameBorderSettings(win);
                         ApplyTitleSettings(win, targetFrame);
                         ApplyCustomColorSetting(win);
-
-                        string itemsType = targetFrame.ItemsType?.ToString();
-                        if (itemsType == "Note")
-                        {
-                            ApplyNoteSettings(win, targetFrame);
-                        }
-                        else
-                        {
-                            ApplyIconSettings(win, targetFrame);
-                        }
+                        ApplyIconSettings(win, targetFrame);
                     }
 
                     Framemanager.UpdateFrameProperty(targetFrame, "CustomColor", customColor, "Global Apply: CustomColor updated");
@@ -1486,15 +1477,6 @@ namespace Desktop_Frames
                 }
 
                 bool isPortalFrame = _frame.ItemsType?.ToString() == "Portal";
-                bool isnoteFrame = _frame.ItemsType?.ToString() == "Note";
-                if (isPortalFrame)
-                {
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Portal frame detected - disabling icon controls for '{_frame.Title}'");
-                }
-                if (isnoteFrame)
-                {
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Note frame detected - disabling icon controls for '{_frame.Title}'");
-                }
 
                 // Load Frame Section properties
                 LoadDropdownValue(_cmbCustomColor, _frame.CustomColor?.ToString(), "CustomColor");
@@ -1554,20 +1536,12 @@ namespace Desktop_Frames
                 LoadCheckboxValue(_chkBoldTitleText, _frame.BoldTitleText?.ToString(), "BoldTitleText");
 
                 // Load Icons Section properties
-                //  if (isPortalFrame|| isnoteFrame)
-                if (isnoteFrame)
-                {
-                    DisableIconControls();
-                }
-                else
-                {
-                    EnableIconControls();
-                    LoadDropdownValue(_cmbIconSize, _frame.IconSize?.ToString(), "IconSize");
-                    LoadNumericValue(_nudIconSpacing, _frame.IconSpacing?.ToString(), "IconSpacing", 5);
-                    LoadDropdownValue(_cmbTextColor, _frame.TextColor?.ToString(), "TextColor");
-                    LoadCheckboxValue(_chkDisableTextShadow, _frame.DisableTextShadow?.ToString(), "DisableTextShadow");
-                    LoadCheckboxValue(_chkGrayscaleIcons, _frame.GrayscaleIcons?.ToString(), "GrayscaleIcons");
-                }
+                EnableIconControls();
+                LoadDropdownValue(_cmbIconSize, _frame.IconSize?.ToString(), "IconSize");
+                LoadNumericValue(_nudIconSpacing, _frame.IconSpacing?.ToString(), "IconSpacing", 5);
+                LoadDropdownValue(_cmbTextColor, _frame.TextColor?.ToString(), "TextColor");
+                LoadCheckboxValue(_chkDisableTextShadow, _frame.DisableTextShadow?.ToString(), "DisableTextShadow");
+                LoadCheckboxValue(_chkGrayscaleIcons, _frame.GrayscaleIcons?.ToString(), "GrayscaleIcons");
 
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Successfully loaded all current values for frame '{_frame.Title}' (Portal: {isPortalFrame})");
             }
@@ -1575,49 +1549,6 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error loading current values for frame '{_frame.Title}': {ex.Message}");
               MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Error loading frame properties: {ex.Message}", "Load Error");
-            }
-        }
-
-        private void DisableIconControls()
-        {
-            try
-            {
-                _cmbIconSize.IsEnabled = false;
-                _nudIconSpacing.IsEnabled = false;
-                _cmbTextColor.IsEnabled = false;
-                _chkDisableTextShadow.IsEnabled = false;
-                _chkGrayscaleIcons.IsEnabled = false;
-                _cmbCustomLaunchEffect.IsEnabled = false;
-
-                _cmbIconSize.SelectedIndex = 0;
-                _nudIconSpacing.Value = 5;
-                _cmbTextColor.SelectedIndex = 0;
-                _chkDisableTextShadow.IsChecked = false;
-                _chkGrayscaleIcons.IsChecked = false;
-                _cmbCustomLaunchEffect.SelectedIndex = 0;
-
-                _cmbIconSize.Background = SystemColors.ControlBrush;
-                _nudIconSpacing.Background = SystemColors.ControlBrush;
-                _cmbTextColor.Background = SystemColors.ControlBrush;
-                _cmbCustomLaunchEffect.Background = SystemColors.ControlBrush;
-
-                string frameType = _frame.ItemsType?.ToString();
-                string tooltipMessage = frameType == "Portal" ? "Icon appearance settings are not available for Portal Frames"
-                                     : frameType == "Note" ? "Icon appearance settings are not available for Note Frames"
-                                     : "Icon appearance settings are disabled";
-
-                _cmbIconSize.ToolTip = tooltipMessage;
-                _nudIconSpacing.ToolTip = tooltipMessage;
-                _cmbTextColor.ToolTip = tooltipMessage;
-                _chkDisableTextShadow.ToolTip = tooltipMessage;
-                _chkGrayscaleIcons.ToolTip = tooltipMessage;
-                _cmbCustomLaunchEffect.ToolTip = tooltipMessage;
-
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, "Disabled icon controls for Portal Frame");
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error disabling icon controls: {ex.Message}");
             }
         }
 
@@ -1821,24 +1752,10 @@ namespace Desktop_Frames
                     ApplyFrameBorderSettings(win);
                     ApplyTitleSettings(win, _frame);
                     ApplyCustomColorSetting(win);
+                    ApplyIconSettings(win, _frame);
 
-                    // --- CHANGED LOGIC START ---
-                    string itemsType = _frame.ItemsType?.ToString();
-
-                    if (itemsType == "Note")
-                    {
-                        // Explicitly update Note visuals
-                        ApplyNoteSettings(win, _frame);
-                    }
-                    else
-                    {
-                        // Update Icon visuals
-                        ApplyIconSettings(win, _frame);
-
-                        // Portal Details view shares text color + grayscale — refresh it too.
-                        if (itemsType == "Portal") Framemanager.RefreshPortalDetails(frameId);
-                    }
-                    // --- CHANGED LOGIC END ---
+                    // Portal Details view shares text color + grayscale — refresh it too.
+                    if (_frame.ItemsType?.ToString() == "Portal") Framemanager.RefreshPortalDetails(frameId);
 
                     LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, $"Applied all runtime changes to frame '{_frame.Title}'");
                 }
@@ -1849,80 +1766,6 @@ namespace Desktop_Frames
             }
         }
 
-
-        // In CustomizeFrameFormManager.cs
-
-        private void ApplyNoteSettings(NonActivatingWindow win, dynamic frame)
-        {
-            try
-            {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"Refreshing Note visuals for frame '{frame.Title}'");
-
-                var border = win.Content as Border;
-                var dockPanel = border?.Child as DockPanel;
-
-                if (dockPanel != null)
-                {
-                    var noteTextBox = dockPanel.Children.OfType<TextBox>().FirstOrDefault();
-
-                    if (noteTextBox != null)
-                    {
-                        // --- ROBUST FIX START ---
-                        // Create a temporary "Effective Frame" object using the CURRENT FORM VALUES.
-                        // This ensures the visual update uses exactly what the user just clicked "Save" on,
-                        // ignoring any stale data in the global list.
-
-                        // 1. Clone properties from the target frame into a dictionary
-                        var effectiveFrame = new Dictionary<string, object>();
-                        try
-                        {
-                            IDictionary<string, object> originalDict = null;
-                            // Handle JObject vs ExpandoObject
-                            if (frame is Newtonsoft.Json.Linq.JObject jObj)
-                                originalDict = jObj.ToObject<Dictionary<string, object>>();
-                            else if (frame is IDictionary<string, object> dict)
-                                originalDict = dict;
-
-                            if (originalDict != null)
-                            {
-                                foreach (var kvp in originalDict) effectiveFrame[kvp.Key] = kvp.Value;
-                            }
-                        }
-                        catch { }
-
-						// 2. OVERRIDE with values from the FORM CONTROLS
-						effectiveFrame["CustomColor"] = GetDropdownValue(_cmbCustomColor);
-						effectiveFrame["TextColor"] = GetDropdownValue(_cmbTextColor);
-						// Map TitleTextSize dropdown to NoteFontSize property
-						effectiveFrame["NoteFontSize"] = GetDropdownValue(_cmbTitleTextSize);
-
-                        // 3. Convert to ExpandoObject for dynamic compatibility
-                        dynamic dynamicFrame = new System.Dynamic.ExpandoObject();
-                        var dynamicDict = (IDictionary<string, object>)dynamicFrame;
-                        foreach (var kvp in effectiveFrame) dynamicDict[kvp.Key] = kvp.Value;
-                        // --- ROBUST FIX END ---
-
-                        // 4. Force NoteFramemanager to repaint using this fresh data
-                        NoteFramemanager.RefreshNoteVisuals(dynamicFrame, noteTextBox);
-
-                        // 5. Update font settings directly
-                        try
-                        {
-                            string fontSizeStr = GetDropdownValue(_cmbTitleTextSize);
-                            if (!string.IsNullOrEmpty(fontSizeStr))
-                                noteTextBox.FontSize = NoteFramemanager.GetNoteFontSizeValue(fontSizeStr);
-                        }
-                        catch { }
-
-                        LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, "Successfully refreshed Note TextBox visuals using form values");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error applying note settings: {ex.Message}");
-            }
-        }
 
         private void ApplyFrameBorderSettings(NonActivatingWindow win)
         {

@@ -53,7 +53,6 @@ namespace Desktop_Frames
         public static bool EnableBackgroundValidationLogging { get; set; } = false;
         public static bool SuppressLaunchWarnings { get; set; } = false;
         public static bool DisableFrameScrollbars { get; set; } = true;
-        public static bool DisableNoteAutoSave { get; set; } = false;
 
         public static bool EnableChameleonMode { get; set; } = true;
         public static bool EnableProfileAutomation { get; set; } = false;
@@ -274,7 +273,6 @@ namespace Desktop_Frames
                 EnableBackgroundValidationLogging,
                 DisableSingleInstance,
                 DisableFrameScrollbars,
-                DisableNoteAutoSave,
                 ExportShortcutsOnFrameDeletion,
                 DeleteOriginalShortcutsOnDrop,
                 NoWildcardsOnPortalFilter,
@@ -359,7 +357,6 @@ namespace Desktop_Frames
             try { PortalBackgroundOpacity = data.PortalBackgroundOpacity ?? 30; } catch { PortalBackgroundOpacity = 30; }
             try { EnableIconGlowEffect = data.EnableIconGlowEffect ?? true; } catch { EnableIconGlowEffect = true; }
             try { DisableFrameScrollbars = data.DisableFrameScrollbars ?? true; } catch { DisableFrameScrollbars = true; }
-            try { DisableNoteAutoSave = data.DisableNoteAutoSave ?? false; } catch { DisableNoteAutoSave = false; }
             try { ExportShortcutsOnFrameDeletion = data.ExportShortcutsOnFrameDeletion ?? false; } catch { ExportShortcutsOnFrameDeletion = false; }
             try { DeleteOriginalShortcutsOnDrop = data.DeleteOriginalShortcutsOnDrop ?? false; } catch { DeleteOriginalShortcutsOnDrop = false; }
             try { ShowPortalExtensions = data.ShowPortalExtensions ?? false; } catch { ShowPortalExtensions = false; }

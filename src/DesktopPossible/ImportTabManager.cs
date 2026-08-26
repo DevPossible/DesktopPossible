@@ -203,7 +203,7 @@ namespace Desktop_Frames
             {
                 // Logic: 
                 // 1. Skip Self
-                // 2. Skip non-Data frames (Portal/Notes can't be imported as tabs)
+                // 2. Skip non-Data frames (only Data frames can be imported as tabs)
                 if (frame.Id?.ToString() == targetId) continue;
                 if (frame.ItemsType?.ToString() != "Data") continue;
 

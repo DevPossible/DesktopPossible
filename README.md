@@ -49,7 +49,7 @@ Everything below was added in this fork and is not in Desktop Frames +.
 
 ### Inherited from Desktop Frames +
 
-- **Frame types:** Data frames (shortcuts and files), Portal frames (live mirror of a folder with navigation, filters and an Explorer-style **Details view** — sortable, groupable columns, zebra striping, native context menu), Note frames and Image frames (with content lock).
+- **Frame types:** Data frames (shortcuts and files), Portal frames (live mirror of a folder with navigation, filters and an Explorer-style **Details view** — sortable, groupable columns, zebra striping, native context menu) and Image frames (with content lock).
 - **Tabs** inside Data frames; **workspace profiles** with hotkeys (direct 0–9, previous, next), import/export of `.frame` files, and daily backups.
 - **Dynamic visibility:** peek-behind, roll-up, auto-hide, idle fade-out, keep-on-top pinning, hide/show all (`Ctrl + Alt + H` or double-click the tray icon).
 - **Broad launch support:** files, folders, web links, Store apps, Steam games, Spotify URIs, run-as-admin / run-as-different-user; 15 launch animations.

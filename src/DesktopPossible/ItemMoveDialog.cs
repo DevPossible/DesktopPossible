@@ -279,8 +279,8 @@ namespace Desktop_Frames
 
             foreach (var frame in FrameData)
             {
-                // 1. Global Exclusions: Portal and Note framess cannot receive items via this dialog
-                if (frame.ItemsType?.ToString() == "Portal" || frame.ItemsType?.ToString() == "Note")
+                // 1. Global Exclusions: Portal frames cannot receive items via this dialog
+                if (frame.ItemsType?.ToString() == "Portal")
                     continue;
 
                 string currentframeId = frame.Id?.ToString();

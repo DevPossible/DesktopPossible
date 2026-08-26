@@ -11,7 +11,7 @@ namespace Desktop_Frames
     /// Stacking order of the frame band. Frames are desktop furniture: the whole band sits
     /// just above the wallpaper and below every application window, in three layers —
     ///   bottom:  Text frames (wallpaper text; no ordering among themselves),
-    ///   above:   content frames (Data / Portal / Note / Image, and future widgets) in their
+    ///   above:   content frames (Data / Portal / Image, and future widgets) in their
     ///            persisted per-frame <c>ZOrder</c>, highest on top,
     ///   top:     everything else on the desktop (apps), which we never touch.
     /// Pinned (AlwaysOnTop) frames are left alone. Clicking a content frame while Frame Edit

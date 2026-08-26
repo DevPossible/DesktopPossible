@@ -41,14 +41,13 @@ Frames are containers on your desktop that group related shortcuts and files tog
 
 - **Frames (Data Frames)**: Regular containers for shortcuts targeting files or folders and web links
 - **Portal Frames**: Special Frames mirroring the contents of folders, with navigation, filters and an Explorer-style Details view
-- **Note Frames**: Frames that display text
 - **Image Frames**: Frames that display a picture (pasted, or copied from / linked to a file)
 - **Text Frames**: Chromeless live text drawn straight onto the wallpaper, with tokens such as `{ComputerName}`, `{IP}`, `{CPUUsage}`, `{RAMUsage}`, `{Uptime}`, `{Date}`, `{Time}`, `{Profile}` (managed from Options → Text Frames)
 
 **How to Create a frame:**
 
 1. The first two Frames are created automatically on first run. Look on the top left corner of your screen.
-2. From there, the heart ♥ menu offers *New Frame*, *New Portal Frame*, *New Note Frame*, *New Image Frame* and *New Text Frame*.
+2. From there, the heart ♥ menu offers *New Frame*, *New Portal Frame*, *New Image Frame* and *New Text Frame*.
 3. Optionally enable *Show 'New Frame' in Desktop Context Menu* (Options → General) and draw a rectangle on the desktop where the frame should go.
 
 **Moving and resizing frames:** frames are locked in place by default. Turn on **Edit Frames Mode** (tray menu, or right-click a frame) to move and resize them, then turn it off again.
@@ -175,7 +174,7 @@ The icons on the Frames which are targeting files and folders are getting contin
 
 **Frame Lock**: Click the lock icon in the top-right corner of the frame to pin its position and size; the move handle next to it drags the frame, and the pin keeps it on top of other windows. Rollup/Rolldown is still available when locked. Note that all frames are unmovable unless **Edit Frames Mode** is on.
 
-**Content Lock**: Right-click → "Lock (prevent changes)" stops accidental edits — a Note becomes read-only, an Image frame refuses new pictures, and Data/Portal frames refuse drops.
+**Content Lock**: Right-click → "Lock (prevent changes)" stops accidental edits — an Image frame refuses new pictures, and Data/Portal frames refuse drops.
 
 
 

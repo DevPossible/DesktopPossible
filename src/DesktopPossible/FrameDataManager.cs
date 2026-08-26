@@ -551,9 +551,6 @@ namespace Desktop_Frames
             frameDict["CurrentTab"] = 0;
             frameDict["Tabs"] = new JArray();
 
-            string itemsType = frameDict["ItemsType"]?.ToString();
-            if (itemsType == "Note") NoteFramemanager.ApplyNoteDefaults(frameDict);
-
             if (!string.IsNullOrEmpty(customColor)) frameDict["CustomColor"] = customColor;
             if (!string.IsNullOrEmpty(customLaunchEffect)) frameDict["CustomLaunchEffect"] = customLaunchEffect;
         }
