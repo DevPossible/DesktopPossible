@@ -131,6 +131,10 @@ namespace Desktop_Frames
                     // Load frames (Now loads from Profile/fences.json)
                     Framemanager.LoadAndCreateFrames(_targetChecker);
 
+                    // Keep frame items in sync with outside deletes/renames of their backing
+                    // files (e.g. Windows' own Delete on the icon's shell context menu).
+                    FrameStoreWatcher.Start();
+
                     // --- PRODUCTION START LOGIC ---
                     if (SettingsManager.EnableVirtualDesktopAutomation)
                     {
@@ -267,6 +271,7 @@ namespace Desktop_Frames
             try { Framemanager.FlushPendingFrameSave(); } catch { }
 
             _triggerPollTimer?.Stop();
+            FrameStoreWatcher.Stop();
             InterCore.Cleanup();
             try
             {

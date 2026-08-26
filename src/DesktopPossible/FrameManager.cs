@@ -1579,7 +1579,9 @@ namespace Desktop_Frames
                 // --- GROUP 1: MANIPULATION ---
                 MenuItem miEdit = new MenuItem { Header = "Edit..." };
                 MenuItem miMove = new MenuItem { Header = "Move..." };
-                MenuItem miRemove = new MenuItem { Header = "Remove" };
+                // "from Frame" so it doesn't read as a duplicate of the shell menu's Delete:
+                // this removes the item (and its backing file); Delete is Windows acting on the file.
+                MenuItem miRemove = new MenuItem { Header = "Remove from Frame" };
 
                 iconContextMenu.Items.Add(miEdit);
                 iconContextMenu.Items.Add(miMove);
