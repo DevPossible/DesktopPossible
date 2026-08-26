@@ -48,6 +48,25 @@ namespace Desktop_Frames
         // Temporary override flag for the "Screen Bound" button
         public static bool IsManualRepositioning = false;
 
+        // Hover highlight for icons: one shared, sealed style with an IsMouseOver trigger so the
+        // highlight applies and reverts automatically. The background must come from the trigger
+        // only (no base setter, no local value) — a local Background would outrank the trigger,
+        // and a base Transparent setter would make the whole cell hit-testable, stealing
+        // clicks in the empty cell corners that today fall through to the frame.
+        private static readonly Style _iconHoverStyle = CreateIconHoverStyle();
+
+        private static Style CreateIconHoverStyle()
+        {
+            var hoverBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(48, 255, 255, 255));
+            hoverBrush.Freeze();
+            var style = new Style(typeof(StackPanel));
+            var trigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            trigger.Setters.Add(new Setter(StackPanel.BackgroundProperty, hoverBrush));
+            style.Triggers.Add(trigger);
+            style.Seal();
+            return style;
+        }
+
 
 
         // --- WM_GETMINMAXINFO Implementation ---
@@ -8106,7 +8125,8 @@ namespace Desktop_Frames
             StackPanel sp = new StackPanel
             {
                 Margin = new Thickness(iconSpacing),
-                Width = 60 + (iconSpacing * 2)
+                Width = 60 + (iconSpacing * 2),
+                Style = _iconHoverStyle
             };
 
             // FREE ARRANGE: mirror the item's persisted grid cell onto the visual so
