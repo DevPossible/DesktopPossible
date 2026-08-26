@@ -51,8 +51,7 @@ Everything below was added in this fork and is not in Desktop Frames +.
 
 - **Frame types:** Data frames (shortcuts and files), Portal frames (live mirror of a folder with navigation, filters and an Explorer-style **Details view** — sortable, groupable columns, zebra striping, native context menu), Note frames and Image frames (with content lock).
 - **Tabs** inside Data frames; **workspace profiles** with hotkeys (direct 0–9, previous, next), import/export of `.frame` files, and daily backups.
-- **Dynamic visibility:** peek-behind, roll-up, auto-hide, idle fade-out, keep-on-top pinning, hide/show all (`Ctrl + Alt + H` or double-click the tray icon), and a **Focus Frame** hotkey that finds a frame by name and raises it.
-- **SpotSearch** (`` Ctrl + ` ``) to find any icon in any frame and launch it.
+- **Dynamic visibility:** peek-behind, roll-up, auto-hide, idle fade-out, keep-on-top pinning, hide/show all (`Ctrl + Alt + H` or double-click the tray icon).
 - **Broad launch support:** files, folders, web links, Store apps, Steam games, Spotify URIs, run-as-admin / run-as-different-user; 15 launch animations.
 - **Theming:** 13 colours, global and per-frame tint, per-frame border and title colours, **Chameleon** wallpaper-matching, and dark-mode menus that follow the OS.
 - Optional **Create New Frame** entry in the desktop's right-click menu (draw a rectangle), **double-click the empty desktop** to toggle native icons, frame snapping, and spacers.
@@ -94,7 +93,7 @@ The project targets **.NET 10** (`net10.0-windows10.0.19041.0`) and builds with 
 | Topic | Description |
 |-------|-------------|
 | [User Manual](docs/manual.md) | Full feature walkthrough — frames, customization, settings |
-| [Tips & Tricks](docs/tips.md) | Power-user features: portal filters, SpotSearch, profiles |
+| [Tips & Tricks](docs/tips.md) | Power-user features: portal filters, profiles |
 | [Advanced Tweaks](docs/tweaks.md) | JSON-level configuration tweaks |
 | [Upstream Version History](docs/upstream-version-history.md) | Pre-fork release history from the upstream project |
 

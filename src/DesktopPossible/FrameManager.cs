@@ -4354,8 +4354,7 @@ namespace Desktop_Frames
                                   "This can block you from typing special characters like @, €, [, or {.\n\n" +
                                   "• Click 'Yes' to disable them (fixes typing issues)\n" +
                                   "• Click 'No' to keep them (if everything works fine)",
-                                  "Optional: Keyboard Compatibility Check",
-                                  NotificationSound.NadaAlert); // Override the user's sound preference for this critical alert
+                                  "Optional: Keyboard Compatibility Check");
 
                     if (disableHotkeys)
                     {
@@ -4413,7 +4412,6 @@ namespace Desktop_Frames
                 IsSnapEnabled = SettingsManager.IsSnapEnabled,
                 ShowBackgroundImageOnPortalFences = SettingsManager.ShowBackgroundImageOnPortalFrames,
                 Showintray = SettingsManager.ShowInTray,
-                EnableSounds = SettingsManager.EnableSounds,
                 TintValue = SettingsManager.TintValue,
                 MenuTintValue = SettingsManager.MenuTintValue,
                 MenuIcon = SettingsManager.MenuIcon,
@@ -4699,7 +4697,6 @@ namespace Desktop_Frames
                                   "---------------------------------\r\n" +
                                   "• Roll Up/Down: Double-click the frame title bar.\r\n" +
                                   "• Rename: Ctrl + Click the title bar (Enter to save).\r\n" +
-                                  "• Search (SpotSearch): Press Ctrl + ` (Tilde) to find any icon instantly.\r\n" +
                                   "• Options: Click the '♥' menu icon (top-left).\r\n" +
                                   "• Reorder Icons on a frame: Ctrl + Drag icon to new position.\r\n" +
                                   "• Context Menu: Right-click icons or Frames for more options.\r\n" +
@@ -4816,16 +4813,6 @@ namespace Desktop_Frames
                 BorderThickness = new Thickness(borderThickness), // Apply border thickness
                 Child = dp
             };
-            // Add Double Click Handler
-            cborder.MouseLeftButtonDown += (s, e) =>
-            {
-                if (SettingsManager.SearchOnDoubleClick && e.ClickCount == 2)
-                {
-                    SearchFormManager.ToggleSearch();
-                    e.Handled = true;
-                }
-            };
-
 
             //  Add heart symbol in top-left corner
             string MenuSymbol = "♥";

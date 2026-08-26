@@ -194,10 +194,6 @@ Right clicking any shortcut the following usage options are available:
 
 
 
-## Search (SpotSearch)
-Press `` CTRL + ` `` (or double-click an empty area of a frame, if enabled in Options → Style & FX) to open the search window. Search is performed on all Data frames and matching shortcuts are displayed below the search field.
-
-
 ## Import/Export Frames
 
 Click on the heart ❤️ menu and select "Export this frame" to export a frame into a  *.frame file.  The file is written to the "Exports" subfolder of the data folder (see File Locations).
@@ -215,7 +211,7 @@ Access settings through the system tray icon → "Options":
 
 **Startup:** Start with Windows.
 
-**Selections:** Single Click to Launch (restart required) · Enable Snap Near Frames · Enable Dimension Snap · Snap frames to grid · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars · Enable Sounds.
+**Selections:** Single Click to Launch (restart required) · Enable Snap Near Frames · Enable Dimension Snap · Snap frames to grid · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars.
 
 **Virtual Desktops:** Automatically Switch Profiles with Virtual Desktop.
 
@@ -227,7 +223,7 @@ Access settings through the system tray icon → "Options":
 
 **Desktop Icon Visibility:** hide the native desktop icons while the program runs or while frames are hidden; double-click the empty desktop to show/hide them.
 
-**Frames:** Enable Show/Hide all frames hotkey · Double-click a frame to open search · Striped rows in Portal Details view.
+**Frames:** Enable Show/Hide all frames hotkey · Striped rows in Portal Details view.
 
 **Icons:** pick the menu, position-lock and filter glyphs and the tray icon style.
 
@@ -245,7 +241,7 @@ Create, rename, reorder and delete profiles, and *Empty Frames to Desktop* for f
 
 ### Hotkeys Tab
 
-Profile switching hotkeys (direct profile 0–9, previous, next), Focus Frame hotkey, Spot Search hotkey. Changes take effect after a restart.
+Profile switching hotkeys (direct profile 0–9, previous, next). Changes take effect after a restart.
 
 ### Smart Desktop Tab
 

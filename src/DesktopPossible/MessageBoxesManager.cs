@@ -4,7 +4,6 @@
 
 using System;
 using System.IO;
-using System.Media;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -54,13 +53,13 @@ namespace Desktop_Frames
         /// <param name="message">The question to ask the user</param>
         /// <param name="title">The dialog title</param>
         /// <returns>True if Yes was clicked, False if No was clicked</returns>
-        public static bool ShowCustomYesNoMessageBox(string message, string title, NotificationSound? overrideSound = null)
+        public static bool ShowCustomYesNoMessageBox(string message, string title)
         {
             try
             {
                 // App.xaml declares ShutdownMode=OnExplicitShutdown globally, so no
                 // save/set/restore dance is needed to keep WPF alive here.
-                var messageBox = new CustomYesNoMessageBoxWindow(message, title, overrideSound);
+                var messageBox = new CustomYesNoMessageBoxWindow(message, title);
                 messageBox.ShowDialog();
 
                 return messageBox.DialogResult;
@@ -88,13 +87,12 @@ namespace Desktop_Frames
 
             public new bool DialogResult => _result;
 
-            public CustomYesNoMessageBoxWindow(string message, string title, NotificationSound? overrideSound = null)
+            public CustomYesNoMessageBoxWindow(string message, string title)
             {
                 _message = message;
                 _title = title;
                 InitializeComponent();
                 PositionWindowOnMouseScreen(this);
-                PlayDingSound(overrideSound);
             }
             // --- FIX: Add Text Measurement for Dynamic Sizing ---
             private Size MeasureText(string text, int maxTextWidth, int fontSize, FontWeight weight)
@@ -363,7 +361,6 @@ namespace Desktop_Frames
                 _remainingSeconds = autoCloseTimeMs / 1000;
                 InitializeComponent();
                 PositionWindowOnMouseScreen(this);
-                PlayNotificationSound();
                 StartAutoCloseTimer();
             }
 
@@ -561,18 +558,6 @@ namespace Desktop_Frames
                 else
                 {
                     _autoCloseLabel.Text = $"Auto-closing in {_remainingSeconds}s";
-                }
-            }
-
-            private void PlayNotificationSound()
-            {
-                try
-                {
-                    // Sound notifications removed (not required).
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error playing sound: {ex.Message}");
                 }
             }
 
@@ -777,7 +762,6 @@ namespace Desktop_Frames
                 _title = title;
                 InitializeComponent();
                 PositionWindowOnMouseScreen(this);
-                PlayDingSound();
             }
 
             private void InitializeComponent()
@@ -1006,7 +990,6 @@ namespace Desktop_Frames
                 _itemCount = itemCount;
                 InitializeComponent();
                 PositionWindowOnMouseScreen(this);
-                PlayDingSound();
             }
 
             private void InitializeComponent()
@@ -1297,74 +1280,6 @@ namespace Desktop_Frames
             }
         }
 
-        /// <summary>
-        /// Plays the ding.wav sound from embedded resources
-        /// </summary>
-        private static void PlayDingSound(NotificationSound? overrideSound = null)
-        {
-            // Sound notifications removed (not required). Kept as a runtime flag so the rest of the
-            // method stays reachable (no unreachable-code warning) and it's easy to re-enable.
-            bool soundsRemoved = true;
-            if (soundsRemoved || SettingsManager.EnableSounds == false)
-            {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI,
-                    "MessageBoxes: Sound disabled, skipping ding sound playback");
-                return;
-            }
-
-            try
-            {
-                string resourceName;
-
-                // Use the override if provided, otherwise fallback to the user's saved setting
-                NotificationSound soundToPlay = overrideSound ?? SettingsManager.NotificationSound;
-
-                switch (soundToPlay)
-                {
-                    case NotificationSound.NadaAlert:
-                        resourceName = "Desktop_Frames.Resources.notification_message-nada-1-326000.wav";
-                        break;
-                    case NotificationSound.DoubleDing:
-                        resourceName = "Desktop_Frames.Resources.soundshelfstudio-ui-notification-pop-513564.wav";
-                        break;
-                    case NotificationSound.SmoothTickle:
-                        resourceName = "Desktop_Frames.Resources.36505577-smooth-simple-notification-274738.wav";
-                        break;
-                    case NotificationSound.MessageDing:
-                        resourceName = "Desktop_Frames.Resources.dragon-studio-new-notification-444814.wav";
-                        break;
-                    case NotificationSound.GentleDing:
-                        resourceName = "Desktop_Frames.Resources.notification_message-best-notification-1-286672.wav";
-                        break;
-                    case NotificationSound.SoftDing:
-                        resourceName = "Desktop_Frames.Resources.universfield-soft-notice-146623.wav";
-                        break;
-                    case NotificationSound.DefaultSound:
-                    default:
-                        resourceName = "Desktop_Frames.Resources.ui-8-warning-sound-effect-336254.wav";
-                        break;
-                }
-
-                using (Stream soundStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
-                {
-                    if (soundStream != null)
-                    {
-                        using (SoundPlayer player = new SoundPlayer(soundStream))
-                        {
-                            player.Play();
-                        }
-                    }
-                    else
-                    {
-                        LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"Sound resource '{resourceName}' not found.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error playing sound: {ex.Message}");
-            }
-        }
         #endregion
 
         #region CustomMessageBoxWindow - Internal WPF Window Class
@@ -1382,7 +1297,6 @@ namespace Desktop_Frames
             {
                 InitializeComponent();
                 PositionWindowOnMouseScreen(this);
-                PlayDingSound();
             }
 
             private void InitializeComponent()

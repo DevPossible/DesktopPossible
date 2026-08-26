@@ -83,7 +83,6 @@ namespace Desktop_Frames
         private static bool _isWindowsKeyPressed = false;
         private static bool _isDKeyPressed = false;
         private static bool _winDDetected = false;
-        private static bool _searchHotkeyDetected = false;
 
         // Hotkey capture (used by the Customize/Options "press to set" fields). While active, the hook
         // grabs the next combo, swallows it, and reports it back — so it doesn't trigger normal hotkeys
@@ -387,52 +386,6 @@ namespace Desktop_Frames
                         {
                             WindowsPlusDDetected?.Invoke(null, EventArgs.Empty);
                         }));
-                    }
-
-                    // ============================================================
-                    // 3. SpotSearch (Ctrl + `)
-                    // ============================================================
-                    if (SettingsManager.EnableSpotSearchHotkey)
-                    {
-                        int triggerKey = SettingsManager.SpotSearchKey;
-                        if (vkCode == triggerKey)
-                        {
-                            // Culture-safe: parse the configured modifier once (cached bitmask) instead
-                            // of a per-keystroke ToLower() string compare.
-                            int requiredMod = GetModifierMaskCached(SettingsManager.SpotSearchModifier);
-                            bool isModPressed = requiredMod == 0 ||
-                                                (requiredMod > 0 && (GetPressedModifierMask() & requiredMod) == requiredMod);
-
-                            if (isKeyDown && isModPressed)
-                            {
-                                if (!_searchHotkeyDetected)
-                                {
-                                    _searchHotkeyDetected = true;
-                                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-                                    {
-                                        SearchFormManager.ToggleSearch();
-                                    }));
-                                }
-                                return (IntPtr)1;
-                            }
-                            else if (isKeyUp) _searchHotkeyDetected = false;
-                        }
-                    }
-
-                    // ============================================================
-                    // 4. Focus Frame (Dynamic Configurable)
-                    // ============================================================
-                    if (SettingsManager.EnableFocusFrameHotkey && vkCode == SettingsManager.FocusFrameKey && isKeyDown)
-                    {
-                        if (CheckModifiersStrict(SettingsManager.FocusFrameModifier))
-                        {
-                            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-                            {
-                                FrameFocusFormManager focusManager = new FrameFocusFormManager();
-                                focusManager.ShowDialog();
-                            }));
-                            return (IntPtr)1; // Swallow the key so other apps don't process it
-                        }
                     }
 
                     // ============================================================

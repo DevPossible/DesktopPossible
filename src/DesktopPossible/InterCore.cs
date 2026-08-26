@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Media;
 using System.Reflection;
 using System.Threading;
 using System.Windows;
@@ -322,9 +321,6 @@ namespace Desktop_Frames
 
             try
             {
-                // Play MIDI music
-                PlayHappyTune2();
-
 				// Get all frame icons
 				var frameWindows = Application.Current.Windows.OfType<NonActivatingWindow>();
                 var allIcons = new List<StackPanel>();
@@ -372,49 +368,6 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"InterCore: Error in Dance Party: {ex.Message}");
                 _isDanceActive = false;
-            }
-        }
-
-        private static void PlayHappyTune2()
-        {
-            if (SettingsManager.EnableSounds == false) return;
-
-            try
-            {
-                var midiOut = new NAudio.Midi.MidiOut(0);
-                midiOut.Send(NAudio.Midi.MidiMessage.ChangePatch(12, 1).RawData);
-
-                var thread = new Thread(() =>
-                {
-                    int[][] chords = { new[] { 60, 64, 67 }, new[] { 67, 71, 74 }, new[] { 69, 72, 76 }, new[] { 65, 69, 72 } };
-
-                    for (int i = 0; i < 14; i++)
-                    {
-                        foreach (var note in chords[i % chords.Length])
-                            midiOut.Send(NAudio.Midi.MidiMessage.StartNote(note, 90, 1).RawData);
-
-                        Thread.Sleep(300);
-
-                        // Staccato rhythm
-                        for (int j = 0; j < 4; j++)
-                        {
-                            int rootNote = chords[i % chords.Length][0];
-                            midiOut.Send(NAudio.Midi.MidiMessage.StopNote(rootNote, 0, 1).RawData);
-                            midiOut.Send(NAudio.Midi.MidiMessage.StartNote(rootNote + (j % 2 == 0 ? 0 : 7), 110, 1).RawData);
-                            Thread.Sleep(100);
-                        }
-                        foreach (var note in chords[i % chords.Length])
-                            midiOut.Send(NAudio.Midi.MidiMessage.StopNote(note, 0, 1).RawData);
-                    }
-                    midiOut.Dispose();
-                });
-
-                thread.IsBackground = true;
-                thread.Start();
-            }
-            catch (Exception ex)
-            {
-                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI, $"InterCore: Audio error: {ex.Message}");
             }
         }
 
@@ -552,7 +505,6 @@ namespace Desktop_Frames
 						frame.BeginAnimation(UIElement.OpacityProperty, fadeOut);
                     }
                 }
-                PlaySweepSound();
 
 				// Create wave effect across frames
 				for (int i = 0; i < allFrames.Count; i++)
@@ -961,30 +913,5 @@ namespace Desktop_Frames
         }
 
         #endregion
-
-        private static void PlaySweepSound()
-        {
-            if (SettingsManager.EnableSounds == false) return;
-
-            // PlaySync on a worker thread: the async Play() returned before playback finished and
-            // the using blocks disposed the stream/player, truncating the sound.
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                try
-                {
-                    using (Stream soundStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Desktop_Frames.Resources.sweep-sound-effect-240243.wav"))
-                    {
-                        if (soundStream != null)
-                        {
-                            using (SoundPlayer player = new SoundPlayer(soundStream)) { player.PlaySync(); }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Error playing sound: {ex.Message}");
-                }
-            });
-        }
     }
 }

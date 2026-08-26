@@ -290,45 +290,6 @@ namespace Desktop_Frames
             n.IsEnabled = false; n.Foreground = Brushes.Gray;
             CreateCheckBox(c, "Disable Frame Scrollbars", "DisableFrameScrollbars", SettingsManager.DisableFrameScrollbars);
 
-
-            // --- NEW: Notification Sound Dropdown ---
-            CheckBox cbSounds = CreateCheckBoxReturn(c, "Enable Sounds", "EnableSounds", SettingsManager.EnableSounds);
-
-            Grid soundGrid = new Grid { Margin = new Thickness(35, 0, 0, 8) }; // Indented to show parent/child relationship
-            soundGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-            soundGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
-
-            TextBlock lblSound = new TextBlock { Text = "Notification Sound:", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(lblSound, 0);
-
-            ComboBox cbSoundType = new ComboBox { Name = "NotificationSoundComboBox", Height = 25, FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-            cbSoundType.Items.Add("Default Sound");
-            cbSoundType.Items.Add("Double Ding");
-            cbSoundType.Items.Add("Smooth Tickle");
-            cbSoundType.Items.Add("Message Ding");
-            cbSoundType.Items.Add("Gentle Ding");
-            cbSoundType.Items.Add("Soft Ding");
-
-            // Map the current Enum back to the UI index
-            cbSoundType.SelectedIndex = SettingsManager.NotificationSound switch
-            {
-                NotificationSound.DoubleDing => 1,
-                NotificationSound.SmoothTickle => 2,
-                NotificationSound.MessageDing => 3,
-                NotificationSound.GentleDing => 4,
-                NotificationSound.SoftDing => 5,
-                _ => 0
-            };
-            Grid.SetColumn(cbSoundType, 1);
-            soundGrid.Children.Add(lblSound);
-            soundGrid.Children.Add(cbSoundType);
-            c.Children.Add(soundGrid);
-
-            // Live-toggle the combobox based on the checkbox state
-            soundGrid.IsEnabled = cbSounds.IsChecked == true;
-            cbSounds.Click += (s, e) => soundGrid.IsEnabled = cbSounds.IsChecked == true;
-            // ----------------------------------------
-
             // --- Virtual Desktops ---
             CreateSectionHeader(c, "Virtual Desktops", _userAccentColor);
 
@@ -390,7 +351,6 @@ namespace Desktop_Frames
             // --- NEW: Frames behavior ---
             CreateSectionHeader(c, "Frames", ColorStyle);
             CreateCheckBox(c, "Enable Show/Hide all frames hotkey", "EnableToggleFramesHotkey", SettingsManager.EnableToggleFramesHotkey);
-            CreateCheckBox(c, "Double-click a frame to open search", "SearchOnDoubleClick", SettingsManager.SearchOnDoubleClick);
             CreateCheckBox(c, "Striped rows in Portal Details view", "PortalDetailsStriped", SettingsManager.PortalDetailsStriped);
 
             // Image frames: how dragged/added image files are stored.
@@ -666,18 +626,6 @@ namespace Desktop_Frames
             // Bind initial state and live toggling
             gProf1.IsEnabled = gProf2.IsEnabled = gProf3.IsEnabled = cbProf.IsChecked == true;
             cbProf.Click += (s, e) => gProf1.IsEnabled = gProf2.IsEnabled = gProf3.IsEnabled = cbProf.IsChecked == true;
-
-            CreateSectionHeader(c, "Utilities", ColorHotkeys);
-
-            CheckBox cbFocus = CreateCheckBoxReturn(c, "Enable Focus Frame Hotkey", "EnableFocusFrameHotkey", SettingsManager.EnableFocusFrameHotkey);
-            Grid gFocus = CreateHotkeyEditor(c, "Focus Frame", "FocusFrame", SettingsManager.FocusFrameModifier, SettingsManager.FocusFrameKey, true);
-            gFocus.IsEnabled = cbFocus.IsChecked == true;
-            cbFocus.Click += (s, e) => gFocus.IsEnabled = cbFocus.IsChecked == true;
-
-            CheckBox cbSpot = CreateCheckBoxReturn(c, "Enable Spot Search Hotkey", "EnableSpotSearchHotkey", SettingsManager.EnableSpotSearchHotkey);
-            Grid gSpot = CreateHotkeyEditor(c, "Spot Search", "SpotSearch", SettingsManager.SpotSearchModifier, SettingsManager.SpotSearchKey, true);
-            gSpot.IsEnabled = cbSpot.IsChecked == true;
-            cbSpot.Click += (s, e) => gSpot.IsEnabled = cbSpot.IsChecked == true;
 
             TextBlock infoText = new TextBlock
             {
@@ -1181,25 +1129,6 @@ namespace Desktop_Frames
                         // Moved from Style Tab (Choices)
                         if (cb.Name == "EnablePortalWatermark") { newPortalWatermarkState = cb.IsChecked == true; SettingsManager.ShowBackgroundImageOnPortalFrames = newPortalWatermarkState; }
                         if (cb.Name == "DisableFrameScrollbars") SettingsManager.DisableFrameScrollbars = cb.IsChecked == true;
-                        if (cb.Name == "EnableSounds") SettingsManager.EnableSounds = cb.IsChecked == true;
-                    }
-                    
-                    // --- NEW: Catch the Sound Config Grid ---
-                    else if (child is Grid genGrid)
-                    {
-                        var sndCombo = genGrid.Children.OfType<ComboBox>().FirstOrDefault(c => c.Name == "NotificationSoundComboBox");
-                        if (sndCombo != null)
-                        {
-                            SettingsManager.NotificationSound = sndCombo.SelectedIndex switch
-                            {
-                                1 => NotificationSound.DoubleDing,
-                                2 => NotificationSound.SmoothTickle,
-                                3 => NotificationSound.MessageDing,
-                                4 => NotificationSound.GentleDing,
-                                5 => NotificationSound.SoftDing,
-                                _ => NotificationSound.DefaultSound
-                            };
-                        }
                     }
                 }
 
@@ -1231,7 +1160,6 @@ namespace Desktop_Frames
                         // NEW: Frames behavior
                         if (cb.Name == "EnableToggleFramesHotkey") SettingsManager.EnableToggleFramesHotkey = cb.IsChecked == true;
                         if (cb.Name == "PortalDetailsStriped") SettingsManager.PortalDetailsStriped = cb.IsChecked == true;
-                        if (cb.Name == "SearchOnDoubleClick") SettingsManager.SearchOnDoubleClick = cb.IsChecked == true;
                     }
                     else if (child is Grid g)
                     {
@@ -1273,8 +1201,6 @@ namespace Desktop_Frames
                     if (child is CheckBox hotkeyCb)
                     {
                         if (hotkeyCb.Name == "EnableProfileHotkeys" && SettingsManager.EnableProfileHotkeys != (hotkeyCb.IsChecked == true)) { SettingsManager.EnableProfileHotkeys = hotkeyCb.IsChecked == true; hotkeysChanged = true; }
-                        if (hotkeyCb.Name == "EnableFocusFrameHotkey" && SettingsManager.EnableFocusFrameHotkey != (hotkeyCb.IsChecked == true)) { SettingsManager.EnableFocusFrameHotkey = hotkeyCb.IsChecked == true; hotkeysChanged = true; }
-                        if (hotkeyCb.Name == "EnableSpotSearchHotkey" && SettingsManager.EnableSpotSearchHotkey != (hotkeyCb.IsChecked == true)) { SettingsManager.EnableSpotSearchHotkey = hotkeyCb.IsChecked == true; hotkeysChanged = true; }
                     }
 
                     if (child is Grid g && g.Children.Count > 1 && g.Children[1] is StackPanel spMods)
@@ -1311,8 +1237,6 @@ namespace Desktop_Frames
                             if (prefix == "ProfSwitch") { if (SettingsManager.ProfileSwitchModifier != modString) { SettingsManager.ProfileSwitchModifier = modString; hotkeysChanged = true; } }
                             if (prefix == "ProfPrev") { if (SettingsManager.ProfilePrevModifier != modString || SettingsManager.ProfilePrevKey != key) { SettingsManager.ProfilePrevModifier = modString; SettingsManager.ProfilePrevKey = key; hotkeysChanged = true; } }
                             if (prefix == "ProfNext") { if (SettingsManager.ProfileNextModifier != modString || SettingsManager.ProfileNextKey != key) { SettingsManager.ProfileNextModifier = modString; SettingsManager.ProfileNextKey = key; hotkeysChanged = true; } }
-                            if (prefix == "FocusFrame") { if (SettingsManager.FocusFrameModifier != modString || SettingsManager.FocusFrameKey != key) { SettingsManager.FocusFrameModifier = modString; SettingsManager.FocusFrameKey = key; hotkeysChanged = true; } }
-                            if (prefix == "SpotSearch") { if (SettingsManager.SpotSearchModifier != modString || SettingsManager.SpotSearchKey != key) { SettingsManager.SpotSearchModifier = modString; SettingsManager.SpotSearchKey = key; hotkeysChanged = true; } }
                         }
                     }
                 }

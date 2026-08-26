@@ -516,24 +516,6 @@ namespace Desktop_Frames
                 Margin = new Thickness(0, 0, 0, 0)
             };
             parent.Children.Add(separator2);
-
-            // --- NEW: Sound Credits ---
-            TextBlock soundCreditsBlock = new TextBlock
-            {
-                FontFamily = new FontFamily("Segoe UI"),
-                FontSize = 10, // Tiny text
-                Foreground = new SolidColorBrush(Color.FromRgb(150, 154, 158)), // Muted grey
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 15, 0, 10) // --- FIX: Added elegant breathing room above and below the credits ---
-            };
-
-            // Using fully qualified 'Run' to avoid needing to add System.Windows.Documents to the using directives
-            soundCreditsBlock.Inlines.Add(new System.Windows.Documents.Run("Using free sound files from "));
-            soundCreditsBlock.Inlines.Add(new System.Windows.Documents.Run("pixabay.com") { FontWeight = FontWeights.Bold });
-            soundCreditsBlock.Inlines.Add(new System.Windows.Documents.Run(" and "));
-            soundCreditsBlock.Inlines.Add(new System.Windows.Documents.Run("pexels.com") { FontWeight = FontWeights.Bold });
-
-            parent.Children.Add(soundCreditsBlock);
         }
 
         private static void CreateFooter(Grid rootGrid)

@@ -61,7 +61,7 @@ DesktopPossible/
 ├── src/
 │   ├── DesktopPossible.sln       # The only solution
 │   └── DesktopPossible/          # WPF app (~58 single-class .cs files)
-│       └── Resources/                  # Icons, logos, notification .wav files
+│       └── Resources/                  # Icons and logos
 ├── tests/
 │   └── DesktopPossible.Tests/    # xUnit unit tests (headless-safe)
 ├── docs/                               # manual.md, tips.md, tweaks.md,
@@ -119,8 +119,8 @@ The app is ~58 single-class files in `src/DesktopPossible/`, namespace
 ### UI forms (`*FormManager` convention)
 
 `AboutFormManager`, `OptionsFormManager`, `CustomizeFrameFormManager`,
-`NotificationFormManager`, `FrameFocusFormManager`, `MessageBoxesManager`,
-`SearchFormManager`, `TextFormatFormManager` — each owns one dialog/window.
+`NotificationFormManager`, `MessageBoxesManager`,
+`TextFormatFormManager` — each owns one dialog/window.
 Related standalone forms:
 `ProfileManagerForm`, `EditShortcutWindow`, `IconPickerDialog`,
 `ItemMoveDialog`.

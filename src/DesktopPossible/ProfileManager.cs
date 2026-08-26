@@ -491,7 +491,6 @@ namespace Desktop_Frames
                     var ghostWindows = new HashSet<string>
                     {
                         "TextFormatFormManager",
-                        "SearchFormManager",
                         "IconPickerDialog",
                         "EditShortcutWindow",
                         "CustomizeFrameFormManager"
