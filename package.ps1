@@ -162,9 +162,17 @@ try {
         & dotnet tool restore
         if ($LASTEXITCODE -ne 0) { throw "dotnet tool restore failed (wix)" }
 
+        # UI + Util extensions (versions must match the pinned wix tool). `extension add`
+        # caches into ./.wix and is idempotent; it needs network on first run only.
+        $wixExtVersion = (Get-Content (Join-Path $PSScriptRoot '.config' 'dotnet-tools.json') -Raw | ConvertFrom-Json).tools.wix.version
+        foreach ($ext in @('WixToolset.UI.wixext', 'WixToolset.Util.wixext')) {
+            & dotnet wix extension add "$ext/$wixExtVersion"
+            if ($LASTEXITCODE -ne 0) { throw "wix extension add failed for $ext/$wixExtVersion" }
+        }
+
         $msiPath = Join-Path $DistDir "$ProjectName-$Version-$Runtime.msi"
         $wxs = Join-Path $PSScriptRoot 'installer' 'DesktopPossible.wxs'
-        & dotnet wix build $wxs -arch x64 -d "Version=$Version" -d "PublishDir=$publishDir" -d "RepoRoot=$PSScriptRoot" -pdbtype none -o $msiPath
+        & dotnet wix build $wxs -arch x64 -ext "WixToolset.UI.wixext/$wixExtVersion" -ext "WixToolset.Util.wixext/$wixExtVersion" -d "Version=$Version" -d "PublishDir=$publishDir" -d "RepoRoot=$PSScriptRoot" -pdbtype none -o $msiPath
         if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE" }
         Write-Host "  [OK] Created: $msiPath" -ForegroundColor Green
     } else {

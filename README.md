@@ -64,7 +64,7 @@ Every [release](https://github.com/DevPossible/DesktopPossible/releases) ships t
 **Installer (recommended):** run `DesktopPossible-<version>-win-x64.msi`. It installs to
 `C:\Program Files\DesktopPossible`, adds a Start Menu shortcut, and upgrades an existing
 install in place. Your configuration lives in `%LocalAppData%\DesktopPossible\Data`.
-Uninstall from *Settings > Apps* like any other program (your data folder is left untouched).
+Uninstall from *Settings > Apps* like any other program (your data folder is left untouched), or run the MSI again for a Repair/Remove menu — removing that way also offers to delete your data (kept by default).
 
 **Portable:** download `DesktopPossible-<version>-win-x64.zip`, unzip it anywhere you like
 (for example `C:\Tools\DesktopPossible`) and run `DesktopPossible.exe`. All configuration is
