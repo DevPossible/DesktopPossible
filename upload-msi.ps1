@@ -39,8 +39,10 @@ try {
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "GitHub CLI (gh) is required: winget install GitHub.cli" }
 
-    $packageArgs = @('-Version', $Version, '-NonInteractive')
-    if ($SkipTests) { $packageArgs += '-SkipTests' }
+    # Hashtable splatting: an array splat passes elements POSITIONALLY, so the literal
+    # string "-Version" bound to package.ps1's $Version parameter and failed validation.
+    $packageArgs = @{ Version = $Version; NonInteractive = $true }
+    if ($SkipTests) { $packageArgs.SkipTests = $true }
     & (Join-Path $PSScriptRoot 'package.ps1') @packageArgs
     if ($LASTEXITCODE -ne 0) { throw "package.ps1 failed" }
 
