@@ -16,33 +16,27 @@ namespace Desktop_Frames
         None, Glow, Shadow, Outline, AngelGlow, ColoredGlow, StrongShadow
     }
 
-    public enum NotificationSound
-    {
-        DefaultSound,
-        DoubleDing,
-        SmoothTickle,
-        MessageDing,
-        GentleDing,
-        SoftDing,
-        NadaAlert // Hidden sound for special events
-    }
-
     /// <summary>
     /// Manages application settings with Strict "Hard Switch" Master support.
     /// </summary>
     public static class SettingsManager
     {
+        /// <summary>True when this launch found no settings file at all (fresh install). Not persisted.</summary>
+        public static bool IsFirstRun { get; private set; }
+
         // --- Properties ---
         public static bool EnableAutoBackup { get; set; } = true;
         public static DateTime LastAutoBackupDate { get; set; } = DateTime.MinValue;
+        // Automatic backups kept before the oldest are deleted (manual backups are never auto-deleted).
+        public static int MaxBackupCount { get; set; } = 7;
+        // A backup archive larger than this is refused with an error (raise the limit to allow it).
+        public static int MaxBackupSizeMB { get; set; } = 100;
         public static bool ShowPortalExtensions { get; set; } = false;
         public static bool NoWildcardsOnPortalFilter { get; set; } = false;
         public static bool IsSnapEnabled { get; set; } = true;
         public static bool ShowBackgroundImageOnPortalFrames { get; set; } = true;
         public static bool UseRecycleBin { get; set; } = true;
         public static bool ShowInTray { get; set; } = true;
-        public static bool EnableSounds { get; set; } = true;
-        public static NotificationSound NotificationSound { get; set; } = NotificationSound.DefaultSound;
         public static int TintValue { get; set; } = 85;
         public static int MenuTintValue { get; set; } = 30;
         public static int MenuIcon { get; set; } = 0;
@@ -58,12 +52,11 @@ namespace Desktop_Frames
         public static bool DeletePreviousLogOnStart { get; set; } = false;
         public static bool EnableBackgroundValidationLogging { get; set; } = false;
         public static bool SuppressLaunchWarnings { get; set; } = false;
-        public static bool DisableFrameScrollbars { get; set; } = false;
-        public static bool DisableNoteAutoSave { get; set; } = false;
+        public static bool DisableFrameScrollbars { get; set; } = true;
 
-        public static bool EnableChameleonMode { get; set; } = false;
+        public static bool EnableChameleonMode { get; set; } = true;
         public static bool EnableProfileAutomation { get; set; } = false;
-        public static bool EnableVirtualDesktopAutomation { get; set; } = false;
+        public static bool EnableVirtualDesktopAutomation { get; set; } = true;
 
         public static bool EnableAutoOrganize { get; set; } = false;
 
@@ -106,15 +99,13 @@ namespace Desktop_Frames
         public static bool ToggleDesktopIconsOnDoubleClick { get; set; } = false;
         // Global default for zebra striping in Portal Details view (per-frame override via DetailsStriped).
         public static bool PortalDetailsStriped { get; set; } = true;
-        // Double-clicking a frame's background opens the search window (results come from shortcut frames).
-        public static bool SearchOnDoubleClick { get; set; } = true;
         // System-tray icon glyph style: "Nested" | "Stacked" | "Grid" (theme-aware monochrome, drawn in GDI+).
         public static string TrayIconStyle { get; set; } = "Nested";
         // How dragged image files are added to Image frames: "Copy" (default) | "Reference" | "Ask".
         public static string ImageDropMode { get; set; } = "Copy";
 
         // --- NEW: Idle Fade-Out Settings ---
-        public static bool FramesFadeOutFx { get; set; } = false;
+        public static bool FramesFadeOutFx { get; set; } = true;
         public static double FadeOutFxTargetAlpha { get; set; } = 0.3;
         public static int FadeOutTime { get; set; } = 5;
         /// <summary>Hover debounce for waking a faded frame (ms): the pointer must rest on the frame
@@ -126,19 +117,14 @@ namespace Desktop_Frames
         public static IconVisibilityEffect IconVisibilityEffect { get; set; } = IconVisibilityEffect.None;
         public static bool ExportShortcutsOnFrameDeletion { get; set; } = false;
         public static bool DeleteOriginalShortcutsOnDrop { get; set; } = false;
-        public static bool EnableSpotSearchHotkey { get; set; } = true;
 
         public static bool EnableProfileHotkeys { get; set; } = false;
         public static bool AltGrWarningShown { get; set; } = false;
-        public static bool EnableFocusFrameHotkey { get; set; } = true;
         // Show/Hide all frames hotkey (default Ctrl+Alt+H)
         public static bool EnableToggleFramesHotkey { get; set; } = true;
         public static int ToggleFramesKey { get; set; } = 0x48; // H
         public static string ToggleFramesModifier { get; set; } = "ctrl+alt";
-        public static int SpotSearchKey { get; set; } = 192;
-
-        public static string SpotSearchModifier { get; set; } = "Control";
-        public static bool EnableDimensionSnap { get; set; } = false;
+        public static bool EnableDimensionSnap { get; set; } = true;
         public static bool SingleClickToLaunch { get; set; } = true;
 
   
@@ -167,6 +153,11 @@ namespace Desktop_Frames
             string appRoot = AppPaths.DataRoot;
             string masterPath = Path.Combine(appRoot, "MasterOptions.json");
             string localPath = ProfileManager.GetProfileFilePath("options.json");
+
+            // Fresh install: no settings file anywhere yet. Sticky for the process lifetime —
+            // LoadSettings re-runs on profile reloads, by which time SaveSettings has created
+            // the file. TrayManager uses this to enable start-with-Windows by default.
+            if (!File.Exists(masterPath) && !File.Exists(localPath)) IsFirstRun = true;
 
             if (!File.Exists(masterPath))
             {
@@ -260,8 +251,6 @@ namespace Desktop_Frames
                 IsSnapEnabled,
                 ShowBackgroundImageOnPortalFrames,
                 ShowInTray,
-                EnableSounds,
-                NotificationSound = NotificationSound.ToString(),
                 UseRecycleBin,
                 TintValue,
                 MenuTintValue,
@@ -284,16 +273,14 @@ namespace Desktop_Frames
                 EnableBackgroundValidationLogging,
                 DisableSingleInstance,
                 DisableFrameScrollbars,
-                DisableNoteAutoSave,
                 ExportShortcutsOnFrameDeletion,
                 DeleteOriginalShortcutsOnDrop,
-                EnableSpotSearchHotkey,
-                SpotSearchKey,
-                SpotSearchModifier,
                 NoWildcardsOnPortalFilter,
                 ShowPortalExtensions,
                 EnableAutoBackup,
                 LastAutoBackupDate,
+                MaxBackupCount,
+                MaxBackupSizeMB,
                 AutoRollTime,
 
                 AllowAutoReposition,
@@ -321,7 +308,6 @@ namespace Desktop_Frames
                 ShowDesktopDot,
                 ToggleDesktopIconsOnDoubleClick,
                 PortalDetailsStriped,
-                SearchOnDoubleClick,
                 TrayIconStyle,
                 ImageDropMode,
                 // Idle Fade-Out
@@ -333,7 +319,6 @@ namespace Desktop_Frames
                 // Global Hotkeys
                 EnableProfileHotkeys,
                 AltGrWarningShown, // --- NEW ---
-                EnableFocusFrameHotkey,
                 EnableToggleFramesHotkey,
                 ToggleFramesKey,
                 ToggleFramesModifier,
@@ -342,43 +327,21 @@ namespace Desktop_Frames
                 ProfilePrevModifier,
                 ProfilePrevKey,
                 ProfileNextModifier,
-                ProfileNextKey,
-                FocusFrameModifier,
-                FocusFrameKey
+                ProfileNextKey
             };
         }
 
         private static void ApplyJsonToProperties(dynamic data)
         {
-            try { EnableAutoBackup = data.EnableAutoBackup ?? false; } catch { EnableAutoBackup = false; }
+            try { EnableAutoBackup = data.EnableAutoBackup ?? true; } catch { EnableAutoBackup = true; }
             try { LastAutoBackupDate = data.LastAutoBackupDate ?? DateTime.MinValue; } catch { LastAutoBackupDate = DateTime.MinValue; }
+            try { MaxBackupCount = data.MaxBackupCount ?? 7; } catch { MaxBackupCount = 7; }
+            if (MaxBackupCount < 1 || MaxBackupCount > 999) MaxBackupCount = 7;
+            try { MaxBackupSizeMB = data.MaxBackupSizeMB ?? 100; } catch { MaxBackupSizeMB = 100; }
+            if (MaxBackupSizeMB < 1 || MaxBackupSizeMB > 100000) MaxBackupSizeMB = 100;
             try { IsSnapEnabled = data.IsSnapEnabled ?? true; } catch { IsSnapEnabled = true; }
             try { ShowBackgroundImageOnPortalFrames = data.ShowBackgroundImageOnPortalFrames ?? true; } catch { ShowBackgroundImageOnPortalFrames = true; }
             try { ShowInTray = data.ShowInTray ?? true; } catch { ShowInTray = true; }
-            try { EnableSounds = data.EnableSounds ?? true; } catch { EnableSounds = true; }
-
-            // --- Notification Sound with Failsafe Logic ---
-            try
-            {
-                string soundConfig = data.NotificationSound?.ToString();
-                if (string.IsNullOrWhiteSpace(soundConfig)) soundConfig = "DefaultSound";
-
-                string normalizedConfig = soundConfig.ToLower().Trim();
-
-                // Allow "soundX" syntax and gracefully migrate old config names
-                if (normalizedConfig == "sound0" || normalizedConfig == "classicwarning") NotificationSound = NotificationSound.DefaultSound;
-                else if (normalizedConfig == "sound1" || normalizedConfig == "modernpop") NotificationSound = NotificationSound.DoubleDing;
-                else if (normalizedConfig == "sound2" || normalizedConfig == "smoothsimple") NotificationSound = NotificationSound.SmoothTickle;
-                else if (normalizedConfig == "sound3" || normalizedConfig == "studionotification") NotificationSound = NotificationSound.MessageDing;
-                else if (normalizedConfig == "sound4") NotificationSound = NotificationSound.GentleDing;
-                else if (normalizedConfig == "sound5") NotificationSound = NotificationSound.SoftDing;
-                else if (Enum.TryParse<NotificationSound>(soundConfig, true, out NotificationSound parsedSound))
-                    NotificationSound = parsedSound;
-                else
-                    NotificationSound = NotificationSound.DefaultSound;
-            }
-            catch { NotificationSound = NotificationSound.DefaultSound; }
-
             try { UseRecycleBin = data.UseRecycleBin ?? true; } catch { UseRecycleBin = true; }
             try { TintValue = data.TintValue ?? 85; } catch { TintValue = 85; }
             try { MenuTintValue = data.MenuTintValue ?? 30; } catch { MenuTintValue = 30; }
@@ -390,15 +353,12 @@ namespace Desktop_Frames
             try { SelectedColor = data.SelectedColor ?? "Gray"; } catch { SelectedColor = "Gray"; }
             try { IsLogEnabled = data.IsLogEnabled ?? false; } catch { IsLogEnabled = false; }
             try { SingleClickToLaunch = data.SingleClickToLaunch ?? true; } catch { SingleClickToLaunch = true; }
-            try { EnableDimensionSnap = data.EnableDimensionSnap ?? false; } catch { EnableDimensionSnap = false; }
+            try { EnableDimensionSnap = data.EnableDimensionSnap ?? true; } catch { EnableDimensionSnap = true; }
             try { PortalBackgroundOpacity = data.PortalBackgroundOpacity ?? 30; } catch { PortalBackgroundOpacity = 30; }
             try { EnableIconGlowEffect = data.EnableIconGlowEffect ?? true; } catch { EnableIconGlowEffect = true; }
-            try { DisableFrameScrollbars = data.DisableFrameScrollbars ?? false; } catch { DisableFrameScrollbars = false; }
-            try { DisableNoteAutoSave = data.DisableNoteAutoSave ?? false; } catch { DisableNoteAutoSave = false; }
+            try { DisableFrameScrollbars = data.DisableFrameScrollbars ?? true; } catch { DisableFrameScrollbars = true; }
             try { ExportShortcutsOnFrameDeletion = data.ExportShortcutsOnFrameDeletion ?? false; } catch { ExportShortcutsOnFrameDeletion = false; }
             try { DeleteOriginalShortcutsOnDrop = data.DeleteOriginalShortcutsOnDrop ?? false; } catch { DeleteOriginalShortcutsOnDrop = false; }
-            try { EnableSpotSearchHotkey = data.EnableSpotSearchHotkey ?? true; } catch { EnableSpotSearchHotkey = true; }
-            try { SpotSearchModifier = data.SpotSearchModifier?.ToString() ?? "Control"; } catch { SpotSearchModifier = "Control"; }
             try { ShowPortalExtensions = data.ShowPortalExtensions ?? false; } catch { ShowPortalExtensions = false; }
             try { NoWildcardsOnPortalFilter = data.NoWildcardsOnPortalFilter ?? false; } catch { NoWildcardsOnPortalFilter = false; }
             try { AutoRollTime = data.AutoRollTime ?? 2; } catch { AutoRollTime = 2; }
@@ -410,8 +370,8 @@ namespace Desktop_Frames
             try { SystemInfoFrameCreated = data.SystemInfoFrameCreated ?? false; } catch { SystemInfoFrameCreated = false; }
             try { FramesWithNoRoundCorners = data.FramesWithNoRoundCorners ?? false; } catch { FramesWithNoRoundCorners = false; }
             try { EnableProfileAutomation = data.EnableProfileAutomation ?? false; } catch { EnableProfileAutomation = false; }
-            try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? false; } catch { EnableVirtualDesktopAutomation = false; }
-            try { EnableChameleonMode = data.EnableChameleonMode ?? false; } catch { EnableChameleonMode = false; } // 
+            try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? true; } catch { EnableVirtualDesktopAutomation = true; }
+            try { EnableChameleonMode = data.EnableChameleonMode ?? true; } catch { EnableChameleonMode = true; }
             try { EnableAutoOrganize = data.EnableAutoOrganize ?? false; } catch { EnableAutoOrganize = false; }
             try { EnableAutoOrganizeNotifications = data.EnableAutoOrganizeNotifications ?? true; } catch { EnableAutoOrganizeNotifications = true; }
 
@@ -430,19 +390,14 @@ namespace Desktop_Frames
             try { ShowDesktopDot = data.ShowDesktopDot ?? true; } catch { ShowDesktopDot = true; }
             try { ToggleDesktopIconsOnDoubleClick = data.ToggleDesktopIconsOnDoubleClick ?? false; } catch { ToggleDesktopIconsOnDoubleClick = false; }
             try { PortalDetailsStriped = data.PortalDetailsStriped ?? true; } catch { PortalDetailsStriped = true; }
-            try { SearchOnDoubleClick = data.SearchOnDoubleClick ?? true; } catch { SearchOnDoubleClick = true; }
             try { TrayIconStyle = (string)(data.TrayIconStyle ?? "Nested"); } catch { TrayIconStyle = "Nested"; }
             try { ImageDropMode = (string)(data.ImageDropMode ?? "Copy"); } catch { ImageDropMode = "Copy"; }
 
             // Idle Fade-Out
-            try { FramesFadeOutFx = data.FramesFadeOutFx ?? false; } catch { FramesFadeOutFx = false; }
+            try { FramesFadeOutFx = data.FramesFadeOutFx ?? true; } catch { FramesFadeOutFx = true; }
             try { FadeOutFxTargetAlpha = data.FadeOutFxTargetAlpha ?? 0.3; } catch { FadeOutFxTargetAlpha = 0.3; }
             try { FadeOutTime = data.FadeOutTime ?? 5; } catch { FadeOutTime = 5; }
             try { FadeWakeDelayMs = data.FadeWakeDelayMs ?? 250; } catch { FadeWakeDelayMs = 250; }
-
-            try { SpotSearchKey = ParseKey(data.SpotSearchKey); } catch { SpotSearchKey = 192; }
-
-      
 
             try
             {
@@ -502,7 +457,6 @@ namespace Desktop_Frames
             // --- FIX: Read existing, but default to false for fresh installs ---
             try { EnableProfileHotkeys = data.EnableProfileHotkeys ?? false; } catch { EnableProfileHotkeys = false; }
             try { AltGrWarningShown = data.AltGrWarningShown ?? false; } catch { AltGrWarningShown = false; }
-            try { EnableFocusFrameHotkey = data.EnableFocusFrameHotkey ?? true; } catch { EnableFocusFrameHotkey = true; }
             try { EnableToggleFramesHotkey = data.EnableToggleFramesHotkey ?? true; } catch { EnableToggleFramesHotkey = true; }
             try { ToggleFramesKey = data.ToggleFramesKey ?? 0x48; } catch { ToggleFramesKey = 0x48; }
             try { if (data.ToggleFramesModifier != null) ToggleFramesModifier = data.ToggleFramesModifier.ToString(); } catch { }
@@ -512,18 +466,8 @@ namespace Desktop_Frames
             try { if (data.ProfilePrevKey != null) ProfilePrevKey = (int)data.ProfilePrevKey; } catch { }
             try { if (data.ProfileNextModifier != null) ProfileNextModifier = data.ProfileNextModifier.ToString(); } catch { }
             try { if (data.ProfileNextKey != null) ProfileNextKey = (int)data.ProfileNextKey; } catch { }
-            try { if (data.FocusFrameModifier != null) FocusFrameModifier = data.FocusFrameModifier.ToString(); } catch { }
-            try { if (data.FocusFrameKey != null) FocusFrameKey = (int)data.FocusFrameKey; } catch { }
 
             SanitizeHotkeys(); // Ensure nulls or invalid manual edits are safely overwritten
-        }
-
-        private static int ParseKey(dynamic value)
-        {
-            if (value == null) return 192;
-            if (int.TryParse(value.ToString(), out int code)) return code;
-            string keyName = value.ToString().ToLower().Trim();
-            return keyName switch { "~" => 192, "tilde" => 192, "space" => 32, "q" => 81, "f1" => 112, _ => 192 };
         }
 
         public static void SetMinLogLevel(LogManager.LogLevel level)
@@ -548,9 +492,6 @@ namespace Desktop_Frames
         public static string ProfileNextModifier { get; set; } = "Control, Alt";
         public static int ProfileNextKey { get; set; } = 0xBE; // Default: VK_OEM_PERIOD
 
-        public static string FocusFrameModifier { get; set; } = "Control, Alt";
-        public static int FocusFrameKey { get; set; } = 0x5A; // Default: VK_Z
-
         /// <summary>
         /// Validates and repairs hotkey configuration to prevent hook crashes from manual JSON edits.
         /// </summary>
@@ -560,7 +501,6 @@ namespace Desktop_Frames
             if (string.IsNullOrWhiteSpace(ProfileSwitchModifier)) ProfileSwitchModifier = "Control, Alt";
             if (string.IsNullOrWhiteSpace(ProfilePrevModifier)) ProfilePrevModifier = "Control, Alt";
             if (string.IsNullOrWhiteSpace(ProfileNextModifier)) ProfileNextModifier = "Control, Alt";
-            if (string.IsNullOrWhiteSpace(FocusFrameModifier)) FocusFrameModifier = "Control, Alt";
 
             // Fallback for missing or broken Profile Switch Array
             if (ProfileSwitchKeys == null || ProfileSwitchKeys.Length < 10)
@@ -569,7 +509,6 @@ namespace Desktop_Frames
             // Fallback for totally invalid Virtual Key codes (must be within 0x01 and 0xFE)
             if (ProfilePrevKey <= 0 || ProfilePrevKey > 254) ProfilePrevKey = 0xBC;
             if (ProfileNextKey <= 0 || ProfileNextKey > 254) ProfileNextKey = 0xBE;
-            if (FocusFrameKey <= 0 || FocusFrameKey > 254) FocusFrameKey = 0x5A;
         }
 
         /// <summary>
@@ -610,14 +549,8 @@ namespace Desktop_Frames
                             data["ProfilePrevKey"] = ProfilePrevKey;
                             data["ProfileNextModifier"] = ProfileNextModifier;
                             data["ProfileNextKey"] = ProfileNextKey;
-                            data["FocusFrameModifier"] = FocusFrameModifier;
-                            data["FocusFrameKey"] = FocusFrameKey;
-                            data["SpotSearchModifier"] = SpotSearchModifier;
-                            data["SpotSearchKey"] = SpotSearchKey;
                             data["EnableProfileHotkeys"] = EnableProfileHotkeys;
                             data["AltGrWarningShown"] = AltGrWarningShown; // --- NEW ---
-                            data["EnableFocusFrameHotkey"] = EnableFocusFrameHotkey;
-                            data["EnableSpotSearchHotkey"] = EnableSpotSearchHotkey;
                             data["FramesFadeOutFx"] = FramesFadeOutFx;
                             data["FadeOutFxTargetAlpha"] = FadeOutFxTargetAlpha;
                             data["FadeOutTime"] = FadeOutTime;

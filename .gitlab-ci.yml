@@ -118,6 +118,12 @@ test-windows:
 # Reuses an existing v-tag on HEAD; otherwise computes via scripts/get-version.sh
 # and bumps patch until the tag is free. Emits VERSION/TAG_EXISTS/SHOULD_RELEASE
 # as dotenv variables plus changelog.md for the GitHub release body.
+#
+# PRERELEASE: pushing main with `git push -o ci.variable="PRERELEASE=true"`
+# produces a release-candidate instead of a full release: the computed version
+# gets the next free "-rc.N" suffix and the GitHub release is marked prerelease.
+# Promoting the SAME commit later without the flag computes the plain x.y.z
+# (zero commits since the rc tag keep the base version) and releases it fully.
 # -----------------------------------------------------------------------------
 version:
   stage: version
@@ -133,8 +139,14 @@ version:
 
       echo "HEAD: $(git rev-parse HEAD)"
       echo "Tags at HEAD: $(git tag --points-at HEAD | tr '\n' ' ')"
+      echo "PRERELEASE: ${PRERELEASE:-false}"
 
-      existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+      if [ "${PRERELEASE:-}" = "true" ]; then
+        # A prerelease run may also reuse an rc tag already on HEAD (pipeline retry).
+        existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' | head -n 1)"
+      else
+        existing_tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+      fi
 
       tag_exists="false"
       should_release="true"
@@ -143,6 +155,15 @@ version:
         version="${existing_tag#v}"
         tag_exists="true"
         echo "HEAD is already tagged: ${existing_tag} - reusing it."
+      elif [ "${PRERELEASE:-}" = "true" ]; then
+        base="$(sh scripts/get-version.sh)"
+        echo "Computed base version: ${base}"
+        n=1
+        while [ -n "$(git tag -l "v${base}-rc.${n}")" ]; do
+          n=$((n + 1))
+        done
+        version="${base}-rc.${n}"
+        echo "Prerelease version: ${version}"
       else
         version="$(sh scripts/get-version.sh)"
         echo "Computed version: ${version}"
@@ -324,12 +345,18 @@ github_release:
       accept="Accept: application/vnd.github.v3+json"
 
       # 1) Create the release from changelog.md.
+      # Prerelease when: 0.x (pre-1.0), or the version carries a prerelease suffix (-rc.N).
+      pre="false"
+      case "$VERSION" in
+        0.*|*-*) pre="true" ;;
+      esac
+
       body="$(jq -Rs . < changelog.md)"
       payload="$(jq -n \
         --arg tag "v${VERSION}" \
         --arg name "DesktopPossible v${VERSION}" \
         --argjson body "${body}" \
-        --argjson pre "$( [ "${VERSION%%.*}" = "0" ] && echo true || echo false )" \
+        --argjson pre "${pre}" \
         '{ tag_name: $tag, name: $name, body: $body, draft: false, prerelease: $pre }')"
 
       status="$(curl -s -o response.json -w "%{http_code}" \

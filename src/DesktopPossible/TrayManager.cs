@@ -11,7 +11,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
-using System.Media;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -105,6 +104,14 @@ namespace Desktop_Frames
             // 2. Check status using the NEW logic (Registry check + Shortcut fallback)
             IsStartWithWindows = CheckIfStartWithWindowsEnabled();
 
+            // Fresh install: start with Windows by default. Existing installs keep whatever
+            // the user chose (registry presence/absence IS their choice).
+            if (SettingsManager.IsFirstRun && !IsStartWithWindows)
+            {
+                try { ToggleStartWithWindows(true); }
+                catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.Settings, $"First-run autostart registration failed: {ex.Message}"); }
+            }
+
 
             // Redraw the icon (overlay dot + tooltip) when the background update check finds a release.
             UpdateChecker.UpdateFound += () =>
@@ -197,44 +204,6 @@ namespace Desktop_Frames
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
                     $"TrayIcon: Error in click handler: {ex.Message}");
-            }
-        }
-
-        private string GetFocusFrameHotkeyString()
-        {
-            try
-            {
-                string mod = SettingsManager.FocusFrameModifier ?? "";
-                int key = SettingsManager.FocusFrameKey;
-
-                if (string.IsNullOrWhiteSpace(mod) && key == 0) return "Not Set";
-
-                List<string> parts = new List<string>();
-
-                if (!string.IsNullOrWhiteSpace(mod))
-                {
-                    // Clean up the string to match standard UI format
-                    string formattedMod = mod.Replace("Control", "Ctrl").Replace(", ", "+");
-                    parts.Add(formattedMod);
-                }
-
-                if (key != 0)
-                {
-                    // FIX: Use System.Windows.Forms.Keys because it perfectly maps to Win32 Virtual Key codes
-                    string keyStr = ((System.Windows.Forms.Keys)key).ToString();
-
-                    // Clean up default enum names (converts "D1" to "1")
-                    if (keyStr.StartsWith("D") && keyStr.Length == 2 && char.IsDigit(keyStr[1]))
-                        keyStr = keyStr.Substring(1);
-
-                    parts.Add(keyStr);
-                }
-
-                return string.Join("+", parts);
-            }
-            catch
-            {
-                return "Ctrl+Alt+Z"; // Safe fallback
             }
         }
 
@@ -332,15 +301,6 @@ namespace Desktop_Frames
             _showHiddenFramesItem = new ToolStripMenuItem("Show Hidden Frames") { Enabled = false };
             trayMenu.Items.Add(_showHiddenFramesItem);
 
-            var focusFrameItem = (ToolStripMenuItem)trayMenu.Items.Add($"Focus Frame... ({GetFocusFrameHotkeyString()})", null, (s, e) =>
-            {
-                System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    FrameFocusFormManager focusManager = new FrameFocusFormManager();
-                    focusManager.ShowDialog();
-                }));
-            });
-
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add("Exit", null, (s, e) => System.Windows.Application.Current.Shutdown());
 
@@ -348,9 +308,6 @@ namespace Desktop_Frames
             // Disabled features are hidden from the tray; re-enable them from Options.
             trayMenu.Opening += (s, e) =>
             {
-                focusFrameItem.Visible = SettingsManager.EnableFocusFrameHotkey;
-                if (focusFrameItem.Visible) focusFrameItem.Text = $"Focus Frame... ({GetFocusFrameHotkeyString()})";
-
                 // Re-resolve live so a toggle made from the frame context menu is reflected here.
                 _frameEditModeItem.Checked = SettingsManager.FrameEditMode;
 

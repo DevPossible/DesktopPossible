@@ -34,18 +34,8 @@ Click the **Filter Icon** (located next to the Lock icon) to toggle the filter b
 
 ---
 
-## SpotSearch
-Press the SpotSearch hotkey (default: `` Ctrl + ` ``) to open the search bar and search the icons of all Data frames (even hidden ones). Optionally, double-clicking an empty area of a frame opens it too (Options → Style & FX → *Double-click a frame to open search*).
-
----
-
 ## Show or hide all frames
 Press `Ctrl + Alt + H` (default; Options → Style & FX → *Enable Show/Hide all frames hotkey*) or double-click the tray icon to toggle every frame at once. Pin an individual frame above other windows with the pin icon in its title bar (or right-click → *Always on top*).
-
----
-
-## Focus Frame
-Press `Ctrl + Alt + Z` (default) or use the "Focus Frame..." tray menu item to open a picker; type part of a frame's name and press Enter (or double-click it) to bring that frame to the front and push the others behind. The hotkey and the tray item are controlled by Options → Hotkeys → *Enable Focus Frame Hotkey*.
 
 Every frame can also have its own **focus hotkey**: right-click the frame → Customize... → *Focus Hotkey* and press the combination you want. 
 
@@ -93,15 +83,6 @@ For deeper customization, you can manually edit the profile's `options.json` fil
 | :--- | :--- |
 | `ExportShortcutsOnFrameDeletion` | If `true`, all icons inside a frame are automatically moved to the desktop when that frame is deleted. |
 | `DeleteOriginalShortcutsOnDrop` | If `true`, dropping a desktop icon into a frame will delete the original desktop file, effectively "moving" it into the frame. |
-
-### SpotSearch
-| Variable | Description |
-| :--- | :--- |
-| `EnableSpotSearchHotkey` | Set to `false` to completely disable the SpotSearch feature. |
-| `SpotSearchKey` | Choose the trigger key: `"q"`, `"space"`, `"~"`, or a specific key code. |
-| `SpotSearchModifier` | Change the modifier key to `"ALT"` or `"CONTROL"`. |
-Options → Hotkeys has UI controls for the SpotSearch hotkey, so editing JSON for this is not needed.
-
 
 ### System
 | Variable | Description |

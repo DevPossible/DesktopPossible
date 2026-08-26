@@ -286,48 +286,7 @@ namespace Desktop_Frames
 
             // Moved from Style Tab (Choices)
             CreateCheckBox(c, "Enable Portal Frames Watermark", "EnablePortalWatermark", SettingsManager.ShowBackgroundImageOnPortalFrames);
-            var n = CreateCheckBoxReturn(c, "Enable Note Frames Watermark (Coming Soon)", "EnableNoteWatermark", false);
-            n.IsEnabled = false; n.Foreground = Brushes.Gray;
             CreateCheckBox(c, "Disable Frame Scrollbars", "DisableFrameScrollbars", SettingsManager.DisableFrameScrollbars);
-
-
-            // --- NEW: Notification Sound Dropdown ---
-            CheckBox cbSounds = CreateCheckBoxReturn(c, "Enable Sounds", "EnableSounds", SettingsManager.EnableSounds);
-
-            Grid soundGrid = new Grid { Margin = new Thickness(35, 0, 0, 8) }; // Indented to show parent/child relationship
-            soundGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-            soundGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
-
-            TextBlock lblSound = new TextBlock { Text = "Notification Sound:", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(lblSound, 0);
-
-            ComboBox cbSoundType = new ComboBox { Name = "NotificationSoundComboBox", Height = 25, FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
-            cbSoundType.Items.Add("Default Sound");
-            cbSoundType.Items.Add("Double Ding");
-            cbSoundType.Items.Add("Smooth Tickle");
-            cbSoundType.Items.Add("Message Ding");
-            cbSoundType.Items.Add("Gentle Ding");
-            cbSoundType.Items.Add("Soft Ding");
-
-            // Map the current Enum back to the UI index
-            cbSoundType.SelectedIndex = SettingsManager.NotificationSound switch
-            {
-                NotificationSound.DoubleDing => 1,
-                NotificationSound.SmoothTickle => 2,
-                NotificationSound.MessageDing => 3,
-                NotificationSound.GentleDing => 4,
-                NotificationSound.SoftDing => 5,
-                _ => 0
-            };
-            Grid.SetColumn(cbSoundType, 1);
-            soundGrid.Children.Add(lblSound);
-            soundGrid.Children.Add(cbSoundType);
-            c.Children.Add(soundGrid);
-
-            // Live-toggle the combobox based on the checkbox state
-            soundGrid.IsEnabled = cbSounds.IsChecked == true;
-            cbSounds.Click += (s, e) => soundGrid.IsEnabled = cbSounds.IsChecked == true;
-            // ----------------------------------------
 
             // --- Virtual Desktops ---
             CreateSectionHeader(c, "Virtual Desktops", _userAccentColor);
@@ -390,7 +349,6 @@ namespace Desktop_Frames
             // --- NEW: Frames behavior ---
             CreateSectionHeader(c, "Frames", ColorStyle);
             CreateCheckBox(c, "Enable Show/Hide all frames hotkey", "EnableToggleFramesHotkey", SettingsManager.EnableToggleFramesHotkey);
-            CreateCheckBox(c, "Double-click a frame to open search", "SearchOnDoubleClick", SettingsManager.SearchOnDoubleClick);
             CreateCheckBox(c, "Striped rows in Portal Details view", "PortalDetailsStriped", SettingsManager.PortalDetailsStriped);
 
             // Image frames: how dragged/added image files are stored.
@@ -546,7 +504,26 @@ namespace Desktop_Frames
 
             CreateCheckBox(c, "Automatic Backup (Daily)", "EnableAutoBackup", SettingsManager.EnableAutoBackup);
 
+            // Backup limits: automatic-backup retention count and the per-backup size cap.
+            Grid backupCfg = new Grid { Margin = new Thickness(15, 4, 0, 4) };
+            backupCfg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(230) });
+            backupCfg.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+            backupCfg.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            backupCfg.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+            TextBlock lblCount = new TextBlock { Text = "Keep last automatic backups:", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
+            TextBox tbCount = new TextBox { Name = "MaxBackupCountBox", Text = SettingsManager.MaxBackupCount.ToString(), Height = 24, VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
+            Grid.SetRow(lblCount, 0); Grid.SetColumn(lblCount, 0);
+            Grid.SetRow(tbCount, 0); Grid.SetColumn(tbCount, 1);
+
+            TextBlock lblSize = new TextBlock { Text = "Max backup size (MB):", FontFamily = new FontFamily("Segoe UI"), FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+            TextBox tbSize = new TextBox { Name = "MaxBackupSizeBox", Text = SettingsManager.MaxBackupSizeMB.ToString(), Height = 24, VerticalContentAlignment = VerticalAlignment.Center };
+            Grid.SetRow(lblSize, 1); Grid.SetColumn(lblSize, 0);
+            Grid.SetRow(tbSize, 1); Grid.SetColumn(tbSize, 1);
+
+            backupCfg.Children.Add(lblCount); backupCfg.Children.Add(tbCount);
+            backupCfg.Children.Add(lblSize); backupCfg.Children.Add(tbSize);
+            c.Children.Add(backupCfg);
 
             // --- Maintenance Section ---
             Color darkPink = Color.FromRgb(199, 21, 133); // MediumVioletRed
@@ -631,6 +608,18 @@ namespace Desktop_Frames
             btnEmptyFrames.Click += (s, e) => EmptyFramesDialog.ShowDialogOnUiThread();
             headerPanel.Children.Add(btnEmptyFrames);
 
+            TextBlock vdHint = new TextBlock
+            {
+                Text = "Tip: Naming a profile the same as a Windows virtual desktop will activate that profile automatically when you switch to that desktop (General → Automatically Switch Profiles with Virtual Desktop). Desktops without a matching profile fall back to Default.",
+                TextWrapping = TextWrapping.Wrap,
+                FontStyle = FontStyles.Italic,
+                Foreground = Brushes.Gray,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Margin = new Thickness(15, 0, 15, 10)
+            };
+            headerPanel.Children.Add(vdHint);
+
             Grid.SetRow(headerPanel, 0);
             c.Children.Add(headerPanel);
 
@@ -666,18 +655,6 @@ namespace Desktop_Frames
             // Bind initial state and live toggling
             gProf1.IsEnabled = gProf2.IsEnabled = gProf3.IsEnabled = cbProf.IsChecked == true;
             cbProf.Click += (s, e) => gProf1.IsEnabled = gProf2.IsEnabled = gProf3.IsEnabled = cbProf.IsChecked == true;
-
-            CreateSectionHeader(c, "Utilities", ColorHotkeys);
-
-            CheckBox cbFocus = CreateCheckBoxReturn(c, "Enable Focus Frame Hotkey", "EnableFocusFrameHotkey", SettingsManager.EnableFocusFrameHotkey);
-            Grid gFocus = CreateHotkeyEditor(c, "Focus Frame", "FocusFrame", SettingsManager.FocusFrameModifier, SettingsManager.FocusFrameKey, true);
-            gFocus.IsEnabled = cbFocus.IsChecked == true;
-            cbFocus.Click += (s, e) => gFocus.IsEnabled = cbFocus.IsChecked == true;
-
-            CheckBox cbSpot = CreateCheckBoxReturn(c, "Enable Spot Search Hotkey", "EnableSpotSearchHotkey", SettingsManager.EnableSpotSearchHotkey);
-            Grid gSpot = CreateHotkeyEditor(c, "Spot Search", "SpotSearch", SettingsManager.SpotSearchModifier, SettingsManager.SpotSearchKey, true);
-            gSpot.IsEnabled = cbSpot.IsChecked == true;
-            cbSpot.Click += (s, e) => gSpot.IsEnabled = cbSpot.IsChecked == true;
 
             TextBlock infoText = new TextBlock
             {
@@ -885,11 +862,21 @@ namespace Desktop_Frames
             Grid buttons = new Grid { Margin = new Thickness(15, 0, 15, 10), Height = 34 };
             for (int i = 0; i < 3; i++) buttons.ColumnDefinitions.Add(new ColumnDefinition());
             Button bAdd = CreateStyledButton("Add Text Frame", ColorTextFrames); bAdd.Margin = new Thickness(0, 0, 5, 0);
-            Button bEdit = CreateStyledButton("Edit...", Color.FromRgb(0, 123, 191)); bEdit.Margin = new Thickness(5, 0, 5, 0);
+            Button bEdit = CreateStyledButton("Customize...", Color.FromRgb(0, 123, 191)); bEdit.Margin = new Thickness(5, 0, 5, 0);
             Button bRemove = CreateStyledButton("Remove", Color.FromRgb(234, 67, 53)); bRemove.Margin = new Thickness(5, 0, 0, 0);
             Grid.SetColumn(bAdd, 0); Grid.SetColumn(bEdit, 1); Grid.SetColumn(bRemove, 2);
             buttons.Children.Add(bAdd); buttons.Children.Add(bEdit); buttons.Children.Add(bRemove);
             c.Children.Add(buttons);
+
+            // Text frames now share the common Customize dialog (text-mode controls only).
+            void CustomizeTextFrame(string? id)
+            {
+                if (id == null) return;
+                dynamic? frame = FrameDataManager.FindFrameById(id);
+                if (frame == null) return;
+                try { new CustomizeFrameFormManager(frame).ShowDialog(); }
+                catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Text frame customize failed: {ex.Message}"); }
+            }
 
             bAdd.Click += (s, e) =>
             {
@@ -897,17 +884,15 @@ namespace Desktop_Frames
                 dynamic frame = Framemanager.CreateTextFrame(wa.Left + 40, wa.Top + 40);
                 Reload();
                 foreach (ListBoxItem item in list.Items) if (item.Tag?.ToString() == frame.Id?.ToString()) list.SelectedItem = item;
-                TextFrameEditorDialog.Show(frame.Id?.ToString());
+                CustomizeTextFrame(frame.Id?.ToString());
                 Reload();
             };
             bEdit.Click += (s, e) =>
             {
-                string? id = SelectedId();
-                if (id == null) return;
-                TextFrameEditorDialog.Show(id);
+                CustomizeTextFrame(SelectedId());
                 Reload();
             };
-            list.MouseDoubleClick += (s, e) => { string? id = SelectedId(); if (id != null) { TextFrameEditorDialog.Show(id); Reload(); } };
+            list.MouseDoubleClick += (s, e) => { string? id = SelectedId(); if (id != null) { CustomizeTextFrame(id); Reload(); } };
             bRemove.Click += (s, e) =>
             {
                 string? id = SelectedId();
@@ -1181,25 +1166,6 @@ namespace Desktop_Frames
                         // Moved from Style Tab (Choices)
                         if (cb.Name == "EnablePortalWatermark") { newPortalWatermarkState = cb.IsChecked == true; SettingsManager.ShowBackgroundImageOnPortalFrames = newPortalWatermarkState; }
                         if (cb.Name == "DisableFrameScrollbars") SettingsManager.DisableFrameScrollbars = cb.IsChecked == true;
-                        if (cb.Name == "EnableSounds") SettingsManager.EnableSounds = cb.IsChecked == true;
-                    }
-                    
-                    // --- NEW: Catch the Sound Config Grid ---
-                    else if (child is Grid genGrid)
-                    {
-                        var sndCombo = genGrid.Children.OfType<ComboBox>().FirstOrDefault(c => c.Name == "NotificationSoundComboBox");
-                        if (sndCombo != null)
-                        {
-                            SettingsManager.NotificationSound = sndCombo.SelectedIndex switch
-                            {
-                                1 => NotificationSound.DoubleDing,
-                                2 => NotificationSound.SmoothTickle,
-                                3 => NotificationSound.MessageDing,
-                                4 => NotificationSound.GentleDing,
-                                5 => NotificationSound.SoftDing,
-                                _ => NotificationSound.DefaultSound
-                            };
-                        }
                     }
                 }
 
@@ -1231,7 +1197,6 @@ namespace Desktop_Frames
                         // NEW: Frames behavior
                         if (cb.Name == "EnableToggleFramesHotkey") SettingsManager.EnableToggleFramesHotkey = cb.IsChecked == true;
                         if (cb.Name == "PortalDetailsStriped") SettingsManager.PortalDetailsStriped = cb.IsChecked == true;
-                        if (cb.Name == "SearchOnDoubleClick") SettingsManager.SearchOnDoubleClick = cb.IsChecked == true;
                     }
                     else if (child is Grid g)
                     {
@@ -1263,7 +1228,19 @@ namespace Desktop_Frames
 
                 // 3. Tools
                 var toolsContent = (StackPanel)((TabItem)_tabControl.Items[2]).Content;
-                foreach (var child in toolsContent.Children) if (child is CheckBox cb && cb.Name == "EnableAutoBackup") SettingsManager.EnableAutoBackup = cb.IsChecked == true;
+                foreach (var child in toolsContent.Children)
+                {
+                    if (child is CheckBox cb && cb.Name == "EnableAutoBackup") SettingsManager.EnableAutoBackup = cb.IsChecked == true;
+                    else if (child is Grid toolsGrid)
+                    {
+                        var cntBox = toolsGrid.Children.OfType<TextBox>().FirstOrDefault(t => t.Name == "MaxBackupCountBox");
+                        if (cntBox != null && int.TryParse(cntBox.Text, out int cnt))
+                            SettingsManager.MaxBackupCount = Math.Max(1, Math.Min(999, cnt));
+                        var sizeBox = toolsGrid.Children.OfType<TextBox>().FirstOrDefault(t => t.Name == "MaxBackupSizeBox");
+                        if (sizeBox != null && int.TryParse(sizeBox.Text, out int mb))
+                            SettingsManager.MaxBackupSizeMB = Math.Max(1, Math.Min(100000, mb));
+                    }
+                }
 
                 // 4. Hotkeys (NEW)
                 var hotkeysContent = (StackPanel)((ScrollViewer)((TabItem)_tabControl.Items[4]).Content).Content;
@@ -1273,8 +1250,6 @@ namespace Desktop_Frames
                     if (child is CheckBox hotkeyCb)
                     {
                         if (hotkeyCb.Name == "EnableProfileHotkeys" && SettingsManager.EnableProfileHotkeys != (hotkeyCb.IsChecked == true)) { SettingsManager.EnableProfileHotkeys = hotkeyCb.IsChecked == true; hotkeysChanged = true; }
-                        if (hotkeyCb.Name == "EnableFocusFrameHotkey" && SettingsManager.EnableFocusFrameHotkey != (hotkeyCb.IsChecked == true)) { SettingsManager.EnableFocusFrameHotkey = hotkeyCb.IsChecked == true; hotkeysChanged = true; }
-                        if (hotkeyCb.Name == "EnableSpotSearchHotkey" && SettingsManager.EnableSpotSearchHotkey != (hotkeyCb.IsChecked == true)) { SettingsManager.EnableSpotSearchHotkey = hotkeyCb.IsChecked == true; hotkeysChanged = true; }
                     }
 
                     if (child is Grid g && g.Children.Count > 1 && g.Children[1] is StackPanel spMods)
@@ -1311,8 +1286,6 @@ namespace Desktop_Frames
                             if (prefix == "ProfSwitch") { if (SettingsManager.ProfileSwitchModifier != modString) { SettingsManager.ProfileSwitchModifier = modString; hotkeysChanged = true; } }
                             if (prefix == "ProfPrev") { if (SettingsManager.ProfilePrevModifier != modString || SettingsManager.ProfilePrevKey != key) { SettingsManager.ProfilePrevModifier = modString; SettingsManager.ProfilePrevKey = key; hotkeysChanged = true; } }
                             if (prefix == "ProfNext") { if (SettingsManager.ProfileNextModifier != modString || SettingsManager.ProfileNextKey != key) { SettingsManager.ProfileNextModifier = modString; SettingsManager.ProfileNextKey = key; hotkeysChanged = true; } }
-                            if (prefix == "FocusFrame") { if (SettingsManager.FocusFrameModifier != modString || SettingsManager.FocusFrameKey != key) { SettingsManager.FocusFrameModifier = modString; SettingsManager.FocusFrameKey = key; hotkeysChanged = true; } }
-                            if (prefix == "SpotSearch") { if (SettingsManager.SpotSearchModifier != modString || SettingsManager.SpotSearchKey != key) { SettingsManager.SpotSearchModifier = modString; SettingsManager.SpotSearchKey = key; hotkeysChanged = true; } }
                         }
                     }
                 }
@@ -1425,18 +1398,23 @@ namespace Desktop_Frames
         {
             try
             {
-                using (var d = new System.Windows.Forms.FolderBrowserDialog())
+                // Backups are zip archives now. Legacy plain-folder backups still restore:
+                // switch the filter to "All files" and pick any file inside the old backup
+                // folder (e.g. its frames.json) — RestoreFromBackup uses its parent folder.
+                var d = new Microsoft.Win32.OpenFileDialog
                 {
-                    // FIX: Use the Profile-Aware path helper
-                    d.SelectedPath = BackupManager.GetBackupsFolderPath();
-                    d.Description = "Select a backup folder to restore from";
+                    Filter = "Backup archives (*.zip)|*.zip|All files (*.*)|*.*",
+                    DefaultExt = ".zip",
+                    InitialDirectory = BackupManager.GetBackupsFolderPath(),
+                    Title = "Select a backup to restore",
+                    RestoreDirectory = true
+                };
 
-                    if (d.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                    {
-                        BackupManager.RestoreFromBackup(d.SelectedPath);
-                        _optionsWindow.Close();
-                        _ = TrayManager.reloadallFrames(); // fire-and-forget reload
-                    }
+                if (d.ShowDialog() == true)
+                {
+                    BackupManager.RestoreFromBackup(d.FileName);
+                    _optionsWindow.Close();
+                    _ = TrayManager.reloadallFrames(); // fire-and-forget reload
                 }
             }
             catch (Exception ex)
@@ -1463,19 +1441,47 @@ namespace Desktop_Frames
 
         private static void PerformFullFactoryReset()
         {
-            if (MessageBoxesManager.ShowCustomYesNoMessageBox("WARNING: This will delete ALL frames, shortcuts, and settings for the CURRENT PROFILE!\n\nAre you sure you want to proceed?", "Factory Reset"))
+            if (MessageBoxesManager.ShowCustomYesNoMessageBox(
+                "This will remove ALL frames and settings for the CURRENT PROFILE.\n\n" +
+                "Files and shortcuts stored inside frames are NOT deleted — they are moved back " +
+                "to your Desktop first. A safety backup is also created.\n\nProceed?", "Factory Reset"))
             {
                 // KISS: Hijack cursor to show processing
                 System.Windows.Application.Current?.Dispatcher.Invoke(() => System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait);
                 try
                 {
-                    // 1. Create a safety backup before wiping
+                    // 1. Create a safety backup before clearing
                     string ts = DateTime.Now.ToString("yyMMddHHmm");
                     BackupManager.CreateBackup($"{ts}_backup_reset", silent: true);
 
-                    // 2. Wipe Profile-Specific Folders
+                    // 2. Dump every stored file back to the Desktop — the app never mass-deletes
+                    //    user files; if the user wants them gone they do it themselves, outside
+                    //    the app. Covers the frame store and the legacy per-profile Shortcuts
+                    //    folder; failures leave the file in place and are logged.
+                    int moved = FrameFileOperations.MoveProfileFilesToDesktop(ProfileManager.CurrentProfileName);
+
+                    string legacyShortcuts = ProfileManager.GetProfileFilePath("Shortcuts");
+                    if (System.IO.Directory.Exists(legacyShortcuts))
+                    {
+                        foreach (string entry in System.IO.Directory.GetFileSystemEntries(legacyShortcuts))
+                        {
+                            try
+                            {
+                                FrameStore.MoveIntoFolder(FrameFileOperations.DesktopDir, entry, copy: false);
+                                moved++;
+                            }
+                            catch (Exception mvEx)
+                            {
+                                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.Error,
+                                    $"Factory reset: could not move '{entry}' to the desktop: {mvEx.Message}");
+                            }
+                        }
+                    }
+
+                    // 3. Wipe app-internal folders only (caches and the last-deleted stash —
+                    //    never user content, which was moved out above).
                     var failedFolders = new List<string>();
-                    foreach (string f in new[] { "Temp Shortcuts", "Shortcuts", "Last Frame Deleted", "CopiedItem" })
+                    foreach (string f in new[] { "Temp Shortcuts", "Last Frame Deleted", "CopiedItem" })
                     {
                         string p = ProfileManager.GetProfileFilePath(f);
                         if (System.IO.Directory.Exists(p))
@@ -1494,7 +1500,7 @@ namespace Desktop_Frames
                         }
                     }
 
-                    // 3. Wipe Profile-Specific Config Files (OVERWRITE INSTEAD OF DELETE)
+                    // 4. Wipe Profile-Specific Config Files (OVERWRITE INSTEAD OF DELETE)
                     // FIX: Pointed to frames.json and wrote empty array to prevent read crashes
                     string fj = ProfileManager.GetProfileFilePath("frames.json");
                     System.IO.File.WriteAllText(fj, "[]");
@@ -1502,11 +1508,12 @@ namespace Desktop_Frames
                     string oj = ProfileManager.GetProfileFilePath("options.json");
                     System.IO.File.WriteAllText(oj, "{}");
 
-                    // 4. Force a clean OS-level restart (Guarantees all UI clears properly)
+                    // 5. Force a clean OS-level restart (Guarantees all UI clears properly)
                     // Surface any folders that could not be wiped instead of pretending success.
+                    string movedNote = moved > 0 ? $"\n{moved} stored file(s) were moved to your Desktop." : "";
                     string resetMessage = failedFolders.Count == 0
-                        ? "Factory Reset complete.\nThe application will now restart."
-                        : $"Factory Reset completed with warnings.\nCould not fully clear: {string.Join(", ", failedFolders)}.\nSee the log for details. The application will now restart.";
+                        ? $"Factory Reset complete.{movedNote}\nThe application will now restart."
+                        : $"Factory Reset completed with warnings.{movedNote}\nCould not fully clear: {string.Join(", ", failedFolders)}.\nSee the log for details. The application will now restart.";
                     MessageBoxesManager.ShowOKOnlyMessageBoxForm(resetMessage, failedFolders.Count == 0 ? "Reset Successful" : "Reset Incomplete");
 
                     string appPath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;

@@ -62,6 +62,18 @@ namespace Desktop_Frames
 
                 SingleInstanceChecker.HandleDuplicateInstance(isDrawCommand ? $"CMD_DRAW|{Guid.NewGuid()}" : null);
 
+                // A plain second launch gets a visible answer, not a silent exit. The "-create"
+                // hand-off stays silent — that is the desktop context menu's IPC channel, not a
+                // user starting the app twice.
+                if (!isDrawCommand)
+                {
+                    MessageBox.Show(
+                        "DesktopPossible is already running.\n\nLook for its icon in the system tray (near the clock).",
+                        "DesktopPossible",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+
                 Shutdown();
                 return;
             }
@@ -118,6 +130,10 @@ namespace Desktop_Frames
 
                     // Load frames (Now loads from Profile/fences.json)
                     Framemanager.LoadAndCreateFrames(_targetChecker);
+
+                    // Keep frame items in sync with outside deletes/renames of their backing
+                    // files (e.g. Windows' own Delete on the icon's shell context menu).
+                    FrameStoreWatcher.Start();
 
                     // --- PRODUCTION START LOGIC ---
                     if (SettingsManager.EnableVirtualDesktopAutomation)
@@ -255,6 +271,7 @@ namespace Desktop_Frames
             try { Framemanager.FlushPendingFrameSave(); } catch { }
 
             _triggerPollTimer?.Stop();
+            FrameStoreWatcher.Stop();
             InterCore.Cleanup();
             try
             {

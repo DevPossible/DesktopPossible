@@ -123,11 +123,22 @@ namespace DesktopPossible.Tests
         [InlineData("Black", 0x0B, 0x0B, 0x0C)]
         public void GetColorFromName_KnownNames_ReturnsPaletteColor(string name, byte r, byte g, byte b)
         {
-            // Act
-            Color result = Utility.GetColorFromName(name);
+            // Arrange - Chameleon mode (default on) replaces default-color lookups with the
+            // wallpaper color; pin it off to test the palette mapping itself.
+            bool chameleon = SettingsManager.EnableChameleonMode;
+            SettingsManager.EnableChameleonMode = false;
+            try
+            {
+                // Act
+                Color result = Utility.GetColorFromName(name);
 
-            // Assert
-            result.ShouldBe(Color.FromRgb(r, g, b));
+                // Assert
+                result.ShouldBe(Color.FromRgb(r, g, b));
+            }
+            finally
+            {
+                SettingsManager.EnableChameleonMode = chameleon;
+            }
         }
 
         [Theory]
@@ -136,11 +147,21 @@ namespace DesktopPossible.Tests
         [InlineData(null)]
         public void GetColorFromName_UnknownOrMissingName_ReturnsTransparent(string? name)
         {
-            // Act
-            Color result = Utility.GetColorFromName(name!);
+            // Arrange - see GetColorFromName_KnownNames_ReturnsPaletteColor
+            bool chameleon = SettingsManager.EnableChameleonMode;
+            SettingsManager.EnableChameleonMode = false;
+            try
+            {
+                // Act
+                Color result = Utility.GetColorFromName(name!);
 
-            // Assert
-            result.ShouldBe(Colors.Transparent);
+                // Assert
+                result.ShouldBe(Colors.Transparent);
+            }
+            finally
+            {
+                SettingsManager.EnableChameleonMode = chameleon;
+            }
         }
 
         #endregion

@@ -51,15 +51,15 @@ namespace Desktop_Frames
         #region Public UI Helpers (NEW)
 
         /// <summary>
-        /// Opens the "Backups" folder for the CURRENT ACTIVE PROFILE in File Explorer.
+        /// Opens the app-level "Backups" folder in File Explorer. Backups are full-app
+        /// archives (settings + every profile), so they live at the data root — not per
+        /// profile as the old plain-folder backups did.
         /// </summary>
         public static void OpenBackupsFolder()
         {
             try
             {
-                string path = ProfileManager.GetProfileFilePath("Backups");
-                if (!Directory.Exists(path)) Directory.CreateDirectory(path);
-                Process.Start("explorer.exe", path);
+                Process.Start("explorer.exe", GetBackupsFolderPath());
             }
             catch (Exception ex)
             {
@@ -68,12 +68,12 @@ namespace Desktop_Frames
         }
 
         /// <summary>
-        /// Returns the full path to the "Backups" folder for the CURRENT ACTIVE PROFILE.
+        /// Full path to the app-level "Backups" folder (created on demand).
         /// Useful for initializing OpenFileDialogs.
         /// </summary>
         public static string GetBackupsFolderPath()
         {
-            string path = ProfileManager.GetProfileFilePath("Backups");
+            string path = Path.Combine(AppPaths.DataRoot, "Backups");
             if (!Directory.Exists(path)) Directory.CreateDirectory(path);
             return path;
         }
@@ -629,27 +629,29 @@ namespace Desktop_Frames
         }
 
         /// <summary>
-        /// Deletes auto-backup folders beyond the newest 10 for the current profile.
-        /// Only folders matching the auto naming ("*_backup_auto") are touched — manual
-        /// backups are never deleted. Mirrors LogManager.CleanupOldLogs.
+        /// Deletes auto-backups beyond the newest SettingsManager.MaxBackupCount in the
+        /// app-level Backups folder. Only entries matching the auto naming
+        /// ("*_backup_auto", zip or legacy folder) are touched — manual backups are never
+        /// deleted. Mirrors LogManager.CleanupOldLogs.
         /// </summary>
         private static void CleanupOldAutoBackups()
         {
             try
             {
-                string backupsFolderPath = ProfileManager.GetProfileFilePath("Backups");
+                string backupsFolderPath = GetBackupsFolderPath();
                 if (!Directory.Exists(backupsFolderPath)) return;
 
-                var oldAutoBackups = Directory.GetDirectories(backupsFolderPath)
-                    .Where(d => Path.GetFileName(d).EndsWith("_backup_auto", StringComparison.OrdinalIgnoreCase))
-                    .OrderByDescending(d => Directory.GetCreationTime(d))
-                    .Skip(10); // Keep the newest 10 auto-backups
+                var oldAutoBackups = Directory.GetFileSystemEntries(backupsFolderPath)
+                    .Where(p => Path.GetFileNameWithoutExtension(p).EndsWith("_backup_auto", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(p => File.GetCreationTime(p))
+                    .Skip(Math.Max(1, SettingsManager.MaxBackupCount));
 
                 foreach (var oldBackup in oldAutoBackups)
                 {
                     try
                     {
-                        Directory.Delete(oldBackup, true);
+                        if (Directory.Exists(oldBackup)) Directory.Delete(oldBackup, true);
+                        else File.Delete(oldBackup);
                         LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.ImportExport,
                             $"Auto-backup retention: deleted old backup {Path.GetFileName(oldBackup)}");
                     }
@@ -667,60 +669,66 @@ namespace Desktop_Frames
             }
         }
 
-        // Refactored Helper: Centralizes the actual backup work
-        public static void CreateBackup(string folderName, bool silent = false)
+        // Folder names that never belong in a backup: backups themselves (self-inclusion
+        // would grow every archive), the transient last-deleted stash, and exports.
+        private static readonly string[] BackupExcludedFolders = { "Backups", "Last Frame Deleted", "Exports" };
+
+        /// <summary>
+        /// Creates one zip archive containing the FULL application state: the data root
+        /// (MasterOptions.json, ProfileOptions.json, every profile's frames.json /
+        /// options.json / Shortcuts) under "Data/", and the frame store (the files stored
+        /// inside frames, all profiles) under "Store/". Refuses (with an acknowledged
+        /// error) when the archive exceeds SettingsManager.MaxBackupSizeMB.
+        /// </summary>
+        public static void CreateBackup(string backupName, bool silent = false)
         {
             // KISS: Instantly trigger the Windows "Wait/Processing" cursor
             Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = Cursors.Wait);
+            string zipPath = null;
             try
             {
-                // SOURCE: Profile Directory (Dynamic)
-                string jsonFilePath = ProfileManager.GetProfileFilePath("frames.json");
-                string optionsFilePath = ProfileManager.GetProfileFilePath("options.json");
-                string shortcutsFolderPath = ProfileManager.GetProfileFilePath("Shortcuts");
+                string backupsFolderPath = GetBackupsFolderPath();
+                zipPath = Path.Combine(backupsFolderPath, backupName + ".zip");
+                if (File.Exists(zipPath)) File.Delete(zipPath);
 
-                // DEST: Profile Directory -> Backups
-                string backupsFolderPath = ProfileManager.GetProfileFilePath("Backups");
-                string backupFolderPath = Path.Combine(backupsFolderPath, folderName);
-
-                if (!Directory.Exists(backupsFolderPath))
+                using (var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
                 {
-                    Directory.CreateDirectory(backupsFolderPath);
-                }
-                Directory.CreateDirectory(backupFolderPath);
-
-                // 1. Copy frames.json
-                string backupJsonFilePath = Path.Combine(backupFolderPath, "frames.json");
-                if (File.Exists(jsonFilePath))
-                {
-                    File.Copy(jsonFilePath, backupJsonFilePath, true);
+                    AddTreeToZip(zip, AppPaths.DataRoot, "Data");
+                    if (Directory.Exists(FrameStore.RootDir))
+                    {
+                        AddTreeToZip(zip, FrameStore.RootDir, "Store");
+                    }
                 }
 
-                // 2. Copy options.json
-                string backupOptionsFilePath = Path.Combine(backupFolderPath, "options.json");
-                if (File.Exists(optionsFilePath))
+                // Size cap: refuse an oversized backup and tell the user how to allow it.
+                long limitBytes = (long)SettingsManager.MaxBackupSizeMB * 1024 * 1024;
+                long sizeBytes = new FileInfo(zipPath).Length;
+                if (sizeBytes > limitBytes)
                 {
-                    File.Copy(optionsFilePath, backupOptionsFilePath, true);
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.ImportExport, "Backed up options.json");
+                    File.Delete(zipPath);
+                    string msg =
+                        $"The backup was NOT created: its size ({sizeBytes / 1024.0 / 1024.0:F1} MB) exceeds the " +
+                        $"configured maximum of {SettingsManager.MaxBackupSizeMB} MB.\n\n" +
+                        "You can raise the limit under Options → Tools → 'Max backup size (MB)', or reduce " +
+                        "the amount of files stored inside frames.";
+                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.ImportExport,
+                        $"Backup '{backupName}' refused: {sizeBytes} bytes exceeds the {SettingsManager.MaxBackupSizeMB} MB limit.");
+                    // Shown for auto backups too — the user must acknowledge that backups are not running.
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm(msg, "Backup Too Large");
+                    return;
                 }
 
-                // 3. Copy Shortcuts Folder
-                string backupShortcutsFolderPath = Path.Combine(backupFolderPath, "Shortcuts");
-                if (Directory.Exists(shortcutsFolderPath))
-                {
-                    Directory.CreateDirectory(backupShortcutsFolderPath);
-                    CopyDirectory(shortcutsFolderPath, backupShortcutsFolderPath);
-                }
-
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport,
+                    $"Backup finished: {zipPath} ({sizeBytes / 1024.0 / 1024.0:F1} MB)");
                 if (!silent)
                 {
                     MessageBoxesManager.ShowOKOnlyMessageBoxForm("Backup completed successfully.", "Backup");
-                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, $"Manual backup finished: {backupFolderPath}");
                 }
             }
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.ImportExport, $"CreateBackup error: {ex.Message}");
+                try { if (zipPath != null && File.Exists(zipPath)) File.Delete(zipPath); } catch { }
                 if (!silent)
                 {
                     MessageBoxesManager.ShowOKOnlyMessageBoxForm($"An error occurred during backup: {ex.Message}", "Error");
@@ -732,7 +740,133 @@ namespace Desktop_Frames
                 Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = null);
             }
         }
-        public static void RestoreFromBackup(string backupFolder)
+
+        /// <summary>
+        /// Adds every file under <paramref name="root"/> to the archive beneath
+        /// <paramref name="prefix"/>/, skipping excluded folders and log files.
+        /// In-use files are skipped with a warning rather than failing the whole backup.
+        /// </summary>
+        private static void AddTreeToZip(ZipArchive zip, string root, string prefix)
+        {
+            string rootFull = Path.GetFullPath(root);
+            foreach (string file in Directory.EnumerateFiles(rootFull, "*", SearchOption.AllDirectories))
+            {
+                string rel = Path.GetRelativePath(rootFull, file);
+                var segments = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (segments.Any(s => BackupExcludedFolders.Contains(s, StringComparer.OrdinalIgnoreCase))) continue;
+                if (rel.EndsWith(".log", StringComparison.OrdinalIgnoreCase)) continue;
+
+                try
+                {
+                    zip.CreateEntryFromFile(file, prefix + "/" + rel.Replace('\\', '/'), CompressionLevel.Optimal);
+                }
+                catch (IOException ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.ImportExport,
+                        $"Backup: skipped in-use file '{rel}': {ex.Message}");
+                }
+            }
+        }
+        /// <summary>
+        /// Restores from a backup given as: a .zip archive (current full-app format, or a
+        /// zip of a legacy profile backup), a legacy plain-copy backup FOLDER, or any file
+        /// inside such a folder (the file picker can't select folders — picking e.g. its
+        /// frames.json selects the folder).
+        /// </summary>
+        public static void RestoreFromBackup(string backupPath)
+        {
+            string tempDir = null;
+            try
+            {
+                string backupFolder = backupPath;
+                if (File.Exists(backupPath))
+                {
+                    if (Path.GetExtension(backupPath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = Cursors.Wait);
+                        try
+                        {
+                            tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+                            ZipFile.ExtractToDirectory(backupPath, tempDir);
+                        }
+                        finally
+                        {
+                            Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = null);
+                        }
+                        backupFolder = tempDir;
+                    }
+                    else
+                    {
+                        backupFolder = Path.GetDirectoryName(backupPath);
+                    }
+                }
+
+                if (string.IsNullOrEmpty(backupFolder) || !Directory.Exists(backupFolder))
+                {
+                    MessageBoxesManager.ShowOKOnlyMessageBoxForm("Invalid backup - not a backup archive or folder.", "Restore Error");
+                    return;
+                }
+
+                // Full-app archive (Data/ + Store/) vs legacy single-profile layout.
+                if (Directory.Exists(Path.Combine(backupFolder, "Data")))
+                {
+                    RestoreFullBackup(backupFolder);
+                }
+                else
+                {
+                    RestoreLegacyProfileBackup(backupFolder);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.ImportExport, $"Restore failed: {ex.Message}");
+                MessageBoxesManager.ShowOKOnlyMessageBoxForm($"Restore failed: {ex.Message}", "Error");
+            }
+            finally
+            {
+                try { if (tempDir != null && Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Restores a full-app archive: Data/ over the data root, Store/ over the frame
+        /// store, then restarts the app so nothing re-saves the old state over the restored
+        /// files. Existing files are overwritten; extra profiles not present in the backup
+        /// are left in place (never silently deleted).
+        /// </summary>
+        private static void RestoreFullBackup(string extractedDir)
+        {
+            bool proceed = MessageBoxesManager.ShowCustomYesNoMessageBox(
+                "This will replace the application settings and ALL profiles (frames, positions, stored files) " +
+                "with the contents of the backup, and then restart the application.\n\nContinue?",
+                "Restore Backup");
+            if (!proceed) return;
+
+            Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = Cursors.Wait);
+            try
+            {
+                CopyDirectory(Path.Combine(extractedDir, "Data"), AppPaths.DataRoot);
+
+                string storeDir = Path.Combine(extractedDir, "Store");
+                if (Directory.Exists(storeDir))
+                {
+                    CopyDirectory(storeDir, FrameStore.RootDir);
+                }
+
+                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, "Full backup restored - restarting.");
+            }
+            finally
+            {
+                Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = null);
+            }
+
+            MessageBoxesManager.ShowOKOnlyMessageBoxForm(
+                "Backup restored.\nThe application will now restart to apply it.",
+                "Restart Required");
+            RestartApplication();
+        }
+
+        private static void RestoreLegacyProfileBackup(string backupFolder)
         {
             Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = Cursors.Wait);
             try
@@ -747,7 +881,7 @@ namespace Desktop_Frames
                 }
                 string backupShortcutsPath = Path.Combine(backupFolder, "Shortcuts");
 
-                if (!File.Exists(backupFramesPath) || !Directory.Exists(backupShortcutsPath))
+                if (!File.Exists(backupFramesPath))
                 {
                     string errorMsg = "Invalid backup folder - missing required files.";
                     MessageBoxesManager.ShowOKOnlyMessageBoxForm(errorMsg, "Restore Error");
@@ -802,7 +936,10 @@ namespace Desktop_Frames
                     Directory.Delete(currentShortcutsPath, true);
                 }
                 Directory.CreateDirectory(currentShortcutsPath);
-                BackupManager.CopyDirectory(backupShortcutsPath, currentShortcutsPath);
+                if (Directory.Exists(backupShortcutsPath))
+                {
+                    BackupManager.CopyDirectory(backupShortcutsPath, currentShortcutsPath);
+                }
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.ImportExport, "Files restored successfully.");
 
@@ -811,23 +948,7 @@ namespace Desktop_Frames
                     MessageBoxesManager.ShowOKOnlyMessageBoxForm(
                         "Global settings have been restored.\nThe application will now restart to apply changes.",
                         "Restart Required");
-
-                    string appPath = Process.GetCurrentProcess().MainModule.FileName;
-
-                    // Spawns a hidden command prompt that waits ~2 seconds before launching the app.
-                    // UseShellExecute = false explicitly prevents the child cmd.exe from inheriting the Single-Instance Mutex.
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = "cmd.exe",
-                        Arguments = $"/c ping 127.0.0.1 -n 3 > nul & start \"\" \"{appPath}\"",
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    });
-
-                    // OS-LEVEL TERMINATION: Bypasses .NET finalizers and WPF dispatchers entirely. 
-                    // Guarantees the old instance is instantly destroyed and cannot deadlock.
-                    Process.GetCurrentProcess().Kill();
+                    RestartApplication();
                 }
                 else
                 {
@@ -843,6 +964,28 @@ namespace Desktop_Frames
             {
                 Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = null);
             }
+        }
+
+        /// <summary>Relaunches the app after ~2s and hard-kills this instance so no
+        /// shutdown code can re-save the pre-restore state over the restored files.</summary>
+        private static void RestartApplication()
+        {
+            string appPath = Process.GetCurrentProcess().MainModule.FileName;
+
+            // Spawns a hidden command prompt that waits ~2 seconds before launching the app.
+            // UseShellExecute = false explicitly prevents the child cmd.exe from inheriting the Single-Instance Mutex.
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c ping 127.0.0.1 -n 3 > nul & start \"\" \"{appPath}\"",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+
+            // OS-LEVEL TERMINATION: Bypasses .NET finalizers and WPF dispatchers entirely.
+            // Guarantees the old instance is instantly destroyed and cannot deadlock.
+            Process.GetCurrentProcess().Kill();
         }
         #endregion
     }

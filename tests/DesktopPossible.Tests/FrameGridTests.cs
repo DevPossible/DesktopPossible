@@ -28,9 +28,9 @@ public class FrameGridTests
     }
 
     [Theory]
-    [InlineData(32, 5, 70)]   // Medium: 32 + 2*14 + 2*5
-    [InlineData(16, 5, 54)]   // Tiny
-    [InlineData(64, 10, 112)] // Huge, wide spacing
+    [InlineData(32, 5, 100)]  // Medium: 32 + 10 + 3*16 + 2*5
+    [InlineData(16, 5, 84)]   // Tiny
+    [InlineData(64, 10, 142)] // Huge, wide spacing
     public void UnitHeightFor_IsIconPlusLabelLinesPlusSpacing(int iconPx, int spacing, double expected)
     {
         FrameGrid.UnitHeightFor(iconPx, spacing).ShouldBe(expected);
@@ -40,7 +40,7 @@ public class FrameGridTests
     public void DefaultUnits_MatchDefaultFrameSettings()
     {
         FrameGrid.UnitWidth.ShouldBe(80);
-        FrameGrid.UnitHeight.ShouldBe(70);
+        FrameGrid.UnitHeight.ShouldBe(100);
         FrameGrid.ChromeWidth.ShouldBe(30);
         FrameGrid.ChromeHeight.ShouldBe(32);
     }
@@ -50,10 +50,10 @@ public class FrameGridTests
     // ---------------------------------------------------------------
 
     [Theory]
-    [InlineData(350, 102, 350, 102)]   // already on the grid: 30+4*80, 32+1*70
-    [InlineData(360, 120, 350, 102)]   // rounds down to nearest
-    [InlineData(400, 140, 430, 172)]   // rounds up: 4.6 cols -> 5, 1.54 rows -> 2
-    [InlineData(230, 130, 190, 102)]   // CreateNewFrame defaults: 2.5 cols -> 2 (round-to-even), 1.4 rows -> 1
+    [InlineData(350, 132, 350, 132)]   // already on the grid: 30+4*80, 32+1*100
+    [InlineData(360, 120, 350, 132)]   // rounds to nearest whole cells
+    [InlineData(400, 140, 430, 132)]   // 4.6 cols -> 5, 1.08 rows -> 1
+    [InlineData(230, 130, 190, 132)]   // CreateNewFrame defaults: 2.5 cols -> 2 (round-to-even), ~1 row
     public void SnapSize_RoundsToChromePlusWholeUnits(double w, double h, double expectedW, double expectedH)
     {
         var (sw, sh) = FrameGrid.SnapSize(w, h);
@@ -90,8 +90,8 @@ public class FrameGridTests
     [Theory]
     [InlineData(0, 0, 0, 0)]
     [InlineData(79, 34, 80, 0)]      // nearest in each axis independently
-    [InlineData(121, 106, 160, 140)] // 1.51 -> 2 cols, 1.51 -> 2 rows
-    [InlineData(119, 104, 80, 70)]   // 1.49 -> 1, 1.49 -> 1
+    [InlineData(121, 106, 160, 100)] // 1.51 -> 2 cols, 1.06 -> 1 row
+    [InlineData(119, 104, 80, 100)]  // 1.49 -> 1, 1.04 -> 1
     public void SnapPosition_NearestGridPointFromOrigin(double x, double y, double ex, double ey)
     {
         var (sx, sy) = FrameGrid.SnapPosition(x, y, 0, 0);
@@ -105,7 +105,7 @@ public class FrameGridTests
         // Taskbar on the left/top: work area starts at (64, 40).
         var (sx, sy) = FrameGrid.SnapPosition(150, 120, 64, 40);
         sx.ShouldBe(64 + 80);   // (150-64)/80 = 1.075 -> 1
-        sy.ShouldBe(40 + 70);   // (120-40)/70 = 1.14 -> 1
+        sy.ShouldBe(40 + 100);  // (120-40)/100 = 0.8 -> 1
 
         // Exactly on the origin stays put.
         FrameGrid.SnapPosition(64, 40, 64, 40).ShouldBe((64, 40));
@@ -117,12 +117,12 @@ public class FrameGridTests
         // Secondary monitor to the left of the primary: negative X, origin at -1920.
         var (sx, sy) = FrameGrid.SnapPosition(-1800, -30, -1920, 0);
         sx.ShouldBe(-1920 + 2 * 80);  // 120/80 = 1.5 -> 2 (MidpointRounding.ToEven: 2)
-        sy.ShouldBe(0);               // -30/70 = -0.43 -> 0
+        sy.ShouldBe(0);               // -30/100 = -0.3 -> 0
 
         // Negative relative to a zero origin snaps to negative multiples.
         var (nx, ny) = FrameGrid.SnapPosition(-90, -140, 0, 0);
         nx.ShouldBe(-80);
-        ny.ShouldBe(-140);
+        ny.ShouldBe(-100);            // -140/100 = -1.4 -> -1
     }
 
     [Fact]

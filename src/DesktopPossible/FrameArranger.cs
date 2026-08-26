@@ -87,7 +87,7 @@ namespace Desktop_Frames
             return result;
         }
 
-        /// <summary>Items in the main list plus every tab (0 for Portal/Note/Image frames).</summary>
+        /// <summary>Items in the main list plus every tab (0 for Portal/Image frames).</summary>
         public static int CountItems(JObject frame)
         {
             int n = frame["Items"] is JArray main ? main.Count : 0;

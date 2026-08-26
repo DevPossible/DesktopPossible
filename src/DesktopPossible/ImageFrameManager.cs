@@ -16,7 +16,7 @@ namespace Desktop_Frames
 {
     /// <summary>
     /// Image frames (ItemsType == "Image"): a frame that displays a SINGLE image filling its content
-    /// area (like a Note frame is a single text box). You move it by dragging the frame, and resize it
+    /// area. You move it by dragging the frame, and resize it
     /// like any frame — the image scales to fit. Starts unlocked so an image can be set straight away;
     /// the content lock (ContentLocked) can then prevent accidental changes.
     /// The image is stored either copied into a per-frame asset folder or linked to the original file.

@@ -7,12 +7,20 @@
   %LocalAppData%\DesktopPossible\Data instead of beside the exe), and adds a Start
   Menu shortcut. MajorUpgrade lets a newer MSI replace an older install in place.
 
+  UI: WixUI_Minimal. Run manually, a fresh install shows welcome+license and finishes
+  with a pre-checked "Launch DesktopPossible" option; run on an installed machine it
+  shows the Repair/Remove maintenance dialogs, and Remove asks whether to keep the
+  user's data (kept by default; see RemoveDataDlg). Silent installs (winget: /qn)
+  bypass all UI and never touch user data; a scripted uninstall can opt in to data
+  removal with REMOVEUSERDATA=1.
+
   Preprocessor variables (passed with -d):
     Version    x.y.z product version
     PublishDir folder holding the published DesktopPossible.exe
     RepoRoot   repository root (Source paths resolve against the working dir, not this file)
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="DesktopPossible"
            Manufacturer="DevPossible"
            Version="$(Version)"
@@ -29,7 +37,6 @@
     <Icon Id="AppIcon.ico" SourceFile="$(RepoRoot)\src\DesktopPossible\Resources\logo2.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/DevPossible/DesktopPossible" />
-    <Property Id="ARPNOREPAIR" Value="1" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="DesktopPossible" />
@@ -56,5 +63,76 @@
     <Feature Id="Main" Title="DesktopPossible" Level="1">
       <ComponentGroupRef Id="AppFiles" />
     </Feature>
+
+    <!-- ================= Interactive UI ================= -->
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(RepoRoot)\installer\License.rtf" />
+
+    <!-- Finish page: "Launch DesktopPossible", pre-checked. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch DesktopPossible" />
+    <Property Id="WixShellExecTarget" Value="[#MainExe]" />
+    <CustomAction Id="LaunchApplication"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixShellExec"
+                  Execute="immediate"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <!-- Uninstall data choice. Public+Secure so silent uninstalls can pass REMOVEUSERDATA=1;
+         unset (the default, and the only possibility under /qn) keeps the data. -->
+    <Property Id="REMOVEUSERDATA" Secure="yes" />
+
+    <!-- Deletes %LocalAppData%\DesktopPossible (Data + Profiles store) for the invoking
+         user. Deferred+impersonated so it runs as the user, quiet-exec so no console
+         flashes. Never runs during an upgrade. -->
+    <SetProperty Id="RemoveUserData"
+                 Value="&quot;cmd.exe&quot; /c rd /s /q &quot;[LocalAppDataFolder]DesktopPossible&quot;"
+                 Sequence="execute"
+                 Before="RemoveUserData" />
+    <CustomAction Id="RemoveUserData"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="RemoveUserData"
+              Before="RemoveFiles"
+              Condition="(REMOVE~=&quot;ALL&quot;) AND (REMOVEUSERDATA=&quot;1&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
+    </InstallExecuteSequence>
+
+    <UI>
+      <!-- Launch the app when the pre-checked box is left on (fresh installs only). -->
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+
+      <!-- Maintenance Remove: ask about the user's data before the confirmation page. -->
+      <Dialog Id="RemoveDataDlg" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Remove [ProductName]" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="Choose what happens to your data." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="BodyText" Type="Text" X="25" Y="60" Width="320" Height="50" NoPrefix="yes"
+                 Text="Your frames, profiles, settings and backups are stored in your user profile (%LocalAppData%\DesktopPossible). By default they are KEPT, so a future install finds everything again." />
+        <Control Id="RemoveDataCheck" Type="CheckBox" X="25" Y="115" Width="330" Height="18"
+                 Property="REMOVEUSERDATA" CheckBoxValue="1"
+                 Text="Also permanently remove my data (frames, profiles, settings, backups)" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel" />
+      </Dialog>
+
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="RemoveDataDlg" Order="999" />
+      <Publish Dialog="RemoveDataDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="RemoveDataDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="RemoveDataDlg" Control="Cancel" Event="SpawnDialog" Value="CancelDlg" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="RemoveDataDlg"
+               Condition="WixUI_InstallMode = &quot;Remove&quot;" Order="999" />
+    </UI>
   </Package>
 </Wix>

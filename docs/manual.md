@@ -41,14 +41,13 @@ Frames are containers on your desktop that group related shortcuts and files tog
 
 - **Frames (Data Frames)**: Regular containers for shortcuts targeting files or folders and web links
 - **Portal Frames**: Special Frames mirroring the contents of folders, with navigation, filters and an Explorer-style Details view
-- **Note Frames**: Frames that display text
 - **Image Frames**: Frames that display a picture (pasted, or copied from / linked to a file)
 - **Text Frames**: Chromeless live text drawn straight onto the wallpaper, with tokens such as `{ComputerName}`, `{IP}`, `{CPUUsage}`, `{RAMUsage}`, `{Uptime}`, `{Date}`, `{Time}`, `{Profile}` (managed from Options → Text Frames)
 
 **How to Create a frame:**
 
 1. The first two Frames are created automatically on first run. Look on the top left corner of your screen.
-2. From there, the heart ♥ menu offers *New Frame*, *New Portal Frame*, *New Note Frame*, *New Image Frame* and *New Text Frame*.
+2. From there, the heart ♥ menu offers *New Frame*, *New Portal Frame*, *New Image Frame* and *New Text Frame*.
 3. Optionally enable *Show 'New Frame' in Desktop Context Menu* (Options → General) and draw a rectangle on the desktop where the frame should go.
 
 **Moving and resizing frames:** frames are locked in place by default. Turn on **Edit Frames Mode** (tray menu, or right-click a frame) to move and resize them, then turn it off again.
@@ -175,7 +174,7 @@ The icons on the Frames which are targeting files and folders are getting contin
 
 **Frame Lock**: Click the lock icon in the top-right corner of the frame to pin its position and size; the move handle next to it drags the frame, and the pin keeps it on top of other windows. Rollup/Rolldown is still available when locked. Note that all frames are unmovable unless **Edit Frames Mode** is on.
 
-**Content Lock**: Right-click → "Lock (prevent changes)" stops accidental edits — a Note becomes read-only, an Image frame refuses new pictures, and Data/Portal frames refuse drops.
+**Content Lock**: Right-click → "Lock (prevent changes)" stops accidental edits — an Image frame refuses new pictures, and Data/Portal frames refuse drops.
 
 
 
@@ -192,10 +191,6 @@ Right clicking any shortcut the following usage options are available:
 
 **Open target folder** : Open target folder in file explorer
 
-
-
-## Search (SpotSearch)
-Press `` CTRL + ` `` (or double-click an empty area of a frame, if enabled in Options → Style & FX) to open the search window. Search is performed on all Data frames and matching shortcuts are displayed below the search field.
 
 
 ## Import/Export Frames
@@ -215,7 +210,7 @@ Access settings through the system tray icon → "Options":
 
 **Startup:** Start with Windows.
 
-**Selections:** Single Click to Launch (restart required) · Enable Snap Near Frames · Enable Dimension Snap · Snap frames to grid · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars · Enable Sounds.
+**Selections:** Single Click to Launch (restart required) · Enable Snap Near Frames · Enable Dimension Snap · Snap frames to grid · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars.
 
 **Virtual Desktops:** Automatically Switch Profiles with Virtual Desktop.
 
@@ -227,25 +222,29 @@ Access settings through the system tray icon → "Options":
 
 **Desktop Icon Visibility:** hide the native desktop icons while the program runs or while frames are hidden; double-click the empty desktop to show/hide them.
 
-**Frames:** Enable Show/Hide all frames hotkey · Double-click a frame to open search · Striped rows in Portal Details view.
+**Frames:** Enable Show/Hide all frames hotkey · Striped rows in Portal Details view.
 
 **Icons:** pick the menu, position-lock and filter glyphs and the tray icon style.
 
 ### Tools Tab
 
-**Backup:** Backup · Restore... · Open Backups Folder · Automatic Backup (Daily).
+**Backup:** Backup · Restore... · Open Backups Folder · Automatic Backup (Daily) · Keep last automatic backups (default 7) · Max backup size in MB (default 100 — a larger backup is refused with an error until you raise the limit).
+
+Backups are zip archives containing the application settings and **all** profiles (frames, positions, stored files). Restore accepts these archives; older plain-folder backups still restore by switching the file filter to "All files" and picking any file inside the backup folder.
 
 **Maintenance:** Screen Bound Frames (pull every frame back onto a visible monitor).
 
-**Reset:** Reset Styles · Clear All Data.
+**Reset:** Reset Styles · Clear All Data. Clear All Data never deletes your files: everything stored inside frames is moved back to the Desktop (and a safety backup is created) before the profile's frames and settings are cleared.
 
 ### Profiles Tab
 
 Create, rename, reorder and delete profiles, and *Empty Frames to Desktop* for frames that store files.
 
+Naming a profile the same as a Windows virtual desktop activates that profile automatically when you switch to that desktop (with General → *Automatically Switch Profiles with Virtual Desktop* enabled); desktops without a matching profile fall back to Default.
+
 ### Hotkeys Tab
 
-Profile switching hotkeys (direct profile 0–9, previous, next), Focus Frame hotkey, Spot Search hotkey. Changes take effect after a restart.
+Profile switching hotkeys (direct profile 0–9, previous, next). Changes take effect after a restart.
 
 ### Smart Desktop Tab
 
@@ -253,7 +252,7 @@ Enable Auto-Organize · Show execution toast notifications · Arrange Now · Arr
 
 ### Text Frames Tab
 
-Add, edit and remove Text frames and their templates.
+Add and remove Text frames. Editing (template, font, colour, draw mode, refresh, opacity) happens in the shared Customize dialog — open it from this tab's *Customize...* button, or right-click the Text frame in Edit Frames Mode → *Customize...*.
 
 ### Look Deeper Tab
 

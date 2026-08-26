@@ -61,7 +61,7 @@ DesktopPossible/
 ├── src/
 │   ├── DesktopPossible.sln       # The only solution
 │   └── DesktopPossible/          # WPF app (~58 single-class .cs files)
-│       └── Resources/                  # Icons, logos, notification .wav files
+│       └── Resources/                  # Icons and logos
 ├── tests/
 │   └── DesktopPossible.Tests/    # xUnit unit tests (headless-safe)
 ├── docs/                               # manual.md, tips.md, tweaks.md,
@@ -87,7 +87,7 @@ JSON schema exactly as-is.
 The app is ~58 single-class files in `src/DesktopPossible/`, namespace
 `Desktop_Frames`, grouped by subsystem. Note: some class names use lowercase
 "manager" from upstream (`Framemanager`, `PortalFramemanager`,
-`NoteFramemanager`, `ImageFramemanager`) — match existing spelling.
+`ImageFramemanager`) — match existing spelling.
 
 ### Frame lifecycle (the core)
 
@@ -103,7 +103,6 @@ The app is ~58 single-class files in `src/DesktopPossible/`, namespace
 
 - `PortalFrameManager.cs` — Portal frames: live folder mirroring, Details
   view, filters, reconciler.
-- `NoteFrameManager.cs` — Note frames (quick text, content lock).
 - `ImageFrameManager.cs` — Image frames (copied or linked image, content lock).
 
 ### Desktop integration
@@ -119,8 +118,7 @@ The app is ~58 single-class files in `src/DesktopPossible/`, namespace
 ### UI forms (`*FormManager` convention)
 
 `AboutFormManager`, `OptionsFormManager`, `CustomizeFrameFormManager`,
-`NotificationFormManager`, `FrameFocusFormManager`, `MessageBoxesManager`,
-`SearchFormManager`, `TextFormatFormManager` — each owns one dialog/window.
+`NotificationFormManager`, `MessageBoxesManager` — each owns one dialog/window.
 Related standalone forms:
 `ProfileManagerForm`, `EditShortcutWindow`, `IconPickerDialog`,
 `ItemMoveDialog`.

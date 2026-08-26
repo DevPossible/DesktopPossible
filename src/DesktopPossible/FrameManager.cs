@@ -48,6 +48,25 @@ namespace Desktop_Frames
         // Temporary override flag for the "Screen Bound" button
         public static bool IsManualRepositioning = false;
 
+        // Hover highlight for icons: one shared, sealed style with an IsMouseOver trigger so the
+        // highlight applies and reverts automatically. The background must come from the trigger
+        // only (no base setter, no local value) — a local Background would outrank the trigger,
+        // and a base Transparent setter would make the whole cell hit-testable, stealing
+        // clicks in the empty cell corners that today fall through to the frame.
+        private static readonly Style _iconHoverStyle = CreateIconHoverStyle();
+
+        private static Style CreateIconHoverStyle()
+        {
+            var hoverBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(48, 255, 255, 255));
+            hoverBrush.Freeze();
+            var style = new Style(typeof(StackPanel));
+            var trigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            trigger.Setters.Add(new Setter(StackPanel.BackgroundProperty, hoverBrush));
+            style.Triggers.Add(trigger);
+            style.Seal();
+            return style;
+        }
+
 
 
         // --- WM_GETMINMAXINFO Implementation ---
@@ -111,8 +130,6 @@ namespace Desktop_Frames
         private static readonly Dictionary<dynamic, TextBlock> _heartTextBlocks = new Dictionary<dynamic, TextBlock>();
 
         //resize feedback
-        private static Window _sizeFeedbackWindow;
-        private static System.Windows.Threading.DispatcherTimer _hideTimer;
 
         // Add near other static fields
         private static TargetChecker _currentTargetChecker;
@@ -1297,14 +1314,6 @@ namespace Desktop_Frames
             };
             menu.Items.Add(newPortalFrameItem);
 
-            MenuItem newNoteFrameItem = new MenuItem { Header = "New Note Frame" };
-            newNoteFrameItem.Click += (s, e) =>
-            {
-                var mousePosition = System.Windows.Forms.Cursor.Position;
-                CreateNewFrame("", "Note", mousePosition.X, mousePosition.Y);
-            };
-            menu.Items.Add(newNoteFrameItem);
-
             MenuItem newImageFrameItem = new MenuItem { Header = "New Image Frame" };
             newImageFrameItem.Click += (s, e) =>
             {
@@ -1560,7 +1569,9 @@ namespace Desktop_Frames
                 // --- GROUP 1: MANIPULATION ---
                 MenuItem miEdit = new MenuItem { Header = "Edit..." };
                 MenuItem miMove = new MenuItem { Header = "Move..." };
-                MenuItem miRemove = new MenuItem { Header = "Remove" };
+                // "from Frame" so it doesn't read as a duplicate of the shell menu's Delete:
+                // this removes the item (and its backing file); Delete is Windows acting on the file.
+                MenuItem miRemove = new MenuItem { Header = "Remove from Frame" };
 
                 iconContextMenu.Items.Add(miEdit);
                 iconContextMenu.Items.Add(miMove);
@@ -4162,6 +4173,40 @@ namespace Desktop_Frames
                     IDictionary<string, object> frameDict = frame is IDictionary<string, object> dict
                         ? dict : ((JObject)frame).ToObject<IDictionary<string, object>>();
 
+                    // --- 0. NOTE FRAME RETIREMENT ---
+                    // The Note frame feature was removed. A leftover Note frame's text is the
+                    // user's content: export it to a .txt on the Desktop (never delete it),
+                    // then drop the frame. The app-authored welcome note is dropped silently.
+                    if (frame.ItemsType?.ToString() == "Note")
+                    {
+                        try
+                        {
+                            string content = frameDict.TryGetValue("NoteContent", out object nc) ? nc?.ToString() : null;
+                            bool isWelcomeNote = content != null && content.StartsWith("WELCOME TO DesktopPossible", StringComparison.Ordinal);
+                            if (!string.IsNullOrWhiteSpace(content) && !isWelcomeNote)
+                            {
+                                string title = frameDict.TryGetValue("Title", out object t) ? t?.ToString() : null;
+                                if (string.IsNullOrWhiteSpace(title)) title = "Note";
+                                foreach (char c in System.IO.Path.GetInvalidFileNameChars()) title = title.Replace(c, '_');
+                                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                                string dest = FrameStore.UniqueDestinationPath(desktop, title.TrimEnd(' ', '.') + ".txt");
+                                System.IO.File.WriteAllText(dest, content);
+                                LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameCreation,
+                                    $"Note frames retired: exported note '{title}' to '{dest}'.");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
+                                $"Note frames retired: failed to export note content: {ex.Message}");
+                        }
+
+                        FrameDataManager.FrameData.RemoveAt(i);
+                        i--;
+                        jsonModified = true;
+                        continue;
+                    }
+
                     // --- 1. CORE VALIDATION (VITAL) ---
                     // Add GUID if missing
                     if (!frameDict.ContainsKey("Id"))
@@ -4354,8 +4399,7 @@ namespace Desktop_Frames
                                   "This can block you from typing special characters like @, €, [, or {.\n\n" +
                                   "• Click 'Yes' to disable them (fixes typing issues)\n" +
                                   "• Click 'No' to keep them (if everything works fine)",
-                                  "Optional: Keyboard Compatibility Check",
-                                  NotificationSound.NadaAlert); // Override the user's sound preference for this critical alert
+                                  "Optional: Keyboard Compatibility Check");
 
                     if (disableHotkeys)
                     {
@@ -4413,7 +4457,6 @@ namespace Desktop_Frames
                 IsSnapEnabled = SettingsManager.IsSnapEnabled,
                 ShowBackgroundImageOnPortalFences = SettingsManager.ShowBackgroundImageOnPortalFrames,
                 Showintray = SettingsManager.ShowInTray,
-                EnableSounds = SettingsManager.EnableSounds,
                 TintValue = SettingsManager.TintValue,
                 MenuTintValue = SettingsManager.MenuTintValue,
                 MenuIcon = SettingsManager.MenuIcon,
@@ -4518,7 +4561,29 @@ namespace Desktop_Frames
 
         public static void StartDrawMode()
         {
-            // Called by App.xaml.cs (Context Menu) or InterCore (IPC)
+            // Called by App.xaml.cs (Context Menu) or InterCore (IPC).
+            // A right-drag on the bare desktop that led here through the context menu
+            // already drew the intended box — reuse it instead of asking again. The
+            // window is generous because it spans menu-reading time plus the 1s trigger
+            // poll; a plain right-click clears the stored box, so it can't go stale.
+            try
+            {
+                if (DesktopFrames.DesktopMouseHook.TryConsumeRightDragRect(TimeSpan.FromSeconds(30), out Rect deviceRect))
+                {
+                    double scale = 1.0;
+                    try { using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero)) scale = g.DpiX / 96.0; } catch { }
+                    CreateFrameFromDraw(new Rect(
+                        deviceRect.X / scale, deviceRect.Y / scale,
+                        deviceRect.Width / scale, deviceRect.Height / scale));
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.FrameCreation,
+                    $"StartDrawMode: right-drag reuse failed, falling back to draw overlay: {ex.Message}");
+            }
+
             var overlay = new DrawFrameOverlay();
             overlay.Show();
         }
@@ -4661,8 +4726,9 @@ namespace Desktop_Frames
 
 
         /// <summary>
-        /// Seeds the one-time instructional "Startup Tips" Note frame at the bottom-right of the
-        /// primary work area. Caller gates this (Default profile + InstructionalFrameCreated flag).
+        /// Seeds the one-time instructional "Startup Tips" frame (a chrome-less Text frame)
+        /// at the bottom-right of the primary work area. Caller gates this (Default profile
+        /// + InstructionalFrameCreated flag).
         /// </summary>
         private static void InitializeDefaultFrame()
         {
@@ -4678,8 +4744,8 @@ namespace Desktop_Frames
                 }
                 catch { }
 
-                // The "Startup Tips" Note Frame
-                var noteFrame = new
+                // The "Startup Tips" Text frame (wallpaper text; auto-sizes to its content).
+                var tipsFrame = new
                 {
                     Id = Guid.NewGuid().ToString(), // Unique ID
                     Title = "DesktopPossible Startup Tips", // Explicit Name
@@ -4687,47 +4753,41 @@ namespace Desktop_Frames
                     Y = tipsY,
                     Width = tipsWidth,
                     Height = tipsHeight,
-                    ItemsType = "Note",
+                    ItemsType = TextFramemanager.Type,
                     Items = new JArray(),
 
-                    // Visuals from your spec
-                    CustomColor = (string)null, // Default
-                    TextColor = "Teal",         // Teal text
-
-                    // Note Settings
-                    NoteContent = "WELCOME TO DesktopPossible\r\n" +
-                                  "---------------------------------\r\n" +
-                                  "• Roll Up/Down: Double-click the frame title bar.\r\n" +
-                                  "• Rename: Ctrl + Click the title bar (Enter to save).\r\n" +
-                                  "• Search (SpotSearch): Press Ctrl + ` (Tilde) to find any icon instantly.\r\n" +
-                                  "• Options: Click the '♥' menu icon (top-left).\r\n" +
-                                  "• Reorder Icons on a frame: Ctrl + Drag icon to new position.\r\n" +
-                                  "• Context Menu: Right-click icons or Frames for more options.\r\n" +
-                                  " \r\n" +
-                                  "TIP: Ctrl + Click or Ctrl + Right-click, gives even more options.\r\n\r\n" +
-                                  "Try customizing this frame! Right-click the title bar -> Customize...",
-
-                    NoteFontSize = "Medium",
-                    NoteFontFamily = "Segoe UI",
-                    WordWrap = "true",
-                    SpellCheck = "false",
+                    // Text frame settings (see TextFramemanager property keys)
+                    TextTemplate = "WELCOME TO DesktopPossible\n" +
+                                   "---------------------------------\n" +
+                                   "• Roll Up/Down: Double-click a frame's title bar.\n" +
+                                   "• Rename: Ctrl + Click a frame's title bar (Enter to save).\n" +
+                                   "• Options: Click the '♥' menu icon (top-left of a frame).\n" +
+                                   "• Reorder Icons: Ctrl + Drag an icon to a new position.\n" +
+                                   "• Move/Resize frames: enable 'Edit Frames Mode' (tray menu).\n" +
+                                   "• Context Menu: Right-click icons or frames for more options.\n" +
+                                   "\n" +
+                                   "TIP: This welcome text is a Text frame - edit or remove it in Options → Text Frames.",
+                    TextFont = "Segoe UI",
+                    TextSize = "13",
+                    TextColor = "#FF20B2AA", // light sea green, readable on most wallpapers
+                    TextAlign = "Left",
+                    TextDrawMode = "Shadow",
+                    TextRefreshSeconds = "0", // static text, no refresh timer
+                    TextOpacity = "100",
 
                     // Standard Properties
                     IsHidden = "false",
                     IsLocked = "false",
                     IsRolled = "false",
-                    AutoRoll = "false", // --- NEW: Auto Roll ---
-                    AlwaysOnTop = "false", // --- NEW ---
+                    AutoRoll = "false",
+                    AlwaysOnTop = "false",
                     UnrolledHeight = 318.0,
-                    BoldTitleText = "false",
-                    DisableTextShadow = "false",
-                    IconSize = "Medium",
-                    IconSpacing = 5,
-                    FrameBorderThickness = 2
+                    CustomColor = "Transparent",
+                    FrameBorderThickness = 0
                 };
 
                 // Save
-                var frames = new List<object> { noteFrame };
+                var frames = new List<object> { tipsFrame };
                 string defaultJson = JsonConvert.SerializeObject(frames, Formatting.Indented);
 
                 System.IO.File.WriteAllText(FrameDataManager.JsonFilePath, defaultJson);
@@ -4816,16 +4876,6 @@ namespace Desktop_Frames
                 BorderThickness = new Thickness(borderThickness), // Apply border thickness
                 Child = dp
             };
-            // Add Double Click Handler
-            cborder.MouseLeftButtonDown += (s, e) =>
-            {
-                if (SettingsManager.SearchOnDoubleClick && e.ClickCount == 2)
-                {
-                    SearchFormManager.ToggleSearch();
-                    e.Handled = true;
-                }
-            };
-
 
             //  Add heart symbol in top-left corner
             string MenuSymbol = "♥";
@@ -5068,21 +5118,13 @@ namespace Desktop_Frames
             CnMnFramemanager.Items.Add(miRenameFrame);
             CnMnFramemanager.Items.Add(new Separator());
 
-            // --- Content lock (prevents changes): Note = read-only, Data/Portal = no drops,
+            // --- Content lock (prevents changes): Data/Portal = no drops,
             //     Image = no set/clear/paste. Separate from the position lock (title-bar icon). ---
             MenuItem miContentLock = new MenuItem { Header = "Lock (prevent changes)", IsCheckable = true, IsChecked = IsContentLocked(frame) };
             miContentLock.Click += (s, e) => SetContentLocked(LiveMenuFrame(), miContentLock.IsChecked);
             CnMnFramemanager.Items.Add(miContentLock);
             CnMnFramemanager.Items.Add(new Separator());
             CnMnFramemanager.Opened += (s, e) => miContentLock.IsChecked = IsContentLocked(LiveMenuFrame());
-
-            // --- Text frame: the editor (template, font, colour, draw mode, refresh). ---
-            if (TextFramemanager.IsTextFrame(frame))
-            {
-                var miEditText = new MenuItem { Header = "Edit Text Frame..." };
-                miEditText.Click += (s, e) => TextFrameEditorDialog.Show(frame.Id?.ToString());
-                CnMnFramemanager.Items.Add(miEditText);
-            }
 
             // --- Image frame controls (set / clear / copy) for the single displayed image. ---
             if (frame.ItemsType?.ToString() == "Image")
@@ -5124,8 +5166,6 @@ namespace Desktop_Frames
                     miSaveImg.IsEnabled = has;
                 };
             }
-
-            MenuItem miNewnoteFrame = new MenuItem { Header = "New Note Frame" };
 
             // --- NEW: Auto Roll Menu Item ---
             MenuItem miAutoRoll = new MenuItem { Header = "Auto roll", IsCheckable = true };
@@ -5186,14 +5226,6 @@ namespace Desktop_Frames
             MenuItem miHide = new MenuItem { Header = "Hide Frame" }; // New Hide Frame item
                                                                    
             CnMnFramemanager.Items.Add(miHide); // Add Hide Frame
-                                                // Add Note Frame specific context menu items if this is a Note Frame
-            if (frame.ItemsType?.ToString() == "Note")
-            {
-                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                    $"Adding Note frame context menu items for '{frame.Title}'");
-                // We'll add the TextBox reference after the window is created
-                // For now, just mark that this will need Note menu items
-            }
             NonActivatingWindow win = new NonActivatingWindow
             {
                 ContextMenu = CnMnFramemanager,
@@ -5218,12 +5250,6 @@ namespace Desktop_Frames
                 Left = (double)frame.X,
                 Tag = frame.Id?.ToString() ?? Guid.NewGuid().ToString() // Ensure ID exists
             };
-            // Add Note frame specific context menu items after window creation
-            if (frame.ItemsType?.ToString() == "Note")
-            {
-                // The TextBox will be created in InitContent(), so we need to add menu items after that
-                // We'll modify the context menu after InitContent() is called
-            }
             //Peek behind frame
             MenuItem miPeekBehind = new MenuItem { Header = "Peek Behind" };
             CnMnFramemanager.Items.Add(miPeekBehind);
@@ -6014,7 +6040,7 @@ namespace Desktop_Frames
             try { string tId = frame.Id?.ToString(); if (!string.IsNullOrEmpty(tId)) _frameTitles[tId] = (titlelabel, titleTextBrush, titleFontSize); } catch { }
 
             // Portal indicator: a small badge (the portal watermark scaled down) at the far-left of
-            // the title bar so Portal frames are visually distinct from Data/Note frames.
+            // the title bar so Portal frames are visually distinct from Data frames.
             // The per-type title glyph (folder / note / shortcut) is rendered inside BuildTitleContent,
             // just to the left of the title text.
 
@@ -6963,6 +6989,27 @@ namespace Desktop_Frames
                         // frames are only movable while the user has explicitly enabled editing.
                         if (!SettingsManager.FrameEditMode)
                         {
+                            // Hint only on real drag intent: the press must travel a few pixels while
+                            // held. A plain click — including the first press of the roll-up
+                            // double-click — stays silent.
+                            var pressOrigin = e.GetPosition(win);
+                            System.Windows.Input.MouseEventHandler dragProbe = null;
+                            MouseButtonEventHandler releaseProbe = null;
+                            void DetachProbes() { win.MouseMove -= dragProbe; win.MouseLeftButtonUp -= releaseProbe; }
+                            dragProbe = (ps, pe) =>
+                            {
+                                if (pe.LeftButton != MouseButtonState.Pressed) { DetachProbes(); return; }
+                                var p = pe.GetPosition(win);
+                                if (Math.Abs(p.X - pressOrigin.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+                                    Math.Abs(p.Y - pressOrigin.Y) >= SystemParameters.MinimumVerticalDragDistance)
+                                {
+                                    DetachProbes();
+                                    SmartToast.ShowEditModeHint();
+                                }
+                            };
+                            releaseProbe = (ps, pe) => DetachProbes();
+                            win.MouseMove += dragProbe;
+                            win.MouseLeftButtonUp += releaseProbe;
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"DragMove blocked for frame '{currentFrame.Title}' (Frame Edit Mode is off)");
                         }
                         else if (!isLocked)
@@ -7187,19 +7234,7 @@ namespace Desktop_Frames
 
             void InitContent()
             {
-                // 1. Handle Note frames - they don't use WrapPanel
-                if (frame.ItemsType?.ToString() == "Note")
-                {
-                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Creating Note frame content for '{frame.Title}'");
-                    dp.Children.Remove(wpcontscr); // Remove ScrollViewer
-                    TextBox noteTextBox = NoteFramemanager.CreateNoteContent(frame, dp);
-
-                    bool isNoteRolled = frame.IsRolled?.ToString().ToLower() == "true";
-                    noteTextBox.Visibility = isNoteRolled ? Visibility.Collapsed : Visibility.Visible;
-                    return;
-                }
-
-                // 1a. Image frames - a single image filling the frame (like a Note, but a picture).
+                // 1a. Image frames - a single image filling the frame.
                 if (frame.ItemsType?.ToString() == "Image")
                 {
                     dp.Children.Remove(wpcontscr); // no WrapPanel; the image fills the content
@@ -7897,10 +7932,6 @@ namespace Desktop_Frames
 
 
 
-            if (SettingsManager.EnableDimensionSnap)
-            {
-                win.SizeChanged += UpdateSizeFeedback;
-            }
             win.LocationChanged += (s, e) =>
             {
                 // Get current frame reference by ID to avoid stale references
@@ -7933,49 +7964,6 @@ namespace Desktop_Frames
                 _heartTextBlocks.Remove(frame);
                 try { win.Close(); } catch { }
                 return;
-            }
-            // Add Note frame specific context menu items after content is initialized
-            if (frame.ItemsType?.ToString() == "Note")
-            {
-                // Use a small delay to ensure the TextBox is fully created and added to the visual tree
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        // Find the TextBox that was created in InitContent()
-                        var border = win.Content as Border;
-                        var dockPanel = border?.Child as DockPanel;
-                        var noteTextBox = dockPanel?.Children.OfType<TextBox>().FirstOrDefault();
-                        if (noteTextBox != null)
-                        {
-                            NoteFramemanager.AddNoteContextMenuItems(CnMnFramemanager, frame, noteTextBox);
-                            LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                                $"Added Note context menu items for frame '{frame.Title}'");
-                        }
-                        else
-                        {
-                            LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
-                                $"CRITICAL: Could not find TextBox for Note frame '{frame.Title}' - checking DockPanel children");
-                            // Debug: Log what children actually exist
-                            if (dockPanel != null)
-                            {
-                                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                                    $"DockPanel has {dockPanel.Children.Count} children:");
-                                for (int i = 0; i < dockPanel.Children.Count; i++)
-                                {
-                                    var child = dockPanel.Children[i];
-                                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation,
-                                        $" Child {i}: {child.GetType().Name}");
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
-                            $"Error adding Note context menu: {ex.Message}");
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             win.Show();
             SendFrameToBottom(win); // desktop furniture: start behind the user's apps
@@ -8119,7 +8107,8 @@ namespace Desktop_Frames
             StackPanel sp = new StackPanel
             {
                 Margin = new Thickness(iconSpacing),
-                Width = 60 + (iconSpacing * 2)
+                Width = 60 + (iconSpacing * 2),
+                Style = _iconHoverStyle
             };
 
             // FREE ARRANGE: mirror the item's persisted grid cell onto the visual so
@@ -10302,10 +10291,10 @@ namespace Desktop_Frames
 
         // ===================== Content lock (prevent changes) =====================
         // Separate from the position "Pin" (IsLocked). ContentLocked blocks edits/additions:
-        // Note = read-only, Data/Portal = no drops, Image = no set/clear/paste.
+        // Data/Portal = no drops, Image = no set/clear/paste.
 
         /// <summary>True if the frame's content is locked. Missing key defaults to locked only for
-        /// Image frames (set-once), unlocked for Note/Data/Portal so they stay editable by default.</summary>
+        /// Image frames (set-once), unlocked for Data/Portal so they stay editable by default.</summary>
         public static bool IsContentLocked(dynamic frame)
         {
             try { string v = frame.ContentLocked?.ToString(); if (!string.IsNullOrEmpty(v)) return v.ToLower() != "false"; } catch { }
@@ -10326,7 +10315,7 @@ namespace Desktop_Frames
         }
 
         /// <summary>Applies the current content-lock state to the live frame (title-bar button glyph,
-        /// Note read-only, Image refresh). Data/Portal are enforced at drop time.</summary>
+        /// Image refresh). Data/Portal are enforced at drop time.</summary>
         public static void ApplyContentLock(dynamic frame)
         {
             try
@@ -10350,20 +10339,6 @@ namespace Desktop_Frames
 
                 if (type == "Image") { ImageFramemanager.Refresh(frame); return; }
                 if (type == "Text") { TextFramemanager.Refresh(frame); return; }
-                if (type == "Note")
-                {
-                    // Walk the whole visual tree — the note's Border.Child is swapped to an overlay Grid
-                    // after the first focus, so a fixed Border→DockPanel path would miss the TextBox.
-                    if (win != null && FindDescendantByName(win, "NoteEditBox") is TextBox tb)
-                    {
-                        tb.IsReadOnly = locked;
-                        // Locking mid-edit: force the note out of edit mode directly (saves the text,
-                        // restores visuals, re-enables focus prevention). Deliberately NOT done by moving
-                        // focus — Window.Focus()/ClearFocus are unreliable on non-activating windows and
-                        // previously left notes stuck in or out of edit mode.
-                        if (locked) NoteFramemanager.ForceEndEdit(tb);
-                    }
-                }
                 // Data/Portal: enforced at drop time (see win.Drop).
             }
             catch { }
@@ -10445,7 +10420,6 @@ namespace Desktop_Frames
 
         private static string GlyphForType(string type) => type switch
         {
-            "Note" => "✎",   // ✎ pencil
             "Data" => "↗",   // ↗ shortcut/launch arrow
             "Image" => "\U0001F5BC", // 🖼 monochrome frame-with-picture
             "Text" => "T",           // text frame
@@ -10455,7 +10429,7 @@ namespace Desktop_Frames
         /// <summary>
         /// Builds the per-type title icon, coloured with the frame's title brush and muted to the same
         /// opacity as the other title-bar icons (Menu Tint). Portal = a drawn spiral (themeable swirl);
-        /// Note/Data = monochrome glyphs.
+        /// Data = monochrome glyph.
         /// </summary>
         private static FrameworkElement BuildTypeIcon(string frameType, System.Windows.Media.Brush baseBrush, double baseFontSize, string tooltip)
         {
@@ -11288,69 +11262,6 @@ namespace Desktop_Frames
 
 
 
-        // Size feedback during resizing
-        private static void ShowSizeFeedback(double width, double height)
-        {
-            if (_sizeFeedbackWindow == null)
-            {
-                _sizeFeedbackWindow = new Window
-                {
-                    WindowStyle = WindowStyle.None,
-                    AllowsTransparency = true,
-                    Background = System.Windows.Media.Brushes.Transparent,
-                    Width = 100,
-                    Height = 30,
-                    ShowInTaskbar = false,
-                    Topmost = true
-                };
-
-                var label = new Label
-                {
-                    Content = "",
-                    Foreground = System.Windows.Media.Brushes.White,
-                    Background = System.Windows.Media.Brushes.Black,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                _sizeFeedbackWindow.Content = label;
-            }
-
-            var labelContent = (Label)_sizeFeedbackWindow.Content;
-            labelContent.Content = $"{Math.Round(width)} x {Math.Round(height)}";
-
-            var mousePos = System.Windows.Forms.Cursor.Position;
-            _sizeFeedbackWindow.Left = mousePos.X + 10;
-            _sizeFeedbackWindow.Top = mousePos.Y + 10;
-
-            _sizeFeedbackWindow.Show();
-
-            // --- BUG FIX: Unified Debounce Timer ---
-            // This guarantees the indicator will ALWAYS disappear 1.5 seconds 
-            // after the last call, preventing orphaned windows on screen.
-            if (_hideTimer == null)
-            {
-                _hideTimer = new System.Windows.Threading.DispatcherTimer
-                {
-                    Interval = TimeSpan.FromMilliseconds(1500)
-                };
-                _hideTimer.Tick += (s, e) => HideSizeFeedback();
-            }
-            _hideTimer.Stop();
-            _hideTimer.Start();
-        }
-
-        private static void HideSizeFeedback()
-        {
-            if (_sizeFeedbackWindow != null)
-            {
-                _sizeFeedbackWindow.Hide();
-            }
-            if (_hideTimer != null)
-            {
-                _hideTimer.Stop();
-            }
-        }
-
         // Size when the current move/resize gesture began (WM_ENTERSIZEMOVE), so the grid
         // size-snap only runs after an actual resize — a plain drag never re-sizes the frame.
         private static readonly Dictionary<NonActivatingWindow, (double W, double H)> _sizeAtGestureStart = new();
@@ -11358,11 +11269,6 @@ namespace Desktop_Frames
         public static void OnResizingStarted(NonActivatingWindow frame)
         {
             try { _sizeAtGestureStart[frame] = (frame.Width, frame.Height); } catch { }
-            if (SettingsManager.EnableDimensionSnap)
-            {
-                frame.SizeChanged += UpdateSizeFeedback;
-                ShowSizeFeedback(frame.Width, frame.Height);
-            }
         }
 
         /// <summary>
@@ -11456,8 +11362,6 @@ namespace Desktop_Frames
 
             if (SettingsManager.EnableDimensionSnap)
             {
-                frame.SizeChanged -= UpdateSizeFeedback;
-
                 double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
                 double snappedHeight = Math.Round(frame.Height / 10.0) * 10;
 
@@ -11479,9 +11383,6 @@ namespace Desktop_Frames
                     FrameData.Height = snappedHeight;
                     FrameDataManager.SaveFrameData();
                 }
-
-                // Show one last time. The unified timer in ShowSizeFeedback will clean it up automatically.
-                ShowSizeFeedback(snappedWidth, snappedHeight);
             }
             else if (SettingsManager.SnapFramesToGrid && sizeChanged)
             {
@@ -11495,6 +11396,90 @@ namespace Desktop_Frames
             // WM_EXITSIZEMOVE fires when a drag OR resize gesture ends: flush the debounced
             // geometry save immediately so the final position/size is on disk right away.
             FlushPendingFrameSave();
+        }
+
+        // ---- Live grid snap during move/resize (WM_MOVING / WM_SIZING) ----
+        // The modal move/size loop proposes a rectangle per mouse tick; rewriting it in
+        // place makes the frame stick to the grid WHILE dragging/sizing instead of
+        // jumping after the gesture. Programmatic moves (SetWindowPos, animations,
+        // auto-arrange) never send these messages, so they are unaffected.
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WinRect { public int Left, Top, Right, Bottom; }
+
+        // WM_SIZING edge codes (wParam): which edge the user is pulling — its opposite is the anchor.
+        private const int WMSZ_LEFT = 1, WMSZ_TOP = 3, WMSZ_TOPLEFT = 4, WMSZ_TOPRIGHT = 5, WMSZ_BOTTOMLEFT = 7;
+
+        /// <summary>
+        /// Snaps the in-progress move/size rectangle (device pixels) to the desktop grid.
+        /// Returns true when the rect was rewritten. No-op unless "Snap frames to grid" is on.
+        /// </summary>
+        public static bool SnapGestureRect(NonActivatingWindow win, bool sizing, long edge, IntPtr rectPtr)
+        {
+            try
+            {
+                if (!SettingsManager.SnapFramesToGrid || rectPtr == IntPtr.Zero) return false;
+
+                var rect = Marshal.PtrToStructure<WinRect>(rectPtr);
+
+                double scale = 1.0;
+                var source = PresentationSource.FromVisual(win);
+                if (source?.CompositionTarget != null) scale = source.CompositionTarget.TransformToDevice.M11;
+                if (scale <= 0) scale = 1.0;
+
+                double unitW = FrameGrid.UnitWidth * scale;
+                double unitH = FrameGrid.UnitHeight * scale;
+
+                var screen = System.Windows.Forms.Screen.FromRectangle(new System.Drawing.Rectangle(
+                    rect.Left, rect.Top, Math.Max(1, rect.Right - rect.Left), Math.Max(1, rect.Bottom - rect.Top)));
+                double ox = screen.WorkingArea.Left, oy = screen.WorkingArea.Top;
+
+                if (!sizing)
+                {
+                    int w = rect.Right - rect.Left, h = rect.Bottom - rect.Top;
+                    int sx = (int)Math.Round(ox + Math.Round((rect.Left - ox) / unitW) * unitW);
+                    int sy = (int)Math.Round(oy + Math.Round((rect.Top - oy) / unitH) * unitH);
+                    if (sx == rect.Left && sy == rect.Top) return false;
+                    rect.Left = sx; rect.Top = sy; rect.Right = sx + w; rect.Bottom = sy + h;
+                }
+                else
+                {
+                    // A rolled-up frame keeps its rolled height (see SnapSizeToGrid): width only.
+                    bool rolled = false;
+                    try
+                    {
+                        string id = win.Tag?.ToString();
+                        dynamic data = string.IsNullOrEmpty(id) ? null : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == id);
+                        rolled = data?.IsRolled?.ToString().ToLower() == "true";
+                    }
+                    catch { }
+
+                    double chromeW = FrameGrid.ChromeWidth * scale;
+                    double chromeH = FrameGrid.ChromeHeight * scale;
+                    int n = Math.Max(1, (int)Math.Round((rect.Right - rect.Left - chromeW) / unitW));
+                    int m = Math.Max(1, (int)Math.Round((rect.Bottom - rect.Top - chromeH) / unitH));
+                    int newW = (int)Math.Round(chromeW + n * unitW);
+                    int newH = (int)Math.Round(chromeH + m * unitH);
+
+                    int e = (int)edge;
+                    // Keep the anchor edge (the one NOT being pulled) fixed.
+                    if (e == WMSZ_LEFT || e == WMSZ_TOPLEFT || e == WMSZ_BOTTOMLEFT) rect.Left = rect.Right - newW;
+                    else rect.Right = rect.Left + newW;
+                    if (!rolled)
+                    {
+                        if (e == WMSZ_TOP || e == WMSZ_TOPLEFT || e == WMSZ_TOPRIGHT) rect.Top = rect.Bottom - newH;
+                        else rect.Bottom = rect.Top + newH;
+                    }
+                }
+
+                Marshal.StructureToPtr(rect, rectPtr, false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"SnapGestureRect: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>
@@ -11626,21 +11611,6 @@ namespace Desktop_Frames
             catch { return ""; }
         }
 
-
-
-        private static void UpdateSizeFeedback(object sender, SizeChangedEventArgs e)
-        {
-            var frame = sender as NonActivatingWindow;
-            if (frame != null)
-            {
-                // --- BUG FIX: Ignore programmatic animations ---
-                // Do not show the resizing indicator if the frame is just rolling up or down
-                string frameId = frame.Tag?.ToString();
-                if (!string.IsNullOrEmpty(frameId) && _framesInTransition.Contains(frameId)) return;
-
-                ShowSizeFeedback(frame.Width, frame.Height);
-            }
-        }
 
 
     }

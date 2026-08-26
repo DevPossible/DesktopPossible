@@ -39,6 +39,7 @@ namespace Desktop_Frames
         private static DispatcherTimer _timer;
         private static IVirtualDesktopManager _manager;
         private static Guid _lastDesktopId = Guid.Empty;
+        private static string _activeSkipReason; // logged once per suppression episode
 
         public static void Start()
         {
@@ -114,17 +115,22 @@ namespace Desktop_Frames
                 // A switch is already running — this poll can tick re-entrantly, because
                 // ReloadFrames pumps messages (DoEvents). Skip the tick entirely; since
                 // _lastDesktopId is only committed on success, the switch retries next tick.
-                if (ProfileManager.IsSwitching) return;
+                //
+                // Every skip below is logged ONCE per episode: a suppressed poll is otherwise
+                // indistinguishable from a missed desktop-change event when diagnosing.
+                if (ProfileManager.IsSwitching) { LogSkip("a profile switch is in progress"); return; }
 
                 // The Options dialog edits the CURRENT profile; switching underneath it would
                 // make Save push the old profile's snapshot into the new profile's options.json.
                 // Suspend VD-driven switching until the dialog closes.
-                if (OptionsFormManager.IsOpen) return;
+                if (OptionsFormManager.IsOpen) { LogSkip("the Options dialog is open"); return; }
 
                 // Same hazard while a categorize-and-sort pass is running: it mutates the
                 // CURRENT profile's frame data (creating frames, moving items); a switch
                 // underneath it would tear that data out from under the in-flight moves.
-                if (AppCategorizer.IsSorting) return;
+                if (AppCategorizer.IsSorting) { LogSkip("auto-organize is running"); return; }
+
+                _activeSkipReason = null;
 
                 // Defer while the user is interacting: Mouse.Captured covers WPF context menus
                 // (and any capture-based interaction); the pressed left button covers DragMove's
@@ -163,28 +169,80 @@ namespace Desktop_Frames
             }
         }
 
+        private static void LogSkip(string reason)
+        {
+            if (_activeSkipReason == reason) return;
+            _activeSkipReason = reason;
+            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
+                $"VirtualDesktopAutomation: desktop-follow suspended while {reason}.");
+        }
+
         /// <summary>
-        /// The current desktop's Guid. Primary source: Explorer's registry value
-        /// CurrentVirtualDesktop (root VirtualDesktops key on current builds, the
-        /// per-session SessionInfo key on older ones) — updated by Explorer on every
-        /// switch and valid even for desktops with no windows on them. Fallback:
-        /// probing visible top-level windows via IVirtualDesktopManager (cannot
-        /// identify empty desktops). Returns Guid.Empty when undeterminable this
-        /// tick — callers keep the last known id.
+        /// The current desktop's Guid.
+        ///
+        /// Primary source: probing visible top-level windows via the documented
+        /// IVirtualDesktopManager — authoritative whenever the current desktop has at
+        /// least one window on it. Explorer's CurrentVirtualDesktop registry value is
+        /// written LAZILY: right after creating/renaming a desktop and clicking into it
+        /// (Task View), the value can still hold the previous desktop's id until a
+        /// keyboard Win+Ctrl+arrow switch forces a write — which is why the registry is
+        /// only a fallback here, not the primary.
+        ///
+        /// When the probe finds nothing, the current desktop is EMPTY (no windows to
+        /// probe). Then: trust the registry if it points at an empty desktop; if the
+        /// registry points at a desktop that demonstrably has windows-but-not-current
+        /// (stale), and exactly one empty desktop exists, that one must be current.
+        /// Returns Guid.Empty when undeterminable this tick — callers keep the last id.
         /// </summary>
         private static Guid GetCurrentDesktopId()
         {
-            // 1) Root key (Windows 11 current builds)
+            // 1) Window probe: exact answer for any populated desktop; also collects
+            //    which desktops hold windows (used for the empty-desktop inference).
+            var populated = new System.Collections.Generic.HashSet<Guid>();
+            Guid probed = ProbeCurrentDesktopFromWindows(populated);
+            if (probed != Guid.Empty) return probed;
+
+            // 2) Registry (root key on current builds, per-session key on older ones).
             Guid fromRegistry = ReadCurrentDesktopFromRegistry(VirtualDesktopsKeyPath);
-            if (fromRegistry != Guid.Empty) return fromRegistry;
+            if (fromRegistry == Guid.Empty)
+                fromRegistry = ReadCurrentDesktopFromRegistry(
+                    $@"Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\{System.Diagnostics.Process.GetCurrentProcess().SessionId}\VirtualDesktops");
 
-            // 2) Per-session key (older Windows 10/11 builds)
-            fromRegistry = ReadCurrentDesktopFromRegistry(
-                $@"Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\{System.Diagnostics.Process.GetCurrentProcess().SessionId}\VirtualDesktops");
-            if (fromRegistry != Guid.Empty) return fromRegistry;
+            // The current desktop is empty. A registry id pointing at an empty desktop is
+            // consistent — use it. An id pointing at a POPULATED desktop is stale (were we
+            // on it, the probe would have said so).
+            Guid[] allDesktops = ReadDesktopIds();
+            if (allDesktops.Length == 0)
+                return fromRegistry; // no list to reason over — best effort
 
-            // 3) Window probe (cannot identify desktops that have no windows on them)
-            return ProbeCurrentDesktopFromWindows();
+            var empties = allDesktops.Where(id => !populated.Contains(id)).ToList();
+            if (fromRegistry != Guid.Empty && empties.Contains(fromRegistry)) return fromRegistry;
+            if (empties.Count == 1) return empties[0]; // only one place an empty current desktop can be
+            return fromRegistry; // ambiguous (several empty desktops) — best effort
+        }
+
+        /// <summary>The ordered desktop id list from Explorer's VirtualDesktopIDs value.</summary>
+        private static Guid[] ReadDesktopIds()
+        {
+            try
+            {
+                using (var rootKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(VirtualDesktopsKeyPath))
+                {
+                    if (rootKey?.GetValue("VirtualDesktopIDs") is byte[] ids && ids.Length >= 16)
+                    {
+                        var result = new Guid[ids.Length / 16];
+                        for (int i = 0; i + 16 <= ids.Length; i += 16)
+                        {
+                            byte[] slice = new byte[16];
+                            Array.Copy(ids, i, slice, 0, 16);
+                            result[i / 16] = new Guid(slice);
+                        }
+                        return result;
+                    }
+                }
+            }
+            catch { }
+            return Array.Empty<Guid>();
         }
 
         private static Guid ReadCurrentDesktopFromRegistry(string keyPath)
@@ -205,7 +263,13 @@ namespace Desktop_Frames
             return Guid.Empty;
         }
 
-        private static Guid ProbeCurrentDesktopFromWindows()
+        /// <summary>
+        /// Returns the current desktop's id when any visible window reports being on it,
+        /// else Guid.Empty. <paramref name="populatedDesktops"/> receives the id of every
+        /// desktop that holds at least one probed window — complete only when the return
+        /// value is Guid.Empty (a hit stops the enumeration early).
+        /// </summary>
+        private static Guid ProbeCurrentDesktopFromWindows(System.Collections.Generic.ISet<Guid> populatedDesktops)
         {
             var mgr = _manager;
             if (mgr == null) return Guid.Empty;
@@ -221,11 +285,14 @@ namespace Desktop_Frames
                     NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
                     if (pid == ownPid) return true; // skip our own frames (see summary)
 
-                    if (mgr.GetWindowDesktopId(hwnd, out Guid id) == 0 && id != Guid.Empty &&
-                        mgr.IsWindowOnCurrentVirtualDesktop(hwnd, out int onCurrent) == 0 && onCurrent == 1)
+                    if (mgr.GetWindowDesktopId(hwnd, out Guid id) == 0 && id != Guid.Empty)
                     {
-                        found = id;
-                        return false; // stop enumerating
+                        populatedDesktops?.Add(id);
+                        if (mgr.IsWindowOnCurrentVirtualDesktop(hwnd, out int onCurrent) == 0 && onCurrent == 1)
+                        {
+                            found = id;
+                            return false; // stop enumerating
+                        }
                     }
                 }
                 catch { }

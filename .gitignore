@@ -44,3 +44,4 @@ _dfp.zip
 
 # Claude Code agent worktrees
 .claude/worktrees/
+.wix/

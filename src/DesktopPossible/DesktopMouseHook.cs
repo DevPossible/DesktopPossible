@@ -9,12 +9,16 @@ namespace DesktopFrames
     /// <summary>
     /// Installs a WH_MOUSE_LL hook and fires Framemanager.WakeUpFrames()
     /// when the user double-clicks the bare Windows desktop (Progman / WorkerW).
+    /// Also remembers the last right-drag rectangle made on the desktop, so the context
+    /// menu's "New Frame" can reuse the box the user already drew (see StartDrawMode).
     /// </summary>
     public static class DesktopMouseHook
     {
         // ── Win32 ────────────────────────────────────────────────────────────
         private const int WH_MOUSE_LL = 14;
         private const int WM_LBUTTONDOWN = 0x0201;
+        private const int WM_RBUTTONDOWN = 0x0204;
+        private const int WM_RBUTTONUP = 0x0205;
 
         // ListView Messages
         private const uint LVM_FIRST = 0x1000;
@@ -70,6 +74,16 @@ namespace DesktopFrames
         private static POINT _lastClickPoint = default;
         private const int CLICK_RADIUS = 4;
 
+        // Right-drag capture (desktop rubber band → context menu → "New Frame").
+        // A plain right-click CLEARS the stored box: the menu the user acts on came from
+        // that release, and it carried no box — so a stale drag can never be misused.
+        private static POINT _rightDownPoint;
+        private static bool _rightDownOnDesktop;
+        private static Rect _rightDragRect = Rect.Empty;
+        private static DateTime _rightDragTimeUtc = DateTime.MinValue;
+        private static readonly object _dragLock = new object();
+        private const int DRAG_MIN_SIZE = 30; // device px per axis; anything smaller is a click
+
         // ── Public API ───────────────────────────────────────────────────────
         public static void Start()
         {
@@ -106,6 +120,19 @@ namespace DesktopFrames
                 {
                     var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
                     HandleClick(data.pt, data.time);
+                }
+                else if (nCode >= 0 && (int)wParam == WM_RBUTTONDOWN)
+                {
+                    // WindowFromPoint/GetClassName read window state without messaging
+                    // Explorer, so they are safe inside the hook (unlike SendMessage).
+                    var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    _rightDownPoint = data.pt;
+                    _rightDownOnDesktop = IsDesktopWindow(WindowFromPoint(data.pt));
+                }
+                else if (nCode >= 0 && (int)wParam == WM_RBUTTONUP)
+                {
+                    var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    HandleRightUp(data.pt);
                 }
             }
             catch (Exception ex)
@@ -155,6 +182,48 @@ namespace DesktopFrames
             {
                 _lastClickTime = time;
                 _lastClickPoint = pt;
+            }
+        }
+
+        private static void HandleRightUp(POINT up)
+        {
+            lock (_dragLock)
+            {
+                int w = Math.Abs(up.x - _rightDownPoint.x);
+                int h = Math.Abs(up.y - _rightDownPoint.y);
+                bool isDrag = _rightDownOnDesktop
+                              && w >= DRAG_MIN_SIZE && h >= DRAG_MIN_SIZE
+                              && IsDesktopWindow(WindowFromPoint(up));
+                if (isDrag)
+                {
+                    _rightDragRect = new Rect(
+                        Math.Min(up.x, _rightDownPoint.x),
+                        Math.Min(up.y, _rightDownPoint.y), w, h);
+                    _rightDragTimeUtc = DateTime.UtcNow;
+                }
+                else
+                {
+                    _rightDragRect = Rect.Empty;
+                }
+            }
+        }
+
+        /// <summary>
+        /// One-shot: the last right-drag rectangle drawn on the bare desktop (device pixels),
+        /// if it is younger than <paramref name="maxAge"/>. Consuming clears it.
+        /// </summary>
+        public static bool TryConsumeRightDragRect(TimeSpan maxAge, out Rect deviceRect)
+        {
+            lock (_dragLock)
+            {
+                deviceRect = _rightDragRect;
+                _rightDragRect = Rect.Empty;
+                if (deviceRect.IsEmpty || DateTime.UtcNow - _rightDragTimeUtc > maxAge)
+                {
+                    deviceRect = Rect.Empty;
+                    return false;
+                }
+                return true;
             }
         }
 
