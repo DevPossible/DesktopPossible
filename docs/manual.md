@@ -239,6 +239,8 @@ Access settings through the system tray icon → "Options":
 
 Create, rename, reorder and delete profiles, and *Empty Frames to Desktop* for frames that store files.
 
+Naming a profile the same as a Windows virtual desktop activates that profile automatically when you switch to that desktop (with General → *Automatically Switch Profiles with Virtual Desktop* enabled); desktops without a matching profile fall back to Default.
+
 ### Hotkeys Tab
 
 Profile switching hotkeys (direct profile 0–9, previous, next). Changes take effect after a restart.

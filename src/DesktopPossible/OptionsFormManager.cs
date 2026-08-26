@@ -591,6 +591,18 @@ namespace Desktop_Frames
             btnEmptyFrames.Click += (s, e) => EmptyFramesDialog.ShowDialogOnUiThread();
             headerPanel.Children.Add(btnEmptyFrames);
 
+            TextBlock vdHint = new TextBlock
+            {
+                Text = "Tip: Naming a profile the same as a Windows virtual desktop will activate that profile automatically when you switch to that desktop (General → Automatically Switch Profiles with Virtual Desktop). Desktops without a matching profile fall back to Default.",
+                TextWrapping = TextWrapping.Wrap,
+                FontStyle = FontStyles.Italic,
+                Foreground = Brushes.Gray,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Margin = new Thickness(15, 0, 15, 10)
+            };
+            headerPanel.Children.Add(vdHint);
+
             Grid.SetRow(headerPanel, 0);
             c.Children.Add(headerPanel);
 
