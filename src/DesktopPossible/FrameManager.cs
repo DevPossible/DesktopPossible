@@ -11462,6 +11462,90 @@ namespace Desktop_Frames
             FlushPendingFrameSave();
         }
 
+        // ---- Live grid snap during move/resize (WM_MOVING / WM_SIZING) ----
+        // The modal move/size loop proposes a rectangle per mouse tick; rewriting it in
+        // place makes the frame stick to the grid WHILE dragging/sizing instead of
+        // jumping after the gesture. Programmatic moves (SetWindowPos, animations,
+        // auto-arrange) never send these messages, so they are unaffected.
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WinRect { public int Left, Top, Right, Bottom; }
+
+        // WM_SIZING edge codes (wParam): which edge the user is pulling — its opposite is the anchor.
+        private const int WMSZ_LEFT = 1, WMSZ_TOP = 3, WMSZ_TOPLEFT = 4, WMSZ_TOPRIGHT = 5, WMSZ_BOTTOMLEFT = 7;
+
+        /// <summary>
+        /// Snaps the in-progress move/size rectangle (device pixels) to the desktop grid.
+        /// Returns true when the rect was rewritten. No-op unless "Snap frames to grid" is on.
+        /// </summary>
+        public static bool SnapGestureRect(NonActivatingWindow win, bool sizing, long edge, IntPtr rectPtr)
+        {
+            try
+            {
+                if (!SettingsManager.SnapFramesToGrid || rectPtr == IntPtr.Zero) return false;
+
+                var rect = Marshal.PtrToStructure<WinRect>(rectPtr);
+
+                double scale = 1.0;
+                var source = PresentationSource.FromVisual(win);
+                if (source?.CompositionTarget != null) scale = source.CompositionTarget.TransformToDevice.M11;
+                if (scale <= 0) scale = 1.0;
+
+                double unitW = FrameGrid.UnitWidth * scale;
+                double unitH = FrameGrid.UnitHeight * scale;
+
+                var screen = System.Windows.Forms.Screen.FromRectangle(new System.Drawing.Rectangle(
+                    rect.Left, rect.Top, Math.Max(1, rect.Right - rect.Left), Math.Max(1, rect.Bottom - rect.Top)));
+                double ox = screen.WorkingArea.Left, oy = screen.WorkingArea.Top;
+
+                if (!sizing)
+                {
+                    int w = rect.Right - rect.Left, h = rect.Bottom - rect.Top;
+                    int sx = (int)Math.Round(ox + Math.Round((rect.Left - ox) / unitW) * unitW);
+                    int sy = (int)Math.Round(oy + Math.Round((rect.Top - oy) / unitH) * unitH);
+                    if (sx == rect.Left && sy == rect.Top) return false;
+                    rect.Left = sx; rect.Top = sy; rect.Right = sx + w; rect.Bottom = sy + h;
+                }
+                else
+                {
+                    // A rolled-up frame keeps its rolled height (see SnapSizeToGrid): width only.
+                    bool rolled = false;
+                    try
+                    {
+                        string id = win.Tag?.ToString();
+                        dynamic data = string.IsNullOrEmpty(id) ? null : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == id);
+                        rolled = data?.IsRolled?.ToString().ToLower() == "true";
+                    }
+                    catch { }
+
+                    double chromeW = FrameGrid.ChromeWidth * scale;
+                    double chromeH = FrameGrid.ChromeHeight * scale;
+                    int n = Math.Max(1, (int)Math.Round((rect.Right - rect.Left - chromeW) / unitW));
+                    int m = Math.Max(1, (int)Math.Round((rect.Bottom - rect.Top - chromeH) / unitH));
+                    int newW = (int)Math.Round(chromeW + n * unitW);
+                    int newH = (int)Math.Round(chromeH + m * unitH);
+
+                    int e = (int)edge;
+                    // Keep the anchor edge (the one NOT being pulled) fixed.
+                    if (e == WMSZ_LEFT || e == WMSZ_TOPLEFT || e == WMSZ_BOTTOMLEFT) rect.Left = rect.Right - newW;
+                    else rect.Right = rect.Left + newW;
+                    if (!rolled)
+                    {
+                        if (e == WMSZ_TOP || e == WMSZ_TOPLEFT || e == WMSZ_TOPRIGHT) rect.Top = rect.Bottom - newH;
+                        else rect.Bottom = rect.Top + newH;
+                    }
+                }
+
+                Marshal.StructureToPtr(rect, rectPtr, false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"SnapGestureRect: {ex.Message}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// FrameGrid.SnapSize for a live window; a rolled-up frame keeps its rolled height
         /// (only the width snaps) so snapping never silently unrolls it.

@@ -39,6 +39,8 @@ public class NonActivatingWindow : Window
 
         const int WM_ENTERSIZEMOVE = 0x0231; // Resizing starts
         const int WM_EXITSIZEMOVE = 0x0232;  // Resizing ends
+        const int WM_SIZING = 0x0214;        // Proposed rect while resizing
+        const int WM_MOVING = 0x0216;        // Proposed rect while dragging
 
         if (msg == WM_ENTERSIZEMOVE)
         {
@@ -47,6 +49,16 @@ public class NonActivatingWindow : Window
         else if (msg == WM_EXITSIZEMOVE)
         {
             Framemanager.OnResizingEnded(this);
+        }
+        else if (msg == WM_MOVING || msg == WM_SIZING)
+        {
+            // Live grid snap: rewrite the proposed rect so the frame sticks to the grid
+            // during the gesture instead of jumping into place afterwards.
+            if (Framemanager.SnapGestureRect(this, msg == WM_SIZING, wParam.ToInt64(), lParam))
+            {
+                handled = true;
+                return new IntPtr(1); // TRUE: we processed the message
+            }
         }
 
         // Handle existing focus prevention
