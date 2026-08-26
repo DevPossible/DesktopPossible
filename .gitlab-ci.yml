@@ -132,7 +132,10 @@ version:
   needs:
     - build
   before_script:
-    - apk add --no-cache git
+    # bash: get-version.sh is a bash script ([[ =~ ]], <<<) — busybox sh kills it
+    # silently under set -e. Every pre-1.0 release happened to take the
+    # "HEAD already tagged" path, so this only surfaced with the rc flow.
+    - apk add --no-cache git bash
   script:
     - |
       set -eu
@@ -156,7 +159,7 @@ version:
         tag_exists="true"
         echo "HEAD is already tagged: ${existing_tag} - reusing it."
       elif [ "${PRERELEASE:-}" = "true" ]; then
-        base="$(sh scripts/get-version.sh)"
+        base="$(bash scripts/get-version.sh)"
         echo "Computed base version: ${base}"
         n=1
         while [ -n "$(git tag -l "v${base}-rc.${n}")" ]; do
@@ -165,7 +168,7 @@ version:
         version="${base}-rc.${n}"
         echo "Prerelease version: ${version}"
       else
-        version="$(sh scripts/get-version.sh)"
+        version="$(bash scripts/get-version.sh)"
         echo "Computed version: ${version}"
 
         if [ -n "$(git tag -l "v${version}")" ]; then
