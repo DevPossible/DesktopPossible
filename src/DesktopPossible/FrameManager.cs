@@ -4537,7 +4537,29 @@ namespace Desktop_Frames
 
         public static void StartDrawMode()
         {
-            // Called by App.xaml.cs (Context Menu) or InterCore (IPC)
+            // Called by App.xaml.cs (Context Menu) or InterCore (IPC).
+            // A right-drag on the bare desktop that led here through the context menu
+            // already drew the intended box — reuse it instead of asking again. The
+            // window is generous because it spans menu-reading time plus the 1s trigger
+            // poll; a plain right-click clears the stored box, so it can't go stale.
+            try
+            {
+                if (DesktopFrames.DesktopMouseHook.TryConsumeRightDragRect(TimeSpan.FromSeconds(30), out Rect deviceRect))
+                {
+                    double scale = 1.0;
+                    try { using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero)) scale = g.DpiX / 96.0; } catch { }
+                    CreateFrameFromDraw(new Rect(
+                        deviceRect.X / scale, deviceRect.Y / scale,
+                        deviceRect.Width / scale, deviceRect.Height / scale));
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.FrameCreation,
+                    $"StartDrawMode: right-drag reuse failed, falling back to draw overlay: {ex.Message}");
+            }
+
             var overlay = new DrawFrameOverlay();
             overlay.Show();
         }
