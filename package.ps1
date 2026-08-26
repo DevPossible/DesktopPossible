@@ -95,8 +95,9 @@ try {
             }
         }
     }
-    if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-        throw "Invalid version '$Version'. Expected format: x.y.z"
+    # x.y.z, optionally with a prerelease suffix (x.y.z-rc.1) for release-candidate builds.
+    if ($Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.]*)?$') {
+        throw "Invalid version '$Version'. Expected format: x.y.z or x.y.z-rc.N"
     }
     Write-Host "Packaging version: $Version" -ForegroundColor Green
 
@@ -170,9 +171,13 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "wix extension add failed for $ext/$wixExtVersion" }
         }
 
+        # MSI ProductVersion must be numeric x.y.z: strip any prerelease suffix. The filename
+        # keeps the full version; MajorUpgrade AllowSameVersionUpgrades lets the final x.y.z
+        # MSI replace an rc install of the same numeric version.
+        $msiVersion = ($Version -split '-')[0]
         $msiPath = Join-Path $DistDir "$ProjectName-$Version-$Runtime.msi"
         $wxs = Join-Path $PSScriptRoot 'installer' 'DesktopPossible.wxs'
-        & dotnet wix build $wxs -arch x64 -ext "WixToolset.UI.wixext/$wixExtVersion" -ext "WixToolset.Util.wixext/$wixExtVersion" -d "Version=$Version" -d "PublishDir=$publishDir" -d "RepoRoot=$PSScriptRoot" -pdbtype none -o $msiPath
+        & dotnet wix build $wxs -arch x64 -ext "WixToolset.UI.wixext/$wixExtVersion" -ext "WixToolset.Util.wixext/$wixExtVersion" -d "Version=$msiVersion" -d "PublishDir=$publishDir" -d "RepoRoot=$PSScriptRoot" -pdbtype none -o $msiPath
         if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE" }
         Write-Host "  [OK] Created: $msiPath" -ForegroundColor Green
     } else {

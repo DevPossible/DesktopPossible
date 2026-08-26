@@ -31,11 +31,11 @@ $Repo = 'DevPossible/DesktopPossible'
 Push-Location $PSScriptRoot
 try {
     if (-not $Version) {
-        $tag = git tag --points-at HEAD | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } | Select-Object -First 1
+        $tag = git tag --points-at HEAD | Where-Object { $_ -match '^v\d+\.\d+\.\d+(-rc\.\d+)?$' } | Select-Object -First 1
         if (-not $tag) { throw "No release tag at HEAD. Check out the release tag or pass -Version." }
         $Version = $tag.TrimStart('v')
     }
-    if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid version '$Version'. Expected x.y.z" }
+    if ($Version -notmatch '^\d+\.\d+\.\d+(-rc\.\d+)?$') { throw "Invalid version '$Version'. Expected x.y.z or x.y.z-rc.N" }
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "GitHub CLI (gh) is required: winget install GitHub.cli" }
 
