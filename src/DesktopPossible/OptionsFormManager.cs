@@ -1443,19 +1443,47 @@ namespace Desktop_Frames
 
         private static void PerformFullFactoryReset()
         {
-            if (MessageBoxesManager.ShowCustomYesNoMessageBox("WARNING: This will delete ALL frames, shortcuts, and settings for the CURRENT PROFILE!\n\nAre you sure you want to proceed?", "Factory Reset"))
+            if (MessageBoxesManager.ShowCustomYesNoMessageBox(
+                "This will remove ALL frames and settings for the CURRENT PROFILE.\n\n" +
+                "Files and shortcuts stored inside frames are NOT deleted — they are moved back " +
+                "to your Desktop first. A safety backup is also created.\n\nProceed?", "Factory Reset"))
             {
                 // KISS: Hijack cursor to show processing
                 System.Windows.Application.Current?.Dispatcher.Invoke(() => System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait);
                 try
                 {
-                    // 1. Create a safety backup before wiping
+                    // 1. Create a safety backup before clearing
                     string ts = DateTime.Now.ToString("yyMMddHHmm");
                     BackupManager.CreateBackup($"{ts}_backup_reset", silent: true);
 
-                    // 2. Wipe Profile-Specific Folders
+                    // 2. Dump every stored file back to the Desktop — the app never mass-deletes
+                    //    user files; if the user wants them gone they do it themselves, outside
+                    //    the app. Covers the frame store and the legacy per-profile Shortcuts
+                    //    folder; failures leave the file in place and are logged.
+                    int moved = FrameFileOperations.MoveProfileFilesToDesktop(ProfileManager.CurrentProfileName);
+
+                    string legacyShortcuts = ProfileManager.GetProfileFilePath("Shortcuts");
+                    if (System.IO.Directory.Exists(legacyShortcuts))
+                    {
+                        foreach (string entry in System.IO.Directory.GetFileSystemEntries(legacyShortcuts))
+                        {
+                            try
+                            {
+                                FrameStore.MoveIntoFolder(FrameFileOperations.DesktopDir, entry, copy: false);
+                                moved++;
+                            }
+                            catch (Exception mvEx)
+                            {
+                                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.Error,
+                                    $"Factory reset: could not move '{entry}' to the desktop: {mvEx.Message}");
+                            }
+                        }
+                    }
+
+                    // 3. Wipe app-internal folders only (caches and the last-deleted stash —
+                    //    never user content, which was moved out above).
                     var failedFolders = new List<string>();
-                    foreach (string f in new[] { "Temp Shortcuts", "Shortcuts", "Last Frame Deleted", "CopiedItem" })
+                    foreach (string f in new[] { "Temp Shortcuts", "Last Frame Deleted", "CopiedItem" })
                     {
                         string p = ProfileManager.GetProfileFilePath(f);
                         if (System.IO.Directory.Exists(p))
@@ -1474,7 +1502,7 @@ namespace Desktop_Frames
                         }
                     }
 
-                    // 3. Wipe Profile-Specific Config Files (OVERWRITE INSTEAD OF DELETE)
+                    // 4. Wipe Profile-Specific Config Files (OVERWRITE INSTEAD OF DELETE)
                     // FIX: Pointed to frames.json and wrote empty array to prevent read crashes
                     string fj = ProfileManager.GetProfileFilePath("frames.json");
                     System.IO.File.WriteAllText(fj, "[]");
@@ -1482,11 +1510,12 @@ namespace Desktop_Frames
                     string oj = ProfileManager.GetProfileFilePath("options.json");
                     System.IO.File.WriteAllText(oj, "{}");
 
-                    // 4. Force a clean OS-level restart (Guarantees all UI clears properly)
+                    // 5. Force a clean OS-level restart (Guarantees all UI clears properly)
                     // Surface any folders that could not be wiped instead of pretending success.
+                    string movedNote = moved > 0 ? $"\n{moved} stored file(s) were moved to your Desktop." : "";
                     string resetMessage = failedFolders.Count == 0
-                        ? "Factory Reset complete.\nThe application will now restart."
-                        : $"Factory Reset completed with warnings.\nCould not fully clear: {string.Join(", ", failedFolders)}.\nSee the log for details. The application will now restart.";
+                        ? $"Factory Reset complete.{movedNote}\nThe application will now restart."
+                        : $"Factory Reset completed with warnings.{movedNote}\nCould not fully clear: {string.Join(", ", failedFolders)}.\nSee the log for details. The application will now restart.";
                     MessageBoxesManager.ShowOKOnlyMessageBoxForm(resetMessage, failedFolders.Count == 0 ? "Reset Successful" : "Reset Incomplete");
 
                     string appPath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;

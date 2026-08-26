@@ -235,7 +235,7 @@ Backups are zip archives containing the application settings and **all** profile
 
 **Maintenance:** Screen Bound Frames (pull every frame back onto a visible monitor).
 
-**Reset:** Reset Styles · Clear All Data.
+**Reset:** Reset Styles · Clear All Data. Clear All Data never deletes your files: everything stored inside frames is moved back to the Desktop (and a safety backup is created) before the profile's frames and settings are cleared.
 
 ### Profiles Tab
 
