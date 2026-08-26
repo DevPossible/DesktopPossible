@@ -104,6 +104,14 @@ namespace Desktop_Frames
             // 2. Check status using the NEW logic (Registry check + Shortcut fallback)
             IsStartWithWindows = CheckIfStartWithWindowsEnabled();
 
+            // Fresh install: start with Windows by default. Existing installs keep whatever
+            // the user chose (registry presence/absence IS their choice).
+            if (SettingsManager.IsFirstRun && !IsStartWithWindows)
+            {
+                try { ToggleStartWithWindows(true); }
+                catch (Exception ex) { LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.Settings, $"First-run autostart registration failed: {ex.Message}"); }
+            }
+
 
             // Redraw the icon (overlay dot + tooltip) when the background update check finds a release.
             UpdateChecker.UpdateFound += () =>

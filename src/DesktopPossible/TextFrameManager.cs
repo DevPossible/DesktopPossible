@@ -381,6 +381,9 @@ namespace Desktop_Frames
             d[KeyDrawMode] = "Shadow";
             d[KeyRefresh] = "60";
             d[KeyOpacity] = "100";
+            // Text frames are wallpaper text: no border, no tint — even in the Customize dialog.
+            d["FrameBorderThickness"] = 0;
+            d["CustomColor"] = "Transparent";
 
             // CreateFrame reads optional keys (IsLocked, AlwaysOnTop, ...) that the defaults don't set.
             // An ExpandoObject THROWS on a missing member; a JObject (what every frame loaded from

@@ -21,6 +21,9 @@ namespace Desktop_Frames
     /// </summary>
     public static class SettingsManager
     {
+        /// <summary>True when this launch found no settings file at all (fresh install). Not persisted.</summary>
+        public static bool IsFirstRun { get; private set; }
+
         // --- Properties ---
         public static bool EnableAutoBackup { get; set; } = true;
         public static DateTime LastAutoBackupDate { get; set; } = DateTime.MinValue;
@@ -45,12 +48,12 @@ namespace Desktop_Frames
         public static bool DeletePreviousLogOnStart { get; set; } = false;
         public static bool EnableBackgroundValidationLogging { get; set; } = false;
         public static bool SuppressLaunchWarnings { get; set; } = false;
-        public static bool DisableFrameScrollbars { get; set; } = false;
+        public static bool DisableFrameScrollbars { get; set; } = true;
         public static bool DisableNoteAutoSave { get; set; } = false;
 
-        public static bool EnableChameleonMode { get; set; } = false;
+        public static bool EnableChameleonMode { get; set; } = true;
         public static bool EnableProfileAutomation { get; set; } = false;
-        public static bool EnableVirtualDesktopAutomation { get; set; } = false;
+        public static bool EnableVirtualDesktopAutomation { get; set; } = true;
 
         public static bool EnableAutoOrganize { get; set; } = false;
 
@@ -99,7 +102,7 @@ namespace Desktop_Frames
         public static string ImageDropMode { get; set; } = "Copy";
 
         // --- NEW: Idle Fade-Out Settings ---
-        public static bool FramesFadeOutFx { get; set; } = false;
+        public static bool FramesFadeOutFx { get; set; } = true;
         public static double FadeOutFxTargetAlpha { get; set; } = 0.3;
         public static int FadeOutTime { get; set; } = 5;
         /// <summary>Hover debounce for waking a faded frame (ms): the pointer must rest on the frame
@@ -118,7 +121,7 @@ namespace Desktop_Frames
         public static bool EnableToggleFramesHotkey { get; set; } = true;
         public static int ToggleFramesKey { get; set; } = 0x48; // H
         public static string ToggleFramesModifier { get; set; } = "ctrl+alt";
-        public static bool EnableDimensionSnap { get; set; } = false;
+        public static bool EnableDimensionSnap { get; set; } = true;
         public static bool SingleClickToLaunch { get; set; } = true;
 
   
@@ -147,6 +150,11 @@ namespace Desktop_Frames
             string appRoot = AppPaths.DataRoot;
             string masterPath = Path.Combine(appRoot, "MasterOptions.json");
             string localPath = ProfileManager.GetProfileFilePath("options.json");
+
+            // Fresh install: no settings file anywhere yet. Sticky for the process lifetime —
+            // LoadSettings re-runs on profile reloads, by which time SaveSettings has created
+            // the file. TrayManager uses this to enable start-with-Windows by default.
+            if (!File.Exists(masterPath) && !File.Exists(localPath)) IsFirstRun = true;
 
             if (!File.Exists(masterPath))
             {
@@ -321,7 +329,7 @@ namespace Desktop_Frames
 
         private static void ApplyJsonToProperties(dynamic data)
         {
-            try { EnableAutoBackup = data.EnableAutoBackup ?? false; } catch { EnableAutoBackup = false; }
+            try { EnableAutoBackup = data.EnableAutoBackup ?? true; } catch { EnableAutoBackup = true; }
             try { LastAutoBackupDate = data.LastAutoBackupDate ?? DateTime.MinValue; } catch { LastAutoBackupDate = DateTime.MinValue; }
             try { IsSnapEnabled = data.IsSnapEnabled ?? true; } catch { IsSnapEnabled = true; }
             try { ShowBackgroundImageOnPortalFrames = data.ShowBackgroundImageOnPortalFrames ?? true; } catch { ShowBackgroundImageOnPortalFrames = true; }
@@ -337,10 +345,10 @@ namespace Desktop_Frames
             try { SelectedColor = data.SelectedColor ?? "Gray"; } catch { SelectedColor = "Gray"; }
             try { IsLogEnabled = data.IsLogEnabled ?? false; } catch { IsLogEnabled = false; }
             try { SingleClickToLaunch = data.SingleClickToLaunch ?? true; } catch { SingleClickToLaunch = true; }
-            try { EnableDimensionSnap = data.EnableDimensionSnap ?? false; } catch { EnableDimensionSnap = false; }
+            try { EnableDimensionSnap = data.EnableDimensionSnap ?? true; } catch { EnableDimensionSnap = true; }
             try { PortalBackgroundOpacity = data.PortalBackgroundOpacity ?? 30; } catch { PortalBackgroundOpacity = 30; }
             try { EnableIconGlowEffect = data.EnableIconGlowEffect ?? true; } catch { EnableIconGlowEffect = true; }
-            try { DisableFrameScrollbars = data.DisableFrameScrollbars ?? false; } catch { DisableFrameScrollbars = false; }
+            try { DisableFrameScrollbars = data.DisableFrameScrollbars ?? true; } catch { DisableFrameScrollbars = true; }
             try { DisableNoteAutoSave = data.DisableNoteAutoSave ?? false; } catch { DisableNoteAutoSave = false; }
             try { ExportShortcutsOnFrameDeletion = data.ExportShortcutsOnFrameDeletion ?? false; } catch { ExportShortcutsOnFrameDeletion = false; }
             try { DeleteOriginalShortcutsOnDrop = data.DeleteOriginalShortcutsOnDrop ?? false; } catch { DeleteOriginalShortcutsOnDrop = false; }
@@ -355,8 +363,8 @@ namespace Desktop_Frames
             try { SystemInfoFrameCreated = data.SystemInfoFrameCreated ?? false; } catch { SystemInfoFrameCreated = false; }
             try { FramesWithNoRoundCorners = data.FramesWithNoRoundCorners ?? false; } catch { FramesWithNoRoundCorners = false; }
             try { EnableProfileAutomation = data.EnableProfileAutomation ?? false; } catch { EnableProfileAutomation = false; }
-            try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? false; } catch { EnableVirtualDesktopAutomation = false; }
-            try { EnableChameleonMode = data.EnableChameleonMode ?? false; } catch { EnableChameleonMode = false; } // 
+            try { EnableVirtualDesktopAutomation = data.EnableVirtualDesktopAutomation ?? true; } catch { EnableVirtualDesktopAutomation = true; }
+            try { EnableChameleonMode = data.EnableChameleonMode ?? true; } catch { EnableChameleonMode = true; }
             try { EnableAutoOrganize = data.EnableAutoOrganize ?? false; } catch { EnableAutoOrganize = false; }
             try { EnableAutoOrganizeNotifications = data.EnableAutoOrganizeNotifications ?? true; } catch { EnableAutoOrganizeNotifications = true; }
 
@@ -379,7 +387,7 @@ namespace Desktop_Frames
             try { ImageDropMode = (string)(data.ImageDropMode ?? "Copy"); } catch { ImageDropMode = "Copy"; }
 
             // Idle Fade-Out
-            try { FramesFadeOutFx = data.FramesFadeOutFx ?? false; } catch { FramesFadeOutFx = false; }
+            try { FramesFadeOutFx = data.FramesFadeOutFx ?? true; } catch { FramesFadeOutFx = true; }
             try { FadeOutFxTargetAlpha = data.FadeOutFxTargetAlpha ?? 0.3; } catch { FadeOutFxTargetAlpha = 0.3; }
             try { FadeOutTime = data.FadeOutTime ?? 5; } catch { FadeOutTime = 5; }
             try { FadeWakeDelayMs = data.FadeWakeDelayMs ?? 250; } catch { FadeWakeDelayMs = 250; }
