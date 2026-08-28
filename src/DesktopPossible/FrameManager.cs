@@ -8458,7 +8458,13 @@ namespace Desktop_Frames
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Foreground = textBrush,
-                MaxWidth = 70
+                // Keep the label inside its own cell and inside the FrameGrid budget: width
+                // = the icon panel's width (60 + 2*spacing; the old hard 70 bled into the
+                // neighbour cell below default spacing), height = the budgeted label lines —
+                // wide-glyph/CJK names otherwise wrap to a 4th line, pushing the cell past
+                // FrameGrid.UnitHeight so grid-snapped frames clipped the last icon row.
+                MaxWidth = FrameGrid.IconPanelWidth + iconSpacing * 2,
+                MaxHeight = FrameGrid.LabelLines * FrameGrid.LabelLineHeight
             };
 
             if (!disableShadow)
@@ -11385,13 +11391,17 @@ namespace Desktop_Frames
                 return;
             }
 
-            if (SettingsManager.EnableDimensionSnap)
+            // A move-only gesture must never touch size: grid heights (chrome 32 + m*100)
+            // aren't multiples of 10, so re-rounding them here shrank the frame 2px on
+            // every plain drag-drop (and the saved off-by-2 heights then let SnapNow's
+            // align-bottom check nudge frames off the grid by the same 2px).
+            if (SettingsManager.EnableDimensionSnap && sizeChanged)
             {
                 double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
                 double snappedHeight = Math.Round(frame.Height / 10.0) * 10;
 
                 // Grid snap wins over the coarse 10px snap: whole icon rows/columns.
-                if (SettingsManager.SnapFramesToGrid && sizeChanged)
+                if (SettingsManager.SnapFramesToGrid)
                     (snappedWidth, snappedHeight) = SnapSizeToGrid(frame, snappedWidth, snappedHeight);
 
                 frame.Width = snappedWidth;
