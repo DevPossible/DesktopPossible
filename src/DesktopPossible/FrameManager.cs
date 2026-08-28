@@ -95,6 +95,19 @@ namespace Desktop_Frames
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        private const int VK_SHIFT = 0x10;
+
+        /// <summary>
+        /// Holding Shift during a frame move/resize gesture bypasses all frame snapping
+        /// (grid, edge, and dimension snap). Read live so it works inside the modal
+        /// move/size loop, where WPF keyboard events don't pump. Frames only — icon
+        /// snapping is unaffected.
+        /// </summary>
+        public static bool IsSnapBypassed => (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
         /// <summary>
         /// Frames are desktop furniture: on creation they must start at the BOTTOM of
         /// the Z-order (just above the wallpaper/icons), not on top of the user's apps.
@@ -7018,8 +7031,12 @@ namespace Desktop_Frames
                             // Grid first, then edge snap: SnapManager only moves the window when a
                             // neighbour/screen edge is within its threshold, so edge alignment (the
                             // stronger intent) overrides the grid point when both apply.
-                            SnapWindowToGrid(win);
-                            SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
+                            // Shift held at drop = place the frame exactly where it was released.
+                            if (!IsSnapBypassed)
+                            {
+                                SnapWindowToGrid(win);
+                                SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
+                            }
                             FlushPendingFrameSave();
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Dragging frame '{currentFrame.Title}'");
                         }
@@ -11360,6 +11377,14 @@ namespace Desktop_Frames
             }
             catch { }
 
+            // Shift held at release = keep the exact size/position the user chose; the
+            // SizeChanged/LocationChanged handlers persist it via the flush below.
+            if (IsSnapBypassed)
+            {
+                FlushPendingFrameSave();
+                return;
+            }
+
             if (SettingsManager.EnableDimensionSnap)
             {
                 double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
@@ -11419,6 +11444,7 @@ namespace Desktop_Frames
             try
             {
                 if (!SettingsManager.SnapFramesToGrid || rectPtr == IntPtr.Zero) return false;
+                if (IsSnapBypassed) return false; // Shift held: track the mouse exactly
 
                 var rect = Marshal.PtrToStructure<WinRect>(rectPtr);
 
