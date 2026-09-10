@@ -173,24 +173,35 @@ namespace Desktop_Frames
             if (to.Count == 0) return result;
 
             var taken = new bool[to.Count];
+            var fromBox = Envelope(from);
+            var toBox = Envelope(to);
 
-            // 1. Exact hardware identity.
+            // 1. Exact hardware identity — and when several panels share one Id, the one in the
+            //    nearest position wins. Two identical monitors flanking a third is an ordinary
+            //    desk setup, and matching those by enumeration order rather than by where they
+            //    sit would swap the left screen's frames onto the right one.
             for (int i = 0; i < from.Count; i++)
             {
                 string id = from[i].Id ?? "";
                 if (id.Length == 0) continue;
+
+                var (fx, fy) = NormalisedCentre(from[i], fromBox);
+                int best = -1;
+                double bestDist = double.MaxValue;
                 for (int j = 0; j < to.Count; j++)
                 {
                     if (taken[j] || !string.Equals(id, to[j].Id ?? "", StringComparison.OrdinalIgnoreCase)) continue;
-                    result[i] = j;
-                    taken[j] = true;
-                    break;
+                    var (tx, ty) = NormalisedCentre(to[j], toBox);
+                    double dist = (fx - tx) * (fx - tx) + (fy - ty) * (fy - ty);
+                    if (dist < bestDist) { bestDist = dist; best = j; }
                 }
+
+                if (best < 0) continue;
+                result[i] = best;
+                taken[best] = true;
             }
 
             // 2. Nearest normalised centre, globally greedy (the closest pair claims first).
-            var fromBox = Envelope(from);
-            var toBox = Envelope(to);
             var pairs = new List<(double Dist, int From, int To)>();
             for (int i = 0; i < from.Count; i++)
             {

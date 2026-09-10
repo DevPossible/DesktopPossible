@@ -79,7 +79,7 @@ namespace Desktop_Frames
                 var monitors = EnumerateMonitors();
                 if (monitors.Count == 0)
                 {
-                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI,
+                    LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
                         "DisplayLayout: no monitors reported; leaving frame geometry untouched.");
                     return;
                 }
@@ -88,7 +88,7 @@ namespace Desktop_Frames
             }
             catch (Exception ex)
             {
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
                     $"DisplayLayout: profile load failed: {ex.Message}");
             }
         }
@@ -103,7 +103,7 @@ namespace Desktop_Frames
             SystemEvents.SessionSwitch += OnSessionSwitch;
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
-            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
+            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                 "DisplayLayout: watching for display, session and power changes.");
         }
 
@@ -169,7 +169,7 @@ namespace Desktop_Frames
                 {
                     IsUnstable = true;
                     _burstStartedUtc = DateTime.UtcNow;
-                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
+                    LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                         $"DisplayLayout: {reason}; waiting for the display configuration to settle.");
                 }
 
@@ -228,7 +228,7 @@ namespace Desktop_Frames
             {
                 _settleTimer?.Stop();
                 IsUnstable = false;
-                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
                     $"DisplayLayout: settle failed: {ex.Message}");
             }
         }
@@ -295,7 +295,7 @@ namespace Desktop_Frames
             _store.Prune(live.Select(x => x.Id), MaxConfigs);
             _store.Save(_storePath);
 
-            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI,
+            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                 $"DisplayLayout: {reason} -> {config.Label} [{fingerprint}] " +
                 $"({(isNewConfig ? "new layout built" : "saved layout restored")}, {moved} of {live.Count} frames moved).");
 
@@ -493,7 +493,7 @@ namespace Desktop_Frames
             }
             catch (Exception ex)
             {
-                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.UI,
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
                     $"DisplayLayout: could not enumerate monitors: {ex.Message}");
             }
             return result;

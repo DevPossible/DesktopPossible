@@ -198,6 +198,52 @@ public class DisplayConfigTests : IDisposable
         map[1].ShouldBe(0); // the external is gone: its frames land on the primary
     }
 
+    /// <summary>
+    /// A pair of identical panels flanking a third shares one hardware Id, so identity alone
+    /// cannot tell the left one from the right one. Position has to break the tie, or the left
+    /// screen's frames land on the right screen.
+    /// </summary>
+    private static List<MonitorInfo> FlankedDesk(int centreWidth = 3840)
+        => new List<MonitorInfo>
+        {
+            Mon("MONITOR\\SAM0C44", 0, 0, centreWidth, 2160, 1.5, primary: true),
+            Mon("MONITOR\\HPN3499", -1620, 0, 1620, 2880, 1.5),
+            Mon("MONITOR\\HPN3499", centreWidth, 0, 1620, 2880, 1.5)
+        };
+
+    [Fact]
+    public void MatchMonitors_TellsTwoIdenticalPanelsApartByPosition()
+    {
+        var before = FlankedDesk();
+
+        // The same desk with the centre monitor swapped for a narrower one: both flanking
+        // panels are still there, but the right-hand one has shifted left with it.
+        var after = FlankedDesk(centreWidth: 2560);
+
+        var map = DisplayConfig.MatchMonitors(before, after);
+
+        map[0].ShouldBe(0); // centre stays centre
+        map[1].ShouldBe(1); // left panel stays left
+        map[2].ShouldBe(2); // right panel stays right
+    }
+
+    [Fact]
+    public void MatchMonitors_KeepsIdenticalPanelsApartWhenTheyAreListedInReverseOrder()
+    {
+        var before = FlankedDesk();
+        var after = new List<MonitorInfo>
+        {
+            Mon("MONITOR\\SAM0C44", 0, 0, 3840, 2160, 1.5, primary: true),
+            Mon("MONITOR\\HPN3499", 3840, 0, 1620, 2880, 1.5),   // right panel enumerated first
+            Mon("MONITOR\\HPN3499", -1620, 0, 1620, 2880, 1.5)   // left panel second
+        };
+
+        var map = DisplayConfig.MatchMonitors(before, after);
+
+        map[1].ShouldBe(2); // the left panel finds the left panel, not the first Id match
+        map[2].ShouldBe(1);
+    }
+
     [Fact]
     public void MatchMonitors_NeverAssignsTwoOldMonitorsToOneNewOneWhileAnotherIsFree()
     {
