@@ -135,6 +135,11 @@ namespace Desktop_Frames
                     // files (e.g. Windows' own Delete on the icon's shell context menu).
                     FrameStoreWatcher.Start();
 
+                    // Watch for docking, monitor changes, resolution/scaling changes and RDP
+                    // sessions. LoadAndCreateFrames has already laid the frames out for the
+                    // monitors attached at startup.
+                    DisplayLayoutManager.Start();
+
                     // --- PRODUCTION START LOGIC ---
                     if (SettingsManager.EnableVirtualDesktopAutomation)
                     {
@@ -271,6 +276,11 @@ namespace Desktop_Frames
             try { Framemanager.FlushPendingFrameSave(); } catch { }
 
             _triggerPollTimer?.Stop();
+
+            // Unhook the SystemEvents handlers (they are static and would otherwise root this
+            // class) and write the final layout for the display configuration in use.
+            try { DisplayLayoutManager.Stop(); } catch { }
+
             FrameStoreWatcher.Stop();
             InterCore.Cleanup();
             try

@@ -1164,6 +1164,15 @@ namespace Desktop_Frames
         }
         private static void AdjustFramePositionToScreen(NonActivatingWindow win)
         {
+            // 0. A display change is in flight: Windows has already shoved windows off the
+            // monitor that went away, and clamping (and saving) that emergency position would
+            // bake it in as the user's choice. DisplayLayoutManager restores the real layout
+            // once the configuration settles.
+            if (DisplayLayoutManager.IsUnstable && !IsManualRepositioning)
+            {
+                return;
+            }
+
             // 1. CONTROL CHECK: 
             // If Auto-Reposition is OFF ... AND ... we are NOT manually forcing it -> EXIT.
             if (!SettingsManager.AllowAutoReposition && !IsManualRepositioning)
@@ -4541,6 +4550,13 @@ namespace Desktop_Frames
                 };
                 _transitionCleanupTimer.Start();
             }
+
+            // Lay the frames out for the monitors that are attached RIGHT NOW, before any
+            // window exists: a known display configuration restores its saved geometry, an
+            // unknown one gets a layout remapped from the last one we saw. Doing it here means
+            // startup and profile switches need no repositioning pass afterwards - the frames
+            // are simply created in the right place.
+            DisplayLayoutManager.ApplyForCurrentProfile();
 
             foreach (dynamic frame in FrameDataManager.FrameData.ToList())
             {
