@@ -27,16 +27,32 @@
 .PARAMETER NoMsi
     Skip building the MSI installer (zip only).
 
+.PARAMETER Sign
+    Authenticode-sign the published exe and the MSI with Azure Trusted Signing
+    (account DevPossible, certificate profile CodeSigning). Windows only - the
+    signing APIs are Win32 - so the Linux CI packaging job never passes it and
+    the release artifacts are signed on Windows via upload-msi.ps1. Requires
+    `az login` as a principal holding "Artifact Signing Certificate Profile
+    Signer" on the signing account.
+
+.PARAMETER SignCredentialType
+    Azure credential type handed to the sign CLI (azure-cli, azure-powershell,
+    managed-identity, workload-identity). Defaults to azure-cli.
+
 .EXAMPLE
     ./package.ps1
     ./package.ps1 -Version 1.2.3 -SkipTests -NonInteractive
+    ./package.ps1 -Sign
 #>
 param(
     [string]$Version = '',
     [switch]$SkipTests,
     [switch]$NonInteractive,
     [switch]$NoSingleFile,
-    [switch]$NoMsi
+    [switch]$NoMsi,
+    [switch]$Sign,
+    [ValidateSet('azure-cli', 'azure-powershell', 'managed-identity', 'workload-identity')]
+    [string]$SignCredentialType = 'azure-cli'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +61,14 @@ $ProjectName = 'DesktopPossible'
 $Runtime = 'win-x64'
 $DistDir = Join-Path $PSScriptRoot '.dist'
 $BuildDir = Join-Path $PSScriptRoot '.build'
+
+# Azure Trusted Signing. None of these are secrets - access is RBAC on the Azure
+# account, not a key in the repo. Region is baked into the endpoint host (eus =
+# eastus); it must match the region the signing account was created in.
+$SigningEndpoint = 'https://eus.codesigning.azure.net/'
+$SigningAccount = 'DevPossible'
+$SigningCertificateProfile = 'CodeSigning'
+$SigningDescriptionUrl = 'https://github.com/DevPossible/DesktopPossible'
 
 function Get-NextVersion {
     # Use conventional commits to calculate version
@@ -64,6 +88,42 @@ function Get-NextVersion {
     }
 
     return "0.1.0"
+}
+
+function Invoke-ArtifactSigning {
+    <#
+        Authenticode-signs one file with Azure Trusted Signing via the pinned
+        `sign` dotnet tool (.config/dotnet-tools.json). The certificate is
+        short-lived by design (it rolls every few days), so every signature is
+        RFC 3161 timestamped - that is what keeps shipped binaries valid long
+        after the signing certificate itself expires.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not $IsWindows) {
+        throw "Signing requires Windows (Authenticode uses Win32 APIs). Run package.ps1 -Sign on Windows, or drop -Sign."
+    }
+
+    Write-Host "  Signing $(Split-Path $Path -Leaf) ..." -ForegroundColor Gray
+    & dotnet sign code artifact-signing $Path `
+        --artifact-signing-endpoint $SigningEndpoint `
+        --artifact-signing-account $SigningAccount `
+        --artifact-signing-certificate-profile $SigningCertificateProfile `
+        --azure-credential-type $SignCredentialType `
+        --description $ProjectName `
+        --description-url $SigningDescriptionUrl `
+        --verbosity Warning
+    if ($LASTEXITCODE -ne 0) {
+        throw "Signing failed for '$Path' (exit $LASTEXITCODE). Check `az login` and the 'Artifact Signing Certificate Profile Signer' role on the $SigningAccount account."
+    }
+
+    # Verify rather than assume: a zero exit code is not proof the file carries a
+    # trusted signature.
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($signature.Status -ne 'Valid') {
+        throw "Signature verification failed for '$Path': $($signature.Status) - $($signature.StatusMessage)"
+    }
+    Write-Host "  [OK] Signed: $(Split-Path $Path -Leaf) ($($signature.SignerCertificate.Subject))" -ForegroundColor Green
 }
 
 function Update-Changelog {
@@ -150,6 +210,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Publish failed with exit code $LASTEXITCODE" }
     Write-Host "  [OK] Published to $publishDir" -ForegroundColor Green
 
+    # Sign the published exe BEFORE archiving and before the MSI build, so the zip
+    # and the installer both carry the signed binary.
+    if ($Sign) {
+        Write-Host "`n=== Signing ($SigningAccount / $SigningCertificateProfile) ===" -ForegroundColor Cyan
+        & dotnet tool restore
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool restore failed (sign)" }
+        Invoke-ArtifactSigning -Path (Join-Path $publishDir "$ProjectName.exe")
+    } else {
+        Write-Host "  [SKIP] Code signing (no -Sign)" -ForegroundColor DarkGray
+    }
+
     # Create archive
     Write-Host "`n=== Archiving ===" -ForegroundColor Cyan
     $archivePath = Join-Path $DistDir "$ProjectName-$Version-$Runtime.zip"
@@ -180,6 +251,10 @@ try {
         & dotnet wix build $wxs -arch x64 -ext "WixToolset.UI.wixext/$wixExtVersion" -ext "WixToolset.Util.wixext/$wixExtVersion" -d "Version=$msiVersion" -d "PublishDir=$publishDir" -d "RepoRoot=$PSScriptRoot" -pdbtype none -o $msiPath
         if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE" }
         Write-Host "  [OK] Created: $msiPath" -ForegroundColor Green
+
+        # The MSI must be signed after wix build - wix rewrites the package, which
+        # would strip any signature applied earlier.
+        if ($Sign) { Invoke-ArtifactSigning -Path $msiPath }
     } else {
         Write-Host "  [SKIP] MSI installer (-NoMsi)" -ForegroundColor DarkGray
     }

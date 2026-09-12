@@ -49,8 +49,8 @@ and all COM interop (Windows Script Host `WScript.Shell` for .lnk shortcuts,
 | `./test-smoke.ps1` | Run unit tests (fast, headless-safe) |
 | `./test-full.ps1` | Run the full test suite |
 | `./start-app.ps1` | Build (unless `-NoBuild`) and launch the app |
-| `./package.ps1` | Produce the self-contained single-file portable zip and (on Windows) the MSI installer |
-| `./upload-msi.ps1` | **User-only** — after a release pipeline: build the MSI on Windows and attach it to the GitHub release |
+| `./package.ps1` | Produce the self-contained single-file portable zip and (on Windows) the MSI installer; add `-Sign` to Authenticode-sign both |
+| `./upload-msi.ps1` | **User-only** — after a release pipeline: build the *signed* MSI and zip on Windows and attach them to the GitHub release |
 | `./create-release.ps1` | **User-only** — triggers a release (never run this) |
 | `./scripts/get-version.ps1` / `.sh` | Calculate next semver from conventional commits |
 
@@ -200,7 +200,10 @@ project files, manifests, or tags.
 2. `main` is release-only; CI mirrors it (plus tags and releases) to GitHub.
 3. The user triggers releases — never automate or initiate one yourself.
 4. After the pipeline creates the GitHub release, the user runs `upload-msi.ps1`
-   on Windows to attach the installer.
+   on Windows to attach the signed installer **and** the signed zip (which
+   replaces the unsigned zip the Linux pipeline attached). A release is not
+   finished until that step has run — until then the only published artifact is
+   an unsigned zip.
 
 ## 8. Gotchas
 
@@ -215,6 +218,19 @@ project files, manifests, or tags.
   Windows only, so the Linux CI publishes the zip alone and the MSI is attached
   afterwards with `upload-msi.ps1`. Keep the `UpgradeCode` GUID stable forever —
   it is what lets a new MSI upgrade an old install.
+- **Code signing is Windows-only and happens outside CI:** release binaries are
+  Authenticode-signed with **Azure Trusted Signing** (account `DevPossible`,
+  certificate profile `CodeSigning`, endpoint `https://eus.codesigning.azure.net/`)
+  via the pinned `sign` dotnet tool. Signing needs `az login` as a principal
+  holding the **Artifact Signing Certificate Profile Signer** role on the signing
+  account — subscription Owner alone is *not* enough, the data-plane action is
+  RBAC-gated separately. The Linux CI cannot sign, so `package.ps1 -Sign` runs on
+  Windows via `upload-msi.ps1`. Trusted Signing certificates are deliberately
+  short-lived (they roll every few days), which is why every signature is RFC 3161
+  timestamped — the timestamp is what keeps shipped binaries valid after the
+  certificate expires. Never pin the `sign` tool by floating version: the NuGet id
+  `sign` collides with an unrelated third-party package at 1.x, so only the
+  Microsoft `0.9.1-beta.*` line is correct.
 - **Portable config beside the exe:** the app reads/writes `Profiles/` and
   `ProfileOptions.json` next to the executable. Never rename these — the
   migration engine and user upgrades depend on the exact names.
