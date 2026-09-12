@@ -39,8 +39,13 @@ namespace DesktopPossible.Tests
                 Interlocked.Decrement(ref concurrent);
             }, isFolder: false);
 
-            // Act: let several ticks fire.
-            Thread.Sleep(700);
+            // Act: let several ticks fire. The wait is bounded by observed progress rather than
+            // a fixed sleep: Timer.Elapsed is raised on the thread pool, and when the full suite
+            // runs collections in parallel the pool can be saturated long enough that a fixed
+            // sleep expires before a single callback is ever scheduled.
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (Volatile.Read(ref executions) < 2 && DateTime.UtcNow < deadline)
+                Thread.Sleep(25);
             checker.Dispose();
 
             // Assert: passes kept running (the guard is released), but never concurrently.
