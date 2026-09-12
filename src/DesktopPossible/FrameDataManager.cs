@@ -244,6 +244,14 @@ namespace Desktop_Frames
 
                 // Keep the per-frame focus-hotkey lookup in sync with the latest data.
                 Framemanager.RefreshFrameHotkeys();
+
+                // Write the same geometry into the active display configuration. This has to
+                // happen continuously: by the time Windows reports a display change it has
+                // already moved windows off the monitor that vanished, so the only record of
+                // where the user actually had them is the one kept before the change.
+                // (No-op while the display configuration is unstable, and when the content
+                // is unchanged the sidecar is not rewritten.)
+                DisplayLayoutManager.MirrorActiveLayout();
             }
             catch (Exception ex)
             {

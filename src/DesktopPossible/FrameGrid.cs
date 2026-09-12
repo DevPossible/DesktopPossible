@@ -13,7 +13,10 @@ namespace Desktop_Frames
     /// </summary>
     public static class FrameGrid
     {
-        /// <summary>Icon StackPanel width (IconManager.AddIcon: Width = 60).</summary>
+        /// <summary>
+        /// Base icon StackPanel width (Framemanager.AddIcon: Width = 60 + 2*IconSpacing,
+        /// and the label's MaxWidth matches that panel width).
+        /// </summary>
         public const double IconPanelWidth = 60;
 
         /// <summary>Default per-frame IconSpacing (CreateNewFrame: IconSpacing = 5).</summary>

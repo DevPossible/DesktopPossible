@@ -65,6 +65,13 @@ namespace Desktop_Frames
         // --- NEW: Hidden Option for Manual Repositioning ---
         public static bool AllowAutoReposition { get; set; } = true;
 
+        /// <summary>
+        /// Remember where frames sit on each display configuration and restore them when it
+        /// comes back (docking, monitor changes, resolution/scaling changes, RDP). See
+        /// DisplayLayoutManager.
+        /// </summary>
+        public static bool EnableDisplayLayoutMemory { get; set; } = true;
+
         // --- Global Frame Edit Mode (default OFF: frames and text frames are position/size locked
         //     until the user turns editing on from the tray menu; app-global, so it survives
         //     profile / virtual-desktop switches) ---
@@ -284,6 +291,7 @@ namespace Desktop_Frames
                 AutoRollTime,
 
                 AllowAutoReposition,
+                EnableDisplayLayoutMemory,
                 FrameEditMode,
                 SnapFramesToGrid,
                 InstructionalFrameCreated,
@@ -364,6 +372,7 @@ namespace Desktop_Frames
             try { AutoRollTime = data.AutoRollTime ?? 2; } catch { AutoRollTime = 2; }
 
             try { AllowAutoReposition = data.AllowAutoReposition ?? true; } catch { AllowAutoReposition = true; }
+            try { EnableDisplayLayoutMemory = data.EnableDisplayLayoutMemory ?? true; } catch { EnableDisplayLayoutMemory = true; }
             try { FrameEditMode = data.FrameEditMode ?? false; } catch { FrameEditMode = false; }
             try { SnapFramesToGrid = data.SnapFramesToGrid ?? true; } catch { SnapFramesToGrid = true; }
             try { InstructionalFrameCreated = data.InstructionalFrameCreated ?? false; } catch { InstructionalFrameCreated = false; }

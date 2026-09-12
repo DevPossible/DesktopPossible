@@ -1,19 +1,19 @@
 {
   "Meta": {
-    "LatestVersion": "0.9.1.0",
+    "LatestVersion": "1.1.0.0",
     "CriticalUpdate": false,
     "DownloadUrl": "https://github.com/DevPossible/DesktopPossible/releases",
     "ForceKillSwitch": false
   },
   "Announcements": [
     {
-      "Id": "MSG_20260821_dfp1",
+      "Id": "MSG_20260912_dp110",
       "Type": "Info",
-      "Title": "Welcome to the DesktopPossible 0.9 beta",
-      "Body": "Thanks for trying the DesktopPossible 0.9 beta, the hard fork of Desktop Frames + maintained by DevPossible. This is a beta: please report anything odd on the GitHub issues page.",
+      "Title": "DesktopPossible 1.1 is here",
+      "Body": "DesktopPossible 1.1 remembers your frame layout for each display configuration, so docking and undocking no longer scrambles your desktop. Downloads are now digitally signed by DevPossible LLC, which means Windows recognises the publisher instead of warning about an unknown one.",
       "Link": "https://github.com/DevPossible/DesktopPossible/releases",
       "TargetVersionMin": "0.0.0.0",
-      "TargetVersionMax": "99.9.9.9",
+      "TargetVersionMax": "1.0.9.9",
       "MaxDisplayCount": 1,
       "AutoCloseSeconds": 0,
       "CanUserDismiss": true

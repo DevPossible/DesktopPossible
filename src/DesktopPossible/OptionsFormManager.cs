@@ -556,7 +556,42 @@ namespace Desktop_Frames
 
             c.Children.Add(btnBound);
 
+            // --- Display Configurations ---
+            CreateCheckBox(c, "Remember frame layout per display setup", "EnableDisplayLayoutMemory", SettingsManager.EnableDisplayLayoutMemory);
 
+            TextBlock lblDisplays = new TextBlock
+            {
+                Text = "Frame positions are saved separately for each monitor setup (docking, resolution " +
+                       "or scaling changes, RDP) and restored when that setup comes back. A setup seen " +
+                       "for the first time gets a layout built from the one you were just using." +
+                       Environment.NewLine + Environment.NewLine +
+                       "Currently: " + DisplayLayoutManager.DescribeCurrentDisplays(),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                Opacity = 0.75,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(15, 0, 0, 12)
+            };
+            c.Children.Add(lblDisplays);
+
+            Button btnForget = CreateStyledButton("Rebuild Layout for This Display Setup", darkPink);
+            btnForget.Width = 320;
+            btnForget.Height = 45;
+            btnForget.Margin = new Thickness(0, 0, 0, 15);
+            btnForget.HorizontalAlignment = HorizontalAlignment.Left;
+            btnForget.ToolTip = "Discards the remembered layout for the monitors in use and rebuilds it from your most recent other setup.";
+            btnForget.Click += (s, e) =>
+            {
+                if (!MessageBoxesManager.ShowCustomYesNoMessageBox(
+                        "Discard the saved frame layout for the display setup you are using now " +
+                        "and rebuild it from your most recent other setup?",
+                        "Rebuild Layout")) return;
+
+                DisplayLayoutManager.ForgetCurrentDisplayLayout();
+                MessageBoxesManager.ShowOKOnlyMessageBoxForm(
+                    "The layout for this display setup has been rebuilt.", "Rebuild Layout");
+            };
+            c.Children.Add(btnForget);
 
             CreateSectionHeader(c, "Reset", Colors.Red);
             Button r1 = CreateStyledButton("Reset Styles", Color.FromRgb(108, 117, 125));
@@ -1231,6 +1266,7 @@ namespace Desktop_Frames
                 foreach (var child in toolsContent.Children)
                 {
                     if (child is CheckBox cb && cb.Name == "EnableAutoBackup") SettingsManager.EnableAutoBackup = cb.IsChecked == true;
+                    else if (child is CheckBox dlm && dlm.Name == "EnableDisplayLayoutMemory") SettingsManager.EnableDisplayLayoutMemory = dlm.IsChecked == true;
                     else if (child is Grid toolsGrid)
                     {
                         var cntBox = toolsGrid.Children.OfType<TextBox>().FirstOrDefault(t => t.Name == "MaxBackupCountBox");

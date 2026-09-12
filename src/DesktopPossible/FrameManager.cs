@@ -95,6 +95,19 @@ namespace Desktop_Frames
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        private const int VK_SHIFT = 0x10;
+
+        /// <summary>
+        /// Holding Shift during a frame move/resize gesture bypasses all frame snapping
+        /// (grid, edge, and dimension snap). Read live so it works inside the modal
+        /// move/size loop, where WPF keyboard events don't pump. Frames only — icon
+        /// snapping is unaffected.
+        /// </summary>
+        public static bool IsSnapBypassed => (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
         /// <summary>
         /// Frames are desktop furniture: on creation they must start at the BOTTOM of
         /// the Z-order (just above the wallpaper/icons), not on top of the user's apps.
@@ -1151,6 +1164,15 @@ namespace Desktop_Frames
         }
         private static void AdjustFramePositionToScreen(NonActivatingWindow win)
         {
+            // 0. A display change is in flight: Windows has already shoved windows off the
+            // monitor that went away, and clamping (and saving) that emergency position would
+            // bake it in as the user's choice. DisplayLayoutManager restores the real layout
+            // once the configuration settles.
+            if (DisplayLayoutManager.IsUnstable && !IsManualRepositioning)
+            {
+                return;
+            }
+
             // 1. CONTROL CHECK: 
             // If Auto-Reposition is OFF ... AND ... we are NOT manually forcing it -> EXIT.
             if (!SettingsManager.AllowAutoReposition && !IsManualRepositioning)
@@ -4529,6 +4551,13 @@ namespace Desktop_Frames
                 _transitionCleanupTimer.Start();
             }
 
+            // Lay the frames out for the monitors that are attached RIGHT NOW, before any
+            // window exists: a known display configuration restores its saved geometry, an
+            // unknown one gets a layout remapped from the last one we saw. Doing it here means
+            // startup and profile switches need no repositioning pass afterwards - the frames
+            // are simply created in the right place.
+            DisplayLayoutManager.ApplyForCurrentProfile();
+
             foreach (dynamic frame in FrameDataManager.FrameData.ToList())
             {
                 CreateFrame(frame, targetChecker);
@@ -7018,8 +7047,12 @@ namespace Desktop_Frames
                             // Grid first, then edge snap: SnapManager only moves the window when a
                             // neighbour/screen edge is within its threshold, so edge alignment (the
                             // stronger intent) overrides the grid point when both apply.
-                            SnapWindowToGrid(win);
-                            SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
+                            // Shift held at drop = place the frame exactly where it was released.
+                            if (!IsSnapBypassed)
+                            {
+                                SnapWindowToGrid(win);
+                                SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
+                            }
                             FlushPendingFrameSave();
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Dragging frame '{currentFrame.Title}'");
                         }
@@ -8441,7 +8474,13 @@ namespace Desktop_Frames
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Foreground = textBrush,
-                MaxWidth = 70
+                // Keep the label inside its own cell and inside the FrameGrid budget: width
+                // = the icon panel's width (60 + 2*spacing; the old hard 70 bled into the
+                // neighbour cell below default spacing), height = the budgeted label lines —
+                // wide-glyph/CJK names otherwise wrap to a 4th line, pushing the cell past
+                // FrameGrid.UnitHeight so grid-snapped frames clipped the last icon row.
+                MaxWidth = FrameGrid.IconPanelWidth + iconSpacing * 2,
+                MaxHeight = FrameGrid.LabelLines * FrameGrid.LabelLineHeight
             };
 
             if (!disableShadow)
@@ -11360,13 +11399,25 @@ namespace Desktop_Frames
             }
             catch { }
 
-            if (SettingsManager.EnableDimensionSnap)
+            // Shift held at release = keep the exact size/position the user chose; the
+            // SizeChanged/LocationChanged handlers persist it via the flush below.
+            if (IsSnapBypassed)
+            {
+                FlushPendingFrameSave();
+                return;
+            }
+
+            // A move-only gesture must never touch size: grid heights (chrome 32 + m*100)
+            // aren't multiples of 10, so re-rounding them here shrank the frame 2px on
+            // every plain drag-drop (and the saved off-by-2 heights then let SnapNow's
+            // align-bottom check nudge frames off the grid by the same 2px).
+            if (SettingsManager.EnableDimensionSnap && sizeChanged)
             {
                 double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
                 double snappedHeight = Math.Round(frame.Height / 10.0) * 10;
 
                 // Grid snap wins over the coarse 10px snap: whole icon rows/columns.
-                if (SettingsManager.SnapFramesToGrid && sizeChanged)
+                if (SettingsManager.SnapFramesToGrid)
                     (snappedWidth, snappedHeight) = SnapSizeToGrid(frame, snappedWidth, snappedHeight);
 
                 frame.Width = snappedWidth;
@@ -11419,6 +11470,7 @@ namespace Desktop_Frames
             try
             {
                 if (!SettingsManager.SnapFramesToGrid || rectPtr == IntPtr.Zero) return false;
+                if (IsSnapBypassed) return false; // Shift held: track the mouse exactly
 
                 var rect = Marshal.PtrToStructure<WinRect>(rectPtr);
 

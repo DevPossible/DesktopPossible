@@ -931,6 +931,11 @@ namespace Desktop_Frames
 
                 AtomicFile.WriteAllText(currentFramesPath, backupContent);
 
+                // The restored frames.json carries its own positions; the remembered per-display
+                // layouts describe the desktop as it was BEFORE the restore and would overwrite
+                // them on the next load. Drop them - they re-seed from the restored frames.
+                DisplayLayoutManager.ForgetAllLayouts();
+
                 if (Directory.Exists(currentShortcutsPath))
                 {
                     Directory.Delete(currentShortcutsPath, true);
