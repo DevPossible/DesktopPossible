@@ -107,5 +107,33 @@ namespace Desktop_Frames
             double sy = originY + Math.Round((y - originY) / unitHeight) * unitHeight;
             return (sx, sy);
         }
+
+        // WM_SIZING edge codes (wParam). 0 = a plain move (WM_MOVING).
+        public const int GestureMove = 0;
+        public const int GestureLeft = 1, GestureRight = 2, GestureTop = 3, GestureTopLeft = 4,
+            GestureTopRight = 5, GestureBottom = 6, GestureBottomLeft = 7, GestureBottomRight = 8;
+
+        /// <summary>
+        /// Rebuilds the raw (unsnapped) rectangle of an in-progress move/size gesture from
+        /// the rectangle at gesture start plus the total cursor travel since then.
+        /// The Windows move/size loop builds each proposed rect from the PREVIOUS proposal
+        /// (already snapped by WM_MOVING/WM_SIZING) plus only the mouse delta since the last
+        /// tick, so snapping that proposal in place makes any movement smaller than half a
+        /// cell round straight back to the same grid point — a slow drag never moves at all.
+        /// Snapping this anchor-based rect instead lets travel accumulate across ticks.
+        /// </summary>
+        public static (int Left, int Top, int Right, int Bottom) ApplyGestureDelta(
+            (int Left, int Top, int Right, int Bottom) start, int dx, int dy, int edge)
+        {
+            var (l, t, r, b) = start;
+            if (edge == GestureMove)
+                return (l + dx, t + dy, r + dx, b + dy);
+
+            if (edge == GestureLeft || edge == GestureTopLeft || edge == GestureBottomLeft) l += dx;
+            if (edge == GestureRight || edge == GestureTopRight || edge == GestureBottomRight) r += dx;
+            if (edge == GestureTop || edge == GestureTopLeft || edge == GestureTopRight) t += dy;
+            if (edge == GestureBottom || edge == GestureBottomLeft || edge == GestureBottomRight) b += dy;
+            return (l, t, r, b);
+        }
     }
 }

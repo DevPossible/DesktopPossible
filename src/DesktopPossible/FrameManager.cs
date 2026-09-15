@@ -11305,9 +11305,22 @@ namespace Desktop_Frames
         // size-snap only runs after an actual resize — a plain drag never re-sizes the frame.
         private static readonly Dictionary<NonActivatingWindow, (double W, double H)> _sizeAtGestureStart = new();
 
+        // Window rect + cursor (device pixels) when the gesture began; SnapGestureRect rebuilds
+        // the raw proposed rect from these so grid snapping doesn't eat slow mouse movement.
+        private static readonly Dictionary<NonActivatingWindow, (WinRect Rect, POINT Cursor)> _gestureAnchor = new();
+
         public static void OnResizingStarted(NonActivatingWindow frame)
         {
             try { _sizeAtGestureStart[frame] = (frame.Width, frame.Height); } catch { }
+            try
+            {
+                var hwnd = new WindowInteropHelper(frame).Handle;
+                if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out var rect) && GetCursorPos(out var cursor))
+                    _gestureAnchor[frame] = (rect, cursor);
+                else
+                    _gestureAnchor.Remove(frame);
+            }
+            catch { _gestureAnchor.Remove(frame); }
         }
 
         /// <summary>
@@ -11396,6 +11409,7 @@ namespace Desktop_Frames
                     sizeChanged = Math.Abs(start.W - frame.Width) > 0.5 || Math.Abs(start.H - frame.Height) > 0.5;
                     _sizeAtGestureStart.Remove(frame);
                 }
+                _gestureAnchor.Remove(frame);
             }
             catch { }
 
@@ -11458,6 +11472,12 @@ namespace Desktop_Frames
         [StructLayout(LayoutKind.Sequential)]
         private struct WinRect { public int Left, Top, Right, Bottom; }
 
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out WinRect lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
         // WM_SIZING edge codes (wParam): which edge the user is pulling — its opposite is the anchor.
         private const int WMSZ_LEFT = 1, WMSZ_TOP = 3, WMSZ_TOPLEFT = 4, WMSZ_TOPRIGHT = 5, WMSZ_BOTTOMLEFT = 7;
 
@@ -11472,7 +11492,21 @@ namespace Desktop_Frames
                 if (!SettingsManager.SnapFramesToGrid || rectPtr == IntPtr.Zero) return false;
                 if (IsSnapBypassed) return false; // Shift held: track the mouse exactly
 
-                var rect = Marshal.PtrToStructure<WinRect>(rectPtr);
+                var proposed = Marshal.PtrToStructure<WinRect>(rectPtr);
+                var rect = proposed;
+
+                // Windows derives each proposal from the previous (snapped) rect plus the
+                // mouse delta since the last tick, so small movements would round straight
+                // back to the same grid point. Rebuild the raw rect from the gesture anchor
+                // (start rect + total cursor travel) so slow drags accumulate movement.
+                if (_gestureAnchor.TryGetValue(win, out var anchor) && GetCursorPos(out var cursor))
+                {
+                    var (l, t, r, b) = FrameGrid.ApplyGestureDelta(
+                        (anchor.Rect.Left, anchor.Rect.Top, anchor.Rect.Right, anchor.Rect.Bottom),
+                        cursor.x - anchor.Cursor.x, cursor.y - anchor.Cursor.y,
+                        sizing ? (int)edge : FrameGrid.GestureMove);
+                    rect.Left = l; rect.Top = t; rect.Right = r; rect.Bottom = b;
+                }
 
                 double scale = 1.0;
                 var source = PresentationSource.FromVisual(win);
@@ -11491,7 +11525,6 @@ namespace Desktop_Frames
                     int w = rect.Right - rect.Left, h = rect.Bottom - rect.Top;
                     int sx = (int)Math.Round(ox + Math.Round((rect.Left - ox) / unitW) * unitW);
                     int sy = (int)Math.Round(oy + Math.Round((rect.Top - oy) / unitH) * unitH);
-                    if (sx == rect.Left && sy == rect.Top) return false;
                     rect.Left = sx; rect.Top = sy; rect.Right = sx + w; rect.Bottom = sy + h;
                 }
                 else
@@ -11523,6 +11556,10 @@ namespace Desktop_Frames
                         else rect.Bottom = rect.Top + newH;
                     }
                 }
+
+                if (rect.Left == proposed.Left && rect.Top == proposed.Top &&
+                    rect.Right == proposed.Right && rect.Bottom == proposed.Bottom)
+                    return false; // already where Windows proposed: nothing to rewrite
 
                 Marshal.StructureToPtr(rect, rectPtr, false);
                 return true;
