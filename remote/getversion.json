@@ -1,11 +1,23 @@
 {
   "Meta": {
-    "LatestVersion": "1.1.0.0",
-    "CriticalUpdate": false,
+    "LatestVersion": "1.1.2.0",
+    "CriticalUpdate": true,
     "DownloadUrl": "https://github.com/DevPossible/DesktopPossible/releases",
     "ForceKillSwitch": false
   },
   "Announcements": [
+    {
+      "Id": "MSG_20260915_dp112",
+      "Type": "Alert",
+      "Title": "Critical update: frame dragging fix",
+      "Body": "DesktopPossible 1.1.2 fixes a bug where frames would not move when dragged slowly with grid snapping on, and only jumped a cell at a time when dragged quickly. Please update to keep frames moving smoothly.",
+      "Link": "https://github.com/DevPossible/DesktopPossible/releases",
+      "TargetVersionMin": "0.0.0.0",
+      "TargetVersionMax": "1.1.1.9",
+      "MaxDisplayCount": 3,
+      "AutoCloseSeconds": 0,
+      "CanUserDismiss": true
+    },
     {
       "Id": "MSG_20260912_dp110",
       "Type": "Info",
