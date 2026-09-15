@@ -134,6 +134,51 @@ public class FrameGridTests
     }
 
     // ---------------------------------------------------------------
+    // Live move/size gesture: raw rect from the gesture anchor
+    // ---------------------------------------------------------------
+
+    private static readonly (int, int, int, int) StartRect = (100, 200, 400, 500);
+
+    [Fact]
+    public void ApplyGestureDelta_Move_OffsetsWholeRect()
+    {
+        FrameGrid.ApplyGestureDelta(StartRect, 7, -3, FrameGrid.GestureMove)
+            .ShouldBe((107, 197, 407, 497));
+    }
+
+    [Fact]
+    public void ApplyGestureDelta_Move_AccumulatesSlowTravelAcrossTicks()
+    {
+        // The bug: snapping Windows' incremental proposal in place discards every
+        // sub-cell tick. Rebuilding from the anchor and the TOTAL travel must land the
+        // rect a whole cell over once the cursor has crawled that far, however slowly.
+        int total = 0;
+        (int Left, int Top, int Right, int Bottom) raw = StartRect;
+        for (int tick = 0; tick < 21; tick++)
+        {
+            total += 5; // 5px per tick, far below half an 80px cell
+            raw = FrameGrid.ApplyGestureDelta(StartRect, total, 0, FrameGrid.GestureMove);
+        }
+        raw.Left.ShouldBe(205);
+        var (sx, _) = FrameGrid.SnapPosition(raw.Left, raw.Top, 0, 0, unitWidth: 80, unitHeight: 100);
+        sx.ShouldBe(240); // 205/80 = 2.56 -> 3 cells: the frame has moved one cell right
+    }
+
+    [Theory]
+    [InlineData(FrameGrid.GestureLeft, 110, 200, 400, 500)]
+    [InlineData(FrameGrid.GestureRight, 100, 200, 410, 500)]
+    [InlineData(FrameGrid.GestureTop, 100, 220, 400, 500)]
+    [InlineData(FrameGrid.GestureBottom, 100, 200, 400, 520)]
+    [InlineData(FrameGrid.GestureTopLeft, 110, 220, 400, 500)]
+    [InlineData(FrameGrid.GestureTopRight, 100, 220, 410, 500)]
+    [InlineData(FrameGrid.GestureBottomLeft, 110, 200, 400, 520)]
+    [InlineData(FrameGrid.GestureBottomRight, 100, 200, 410, 520)]
+    public void ApplyGestureDelta_Size_MovesOnlyThePulledEdges(int edge, int l, int t, int r, int b)
+    {
+        FrameGrid.ApplyGestureDelta(StartRect, 10, 20, edge).ShouldBe((l, t, r, b));
+    }
+
+    // ---------------------------------------------------------------
     // App-Categorize placement: gap + grid alignment
     // ---------------------------------------------------------------
 
