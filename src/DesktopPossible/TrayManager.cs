@@ -51,6 +51,8 @@ namespace Desktop_Frames
         private ToolStripMenuItem _autoOrganizeMenuItem; // NEW
 
         private ToolStripMenuItem _frameEditModeItem; // Global "Edit Frames Mode" toggle
+        private ToolStripMenuItem _updateNowItem;     // Shown only while a newer release exists
+        private ToolStripSeparator _updateNowSeparator;
 
         private class HiddenFrame
         {
@@ -235,6 +237,27 @@ namespace Desktop_Frames
             }
 
             var trayMenu = new ContextMenuStrip();
+            // "Update Now" sits at the top and is only visible while UpdateChecker knows of a
+            // newer release. Installed (MSI) builds download + verify + run the installer;
+            // portable builds have no installer to run, so they get the releases page.
+            _updateNowItem = new ToolStripMenuItem("Update Now...")
+            {
+                Visible = false,
+                Font = new System.Drawing.Font(System.Drawing.SystemFonts.MenuFont ?? System.Drawing.SystemFonts.DefaultFont, System.Drawing.FontStyle.Bold),
+            };
+            _updateNowItem.Click += (s, e) =>
+            {
+                var latest = UpdateChecker.LatestVersion;
+                var installer = UpdateChecker.Installer;
+                if (latest != null && installer != null && AppPaths.IsInstalled)
+                    System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => UpdateDialog.Show(latest, installer)));
+                else
+                    try { Process.Start(new ProcessStartInfo { FileName = UpdateChecker.ReleaseUrl, UseShellExecute = true }); } catch { }
+            };
+            trayMenu.Items.Add(_updateNowItem);
+            _updateNowSeparator = new ToolStripSeparator { Visible = false };
+            trayMenu.Items.Add(_updateNowSeparator);
+
             trayMenu.Items.Add("About...", null, (s, e) => AboutFormManager.ShowAboutForm());
             trayMenu.Items.Add("Options...", null, (s, e) => OptionsFormManager.ShowOptionsForm());
             trayMenu.Items.Add(new ToolStripSeparator());
@@ -310,6 +333,15 @@ namespace Desktop_Frames
             {
                 // Re-resolve live so a toggle made from the frame context menu is reflected here.
                 _frameEditModeItem.Checked = SettingsManager.FrameEditMode;
+
+                bool updateAvailable = UpdateChecker.IsUpdateAvailable;
+                _updateNowItem.Text = updateAvailable
+                    ? (AppPaths.IsInstalled && UpdateChecker.Installer != null
+                        ? $"Update Now to v{UpdateChecker.LatestVersion?.ToString(3)}..."
+                        : $"Download v{UpdateChecker.LatestVersion?.ToString(3)}...")
+                    : "Update Now...";
+                _updateNowItem.Visible = updateAvailable;
+                _updateNowSeparator.Visible = updateAvailable;
 
                 // The Smart Desktop section (manual sort command + auto-categorize toggle)
                 // stays visible regardless of the toggle: the sort command is the primary

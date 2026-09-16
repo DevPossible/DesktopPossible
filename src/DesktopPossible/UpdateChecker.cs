@@ -24,6 +24,12 @@ public static class UpdateChecker
     public static string ReleaseUrl { get; private set; } = ReleasesPage;
     public static bool IsUpdateAvailable => LatestVersion != null && LatestVersion > CurrentVersion;
 
+    /// <summary>The latest release's Windows installer asset, when the release has one.</summary>
+    public static ReleaseAsset? Installer { get; private set; }
+
+    /// <summary>A downloadable release asset as reported by the GitHub releases API.</summary>
+    public sealed record ReleaseAsset(string Name, string Url, long Size, string? Sha256);
+
     public static Version CurrentVersion =>
         Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 0, 0, 0);
 
@@ -64,6 +70,7 @@ public static class UpdateChecker
             if (!TryParseReleaseTag(release["tag_name"]?.ToString(), out var version)) return;
             LatestVersion = version;
             ReleaseUrl = release["html_url"]?.ToString() is { Length: > 0 } url ? url : ReleasesPage;
+            Installer = SelectInstallerAsset(release["assets"] as JArray);
 
             LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
                 $"UpdateChecker: latest release {LatestVersion}, running {CurrentVersion}");
@@ -75,6 +82,39 @@ public static class UpdateChecker
             // Offline, rate-limited, or GitHub down: try again next interval.
             LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General, $"UpdateChecker: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Picks the win-x64 MSI from a release's asset list (name, download URL, size and the
+    /// GitHub-computed SHA-256 digest when present). Null when the release has no installer.
+    /// </summary>
+    public static ReleaseAsset? SelectInstallerAsset(JArray? assets)
+    {
+        if (assets == null) return null;
+        foreach (var asset in assets)
+        {
+            string name = asset["name"]?.ToString() ?? "";
+            if (!name.EndsWith("-win-x64.msi", StringComparison.OrdinalIgnoreCase)) continue;
+
+            string? url = asset["browser_download_url"]?.ToString();
+            if (string.IsNullOrEmpty(url)) continue;
+
+            long size = asset["size"]?.Type == JTokenType.Integer ? asset["size"]!.Value<long>() : 0;
+            return new ReleaseAsset(name, url, size, ParseSha256Digest(asset["digest"]?.ToString()));
+        }
+        return null;
+    }
+
+    /// <summary>Extracts the lowercase hex hash from a GitHub asset digest ("sha256:&lt;hex&gt;"); null for anything else.</summary>
+    public static string? ParseSha256Digest(string? digest)
+    {
+        const string prefix = "sha256:";
+        if (digest == null || !digest.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return null;
+        string hex = digest[prefix.Length..].Trim().ToLowerInvariant();
+        if (hex.Length != 64) return null;
+        foreach (char c in hex)
+            if (!Uri.IsHexDigit(c)) return null;
+        return hex;
     }
 
     /// <summary>Parses a release tag such as "v1.2.3" (or "1.2.3") into a comparable 4-part version.</summary>
