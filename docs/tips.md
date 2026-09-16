@@ -60,9 +60,9 @@ Switching profiles can be done by selecting the appropriate profile name on tray
   
 
 ### Smart Desktop (Auto-Organize)
- - Tray menu → **Sort Desktop into Categories** looks at every loose icon on the desktop, works out what each one is (browser, developer tool, game, document, ...) and moves it into a matching category frame, creating frames as needed. One click, no rules to write.
+ - Options → Smart Desktop → **Arrange Now** looks at every loose icon on the desktop, works out what each one is (browser, developer tool, game, document, ...) and moves it into a matching category frame, creating frames as needed. One click, no rules to write.
  - **Enable Auto-Organize** (tray menu or Options → Smart Desktop) keeps doing this in the background as new icons land on the desktop; *Show execution toast notifications* tells you when it moved something.
- - Options → Smart Desktop also has **Arrange Now** and **Arrange Frames** (auto-size and tile all frames).
+ - Options → Smart Desktop also has **Arrange Frames** (auto-size and tile all frames).
   
  
 
