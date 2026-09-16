@@ -270,24 +270,8 @@ namespace Desktop_Frames
             trayMenu.Items.Add(smartTopSeparator);
 
             // --- SMART DESKTOP OPTIONS ---
-            trayMenu.Items.Add("Sort Desktop into Categories", null, async (s, e) =>
-            {
-                // Fire-and-forget: classification runs in the background; toast on completion.
-                try
-                {
-                    var (items, categories) = await AppCategorizer.SortDesktopAsync();
-                    System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        SmartToast.Show("Desktop sorted", $"Sorted {items} items into {categories} categories");
-                    }));
-                }
-                catch (Exception ex)
-                {
-                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General,
-                        $"Sort Desktop into Categories failed: {ex.Message}");
-                }
-            });
-
+            // The one-shot "Sort Desktop into Categories" command lives only in
+            // Options → Smart Desktop ("Arrange Now"); the tray keeps just the toggle.
             _autoOrganizeMenuItem = new ToolStripMenuItem("Enable Auto-Organize") { CheckOnClick = true };
             _autoOrganizeMenuItem.Checked = SettingsManager.EnableAutoOrganize;
             _autoOrganizeMenuItem.Click += (s, e) =>
@@ -343,9 +327,6 @@ namespace Desktop_Frames
                 _updateNowItem.Visible = updateAvailable;
                 _updateNowSeparator.Visible = updateAvailable;
 
-                // The Smart Desktop section (manual sort command + auto-categorize toggle)
-                // stays visible regardless of the toggle: the sort command is the primary
-                // entry point and must always be reachable.
                 _autoOrganizeMenuItem.Checked = SettingsManager.EnableAutoOrganize;
             };
 

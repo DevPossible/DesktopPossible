@@ -851,7 +851,7 @@ namespace Desktop_Frames
                        "Each new arrival is automatically categorized (Productivity, Utilities, Games, VR, " +
                        "Developer Tools, Security Apps, Media) and moved into its category frame — the frame " +
                        "is created automatically when needed. Items that cannot be categorized are left alone. " +
-                       "Use \"Arrange Now\" (or the tray menu's \"Sort Desktop into Categories\") to sort " +
+                       "Use \"Arrange Now\" to sort " +
                        "everything already on the Desktop at any time, whether or not Auto-Organize is enabled.",
                 FontStyle = FontStyles.Italic,
                 Foreground = Brushes.Gray,
