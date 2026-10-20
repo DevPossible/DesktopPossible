@@ -98,16 +98,43 @@ namespace Desktop_Frames
             }
         }
 
+        /// <summary>FOLDERFLAGS bits that make Explorer ignore or snap explicit icon positions.</summary>
+        public const uint FWF_AUTOARRANGE = 0x1, FWF_SNAPTOGRID = 0x4;
+
         /// <summary>
-        /// True when "Auto arrange icons" is on: Explorer then ignores explicit positions, so
-        /// icons cannot be parked. Null when the desktop view is unavailable.
+        /// The desktop view's FOLDERFLAGS ("Auto arrange icons" = FWF_AUTOARRANGE, "Align icons to
+        /// grid" = FWF_SNAPTOGRID), or null when the desktop view is unavailable.
         /// </summary>
-        public static bool? IsAutoArrange()
+        public static uint? GetFolderFlags()
         {
             var view = GetView();
             if (view == null) return null;
-            try { return view.GetAutoArrange() == 0; } // S_OK = on, S_FALSE = off
+            try
+            {
+                if (view is not IFolderView2 v2) return null;
+                v2.GetCurrentFolderFlags(out uint flags);
+                return flags;
+            }
             catch { return null; }
+            finally { Marshal.ReleaseComObject(view); }
+        }
+
+        /// <summary>Sets the <paramref name="mask"/> bits of the desktop view's FOLDERFLAGS to <paramref name="flags"/>.</summary>
+        public static bool SetFolderFlags(uint mask, uint flags)
+        {
+            var view = GetView();
+            if (view == null) return false;
+            try
+            {
+                if (view is not IFolderView2 v2) return false;
+                v2.SetCurrentFolderFlags(mask, flags);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General, $"DesktopFolderView.SetFolderFlags: {ex.Message}");
+                return false;
+            }
             finally { Marshal.ReleaseComObject(view); }
         }
 
@@ -215,6 +242,20 @@ namespace Desktop_Frames
             [PreserveSig] int GetAutoArrange();
             void SelectItem(int iItem, uint dwFlags);
             void SelectAndPositionItems(uint cidl, IntPtr apidl, IntPtr apt, uint dwFlags);
+        }
+
+        // IFolderView2 extends IFolderView: its vtable repeats IFolderView's slots first
+        // (declared as placeholders — only the folder-flag methods are called through it).
+        [ComImport, Guid("1af3a467-214f-4298-908e-06b03e0b39f9"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IFolderView2
+        {
+            void _GetCurrentViewMode(); void _SetCurrentViewMode(); void _GetFolder(); void _Item(); void _ItemCount();
+            void _Items(); void _GetSelectionMarkedItem(); void _GetFocusedItem(); void _GetItemPosition(); void _GetSpacing();
+            void _GetDefaultSpacing(); void _GetAutoArrange(); void _SelectItem(); void _SelectAndPositionItems();
+            void SetGroupBy(); void GetGroupBy(); void SetViewProperty(); void GetViewProperty();
+            void SetTileViewProperties(); void SetExtendedTileViewProperties(); void SetText();
+            void SetCurrentFolderFlags(uint dwMask, uint dwFlags);
+            void GetCurrentFolderFlags(out uint pdwFlags);
         }
 
         #endregion
