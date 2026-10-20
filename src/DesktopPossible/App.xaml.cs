@@ -149,6 +149,11 @@ namespace Desktop_Frames
                     DesktopIconParker.Start();
                     SessionEnding += (s2, ev2) => DesktopIconParker.Stop(); // before Explorer saves the layout
 
+                    // Move items still stored in frame folders out to the Desktop, in the
+                    // background once startup has settled (Explorer's desktop must be ready).
+                    Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
+                        Dispatcher.BeginInvoke(new Action(DesktopMigration.StartIfNeeded)));
+
                     // Watch for docking, monitor changes, resolution/scaling changes and RDP
                     // sessions. LoadAndCreateFrames has already laid the frames out for the
                     // monitors attached at startup.

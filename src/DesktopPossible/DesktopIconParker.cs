@@ -196,31 +196,50 @@ namespace Desktop_Frames
             }
         }
 
-        /// <summary>Full path of every item in every frame (all tabs) of the active profile.</summary>
+        // Other profiles' framed paths, cached by frames.json write time (reconcile runs often).
+        private static readonly Dictionary<string, (DateTime Stamp, HashSet<string> Paths)> _otherProfiles =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Full path of every item in every frame (all tabs) of EVERY profile. Desktop icons are
+        /// shared by all profiles and virtual desktops (virtual-desktop automation switches
+        /// profiles), so an item framed in an inactive profile must stay hidden too.
+        /// </summary>
         private static HashSet<string> CollectFramedPaths()
         {
             var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            void AddItems(JArray? items)
-            {
-                if (items == null) return;
-                foreach (var item in items.OfType<JObject>())
-                {
-                    string? name = item["Filename"]?.ToString();
-                    if (string.IsNullOrEmpty(name) || name.StartsWith("INTERNAL_BLANK_", StringComparison.Ordinal)) continue;
-                    try { paths.Add(Path.GetFullPath(name)); } catch { }
-                }
-            }
+            string activeDir = Path.GetFullPath(ProfileManager.CurrentProfileDir);
 
-            foreach (dynamic frame in FrameDataManager.FrameData ?? new List<dynamic>())
+            // Active profile: live in-memory frames (may hold unsaved changes).
+            var active = new ProfileFrameSet { Dir = activeDir, IsActive = true, Frames = FrameDataManager.FrameData ?? new List<dynamic>(), Save = () => { } };
+            foreach (var (_, full, _) in AllProfileFrames.Items(active)) paths.Add(full);
+
+            if (!Directory.Exists(AllProfileFrames.ProfilesRoot)) return paths;
+            foreach (string dir in Directory.GetDirectories(AllProfileFrames.ProfilesRoot))
             {
+                if (string.Equals(Path.GetFullPath(dir), activeDir, StringComparison.OrdinalIgnoreCase)) continue;
+                string json = Path.Combine(dir, "frames.json");
                 try
                 {
-                    if (frame.ItemsType?.ToString() != "Data") continue;
-                    AddItems(frame.Items as JArray);
-                    if (frame.Tabs is JArray tabs)
-                        foreach (var tab in tabs.OfType<JObject>()) AddItems(tab["Items"] as JArray);
+                    if (!File.Exists(json)) continue;
+                    DateTime stamp = File.GetLastWriteTimeUtc(json);
+                    if (!_otherProfiles.TryGetValue(json, out var cached) || cached.Stamp != stamp)
+                    {
+                        var token = JToken.Parse(File.ReadAllText(json));
+                        var set = new ProfileFrameSet
+                        {
+                            Dir = Path.GetFullPath(dir), IsActive = false, Save = () => { },
+                            Frames = (token as JArray ?? new JArray(token)).OfType<JObject>().Cast<dynamic>().ToList(),
+                        };
+                        cached = (stamp, new HashSet<string>(AllProfileFrames.Items(set).Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase));
+                        _otherProfiles[json] = cached;
+                    }
+                    paths.UnionWith(cached.Paths);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.General, $"DesktopIconParker: cannot read '{json}': {ex.Message}");
+                }
             }
             return paths;
         }

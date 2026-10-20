@@ -210,7 +210,7 @@ Access settings through the system tray icon → "Options":
 
 **Startup:** Start with Windows.
 
-**Selections:** Single Click to Launch (restart required) · Snap frames to other frames and screen edges · Keep framed items on the Desktop (experimental: items dropped into a frame stay real files on the Desktop and their desktop icons are hidden while DesktopPossible runs; they reappear when you quit) · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars.
+**Selections:** Single Click to Launch (restart required) · Snap frames to other frames and screen edges · Keep framed items on the Desktop (on by default: items dropped into a frame stay real files on the Desktop and their desktop icons are hidden while DesktopPossible runs, for every profile and virtual desktop; they reappear when you quit. Items that older versions stored in frame folders are moved to the Desktop automatically at startup, keeping their frame and position; a backup of the frame data is taken first) · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars.
 
 **Virtual Desktops:** Automatically Switch Profiles with Virtual Desktop.
 

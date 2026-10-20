@@ -547,6 +547,9 @@ namespace Desktop_Frames
             Framemanager.ReloadFrames(silent);
             // -----------------------------------------
 
+            // The new profile's frames may still hold items in frame folders.
+            DesktopMigration.StartIfNeeded();
+
             if (TrayManager.Instance != null)
             {
                 // --- THE FIX IS HERE ---
