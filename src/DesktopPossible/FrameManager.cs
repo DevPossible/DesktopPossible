@@ -3768,7 +3768,7 @@ namespace Desktop_Frames
         /// <param name="frameId">The frame ID to synchronize</param>
         /// <param name="sourceLocation">Where the change originated: "tab0" or "main"</param>
         /// <param name="operationType">Type of operation: "add", "remove", "full"</param>
-        private static void SynchronizeTab0Content(string frameId, string sourceLocation, string operationType = "full")
+        internal static void SynchronizeTab0Content(string frameId, string sourceLocation, string operationType = "full")
         {
             if (_isSynchronizing)
             {
@@ -7602,15 +7602,22 @@ namespace Desktop_Frames
                             // --- DATA FRAME LOGIC ---
                             if (frame.ItemsType?.ToString() == "Data")
                             {
-                                // Every Data frame is folder-backed: the item's backing file lives
-                                // in the frame's own store folder and Filename is its ABSOLUTE path.
-                                string frameFolder;
-                                try { frameFolder = FrameStore.GetFrameFolder(frame); }
-                                catch (Exception storeEx)
+                                // Data frames are folder-backed: the item's backing file lives in the
+                                // frame's own store folder and Filename is its ABSOLUTE path — unless
+                                // "Keep framed items on the Desktop" is on: then the item is a file on
+                                // the Desktop and its desktop icon is parked while we run.
+                                bool keepOnDesktop = SettingsManager.KeepFramedItemsOnDesktop;
+                                bool referencedInPlace = false;
+                                string frameFolder = null;
+                                if (!keepOnDesktop)
                                 {
-                                    LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
-                                        $"Cannot create frame store folder: {storeEx.Message}");
-                                    continue;
+                                    try { frameFolder = FrameStore.GetFrameFolder(frame); }
+                                    catch (Exception storeEx)
+                                    {
+                                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.FrameCreation,
+                                            $"Cannot create frame store folder: {storeEx.Message}");
+                                        continue;
+                                    }
                                 }
                                 string shortcutName;
 
@@ -7660,7 +7667,35 @@ namespace Desktop_Frames
 
                                 bool isDroppedExe = System.IO.Path.GetExtension(droppedFile).ToLower() == ".exe";
 
-                                if (isFolderFlag || isDroppedExe)
+                                if (keepOnDesktop)
+                                {
+                                    try
+                                    {
+                                        shortcutName = PlaceOnDesktopForFrame(droppedFile, isDroppedExe, dropIsCopy, out referencedInPlace);
+                                    }
+                                    catch (Exception placeEx)
+                                    {
+                                        LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.IconHandling,
+                                            $"Drop: could not place '{droppedFile}' on the Desktop: {placeEx.Message}");
+                                        continue;
+                                    }
+
+                                    if (!isDroppedShortcut && !isDroppedUrlFile && !isFolderFlag && !shortcutName.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        // Raw file: its own target, never a folder.
+                                        targetPath = shortcutName;
+                                        isFolder = false;
+                                    }
+
+                                    // An icon lives in one frame: framing a desktop item that is already
+                                    // framed elsewhere (e.g. dragged from a File Explorer window on the
+                                    // Desktop folder) moves it here.
+                                    RemoveItemReferences(shortcutName, frame.Id?.ToString());
+
+                                    // Icon management only: Explorer must not move or delete anything.
+                                    if (referencedInPlace && !IconDragDropManager.IsOleDragInProgress) e.Effects = DragDropEffects.None;
+                                }
+                                else if (isFolderFlag || isDroppedExe)
                                 {
                                     // CASE A: folders and executables stay IN PLACE — a new .lnk
                                     // pointing at them is created in the frame folder.
@@ -7833,7 +7868,8 @@ namespace Desktop_Frames
                                     AttachIconContextMenu(sp, newItem, frame, win);
 
                                     // --- HIDDEN TWEAK: Delete Original Shortcut On Drop ---
-                                    if (SettingsManager.DeleteOriginalShortcutsOnDrop && isDroppedShortcut && !isFolder && !isWebLink)
+                                    // (Never for a desktop item framed in place: that file IS the item.)
+                                    if (SettingsManager.DeleteOriginalShortcutsOnDrop && !keepOnDesktop && isDroppedShortcut && !isFolder && !isWebLink)
                                     {
                                         try
                                         {
@@ -8579,6 +8615,80 @@ namespace Desktop_Frames
             double frameWidth = 230;
             try { frameWidth = ToDoubleInvariant(frame.Width?.ToString(), 230); } catch { }
             return GridLayout.ColumnsForWidth(frameWidth - 10, cellWidth); // ~10px frame chrome
+        }
+
+        /// <summary>
+        /// "Keep framed items on the Desktop": returns the Desktop path a dropped item is framed
+        /// by. A desktop item is framed IN PLACE (no file operation — icon management only); an
+        /// item from anywhere else first gets what a drop on the Desktop would do (Explorer's
+        /// defaults: move on the same volume, copy across volumes or with Ctrl, a shortcut for a
+        /// program), and the resulting desktop item is framed.
+        /// </summary>
+        private static string PlaceOnDesktopForFrame(string droppedFile, bool isExe, bool copy, out bool referencedInPlace)
+        {
+            referencedInPlace = DesktopIconParker.IsDesktopItem(droppedFile);
+            if (referencedInPlace) return System.IO.Path.GetFullPath(droppedFile);
+
+            string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            if (isExe)
+            {
+                string lnk = FrameStore.UniqueDestinationPath(desktopDir, System.IO.Path.GetFileNameWithoutExtension(droppedFile) + ".lnk");
+                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell")!)!;
+                dynamic shortcut = shell.CreateShortcut(lnk);
+                shortcut.TargetPath = droppedFile;
+                shortcut.WorkingDirectory = System.IO.Path.GetDirectoryName(droppedFile);
+                shortcut.Save();
+                return lnk;
+            }
+
+            bool sameVolume = string.Equals(System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(droppedFile)),
+                System.IO.Path.GetPathRoot(desktopDir), StringComparison.OrdinalIgnoreCase);
+            return FrameStore.MoveIntoFolder(desktopDir, droppedFile, copy || !sameVolume);
+        }
+
+        /// <summary>
+        /// Removes every reference to <paramref name="path"/> from the Data frames other than
+        /// <paramref name="exceptFrameId"/> (all tabs), persists, and refreshes those frames.
+        /// </summary>
+        private static void RemoveItemReferences(string path, string exceptFrameId)
+        {
+            try
+            {
+                bool Matches(JToken t)
+                {
+                    string name = t["Filename"]?.ToString();
+                    if (string.IsNullOrEmpty(name) || name.StartsWith("INTERNAL_BLANK_")) return false;
+                    try { return string.Equals(System.IO.Path.GetFullPath(name), path, StringComparison.OrdinalIgnoreCase); }
+                    catch { return false; }
+                }
+                int RemoveFrom(JArray items)
+                {
+                    if (items == null) return 0;
+                    var hits = items.Where(Matches).ToList();
+                    foreach (var hit in hits) hit.Remove();
+                    return hits.Count;
+                }
+
+                bool changed = false;
+                foreach (dynamic f in FrameDataManager.FrameData.ToList())
+                {
+                    if (f.ItemsType?.ToString() != "Data" || f.Id?.ToString() == exceptFrameId) continue;
+                    int removed = RemoveFrom(f.Items as JArray);
+                    if (f.Tabs is JArray tabs)
+                        foreach (var tab in tabs.OfType<JObject>()) removed += RemoveFrom(tab["Items"] as JArray);
+                    if (removed == 0) continue;
+
+                    changed = true;
+                    string id = f.Id?.ToString();
+                    var win = System.Windows.Application.Current?.Windows.OfType<NonActivatingWindow>().FirstOrDefault(w => w.Tag?.ToString() == id);
+                    if (win != null) RefreshFrameUsingFormApproach(win, f);
+                }
+                if (changed) FrameDataManager.SaveFrameData();
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.IconHandling, $"RemoveItemReferences '{path}': {ex.Message}");
+            }
         }
 
         /// <summary>

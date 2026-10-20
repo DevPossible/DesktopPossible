@@ -35,6 +35,10 @@ namespace Desktop_Frames
         public static bool ShowPortalExtensions { get; set; } = false;
         public static bool NoWildcardsOnPortalFilter { get; set; } = false;
         public static bool IsSnapEnabled { get; set; } = true;
+        // Experimental Fences-style storage: desktop items dropped into a frame stay on the
+        // Desktop (their icons are parked off-screen while the app runs, see DesktopIconParker)
+        // instead of moving into the frame's store folder.
+        public static bool KeepFramedItemsOnDesktop { get; set; } = false;
         public static bool ShowBackgroundImageOnPortalFrames { get; set; } = true;
         public static bool UseRecycleBin { get; set; } = true;
         public static bool ShowInTray { get; set; } = true;
@@ -253,6 +257,7 @@ namespace Desktop_Frames
             return new
             {
                 IsSnapEnabled,
+                KeepFramedItemsOnDesktop,
                 ShowBackgroundImageOnPortalFrames,
                 ShowInTray,
                 UseRecycleBin,
@@ -346,6 +351,7 @@ namespace Desktop_Frames
             // default as the new one so existing users stop having larger backups refused.
             if (MaxBackupSizeMB == 100) MaxBackupSizeMB = DefaultMaxBackupSizeMB;
             try { IsSnapEnabled = data.IsSnapEnabled ?? true; } catch { IsSnapEnabled = true; }
+            try { KeepFramedItemsOnDesktop = data.KeepFramedItemsOnDesktop ?? false; } catch { KeepFramedItemsOnDesktop = false; }
             try { ShowBackgroundImageOnPortalFrames = data.ShowBackgroundImageOnPortalFrames ?? true; } catch { ShowBackgroundImageOnPortalFrames = true; }
             try { ShowInTray = data.ShowInTray ?? true; } catch { ShowInTray = true; }
             try { UseRecycleBin = data.UseRecycleBin ?? true; } catch { UseRecycleBin = true; }

@@ -149,6 +149,9 @@ namespace Desktop_Frames
 
                 LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.FrameCreation,
                     $"Successfully loaded {_frameData?.Count ?? 0} frames from JSON");
+
+                // A (re)load — e.g. a profile switch — changes which desktop icons are framed.
+                DesktopIconParker.RequestReconcile();
             }
             catch (Exception ex)
             {
@@ -252,6 +255,9 @@ namespace Desktop_Frames
                 // (No-op while the display configuration is unstable, and when the content
                 // is unchanged the sidecar is not rewritten.)
                 DisplayLayoutManager.MirrorActiveLayout();
+
+                // Items may have joined or left frames: park/restore their desktop icons.
+                DesktopIconParker.RequestReconcile();
             }
             catch (Exception ex)
             {

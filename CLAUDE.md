@@ -108,6 +108,10 @@ The app is ~58 single-class files in `src/DesktopPossible/`, namespace
 ### Desktop integration
 
 - `DesktopIconManager.cs` — native desktop icon show/hide.
+- `DesktopIconParker.cs` + `IconParking.cs` (pure rules) + `DesktopFolderView.cs`
+  (IFolderView COM) — "Keep framed items on the Desktop": framed desktop items stay
+  real files and their desktop icons are parked off-screen while the app runs, restored
+  on exit, by a `--icon-guard` process after a crash, and from `parked-icons.json`.
 - `DesktopMouseHook.cs` — WH_MOUSE_LL hook; double-click on the bare desktop
   wakes frames.
 - `TrayManager.cs` — system tray icon and menu.

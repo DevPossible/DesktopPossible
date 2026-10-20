@@ -56,6 +56,15 @@ namespace Desktop_Frames
                     return;
                 }
 
+                // A framed desktop item already lives on the Desktop: its icon reappears when it
+                // leaves the frame, so copying it would only create a duplicate.
+                if (DesktopIconParker.IsDesktopItem(filePath))
+                {
+                    LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate,
+                        $"'{displayName}' is already on the Desktop; nothing to send");
+                    return;
+                }
+
                 // Get desktop path - BackupManager environment detection pattern
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameUpdate,

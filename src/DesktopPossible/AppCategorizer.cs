@@ -1422,13 +1422,22 @@ namespace Desktop_Frames
         {
             try
             {
-                string frameFolder = FrameStore.GetFrameFolder(frame);
                 bool isShortcut = item.Ext == ".lnk" || item.Ext == ".url";
 
                 string fullTarget;
                 bool isFolder = false;
-                if (isShortcut || item.IsRawFile)
+                if (SettingsManager.KeepFramedItemsOnDesktop)
                 {
+                    // Icon management: the desktop item is framed in place and its desktop
+                    // icon parked while the app runs (DesktopIconParker) — no file moves.
+                    fullTarget = Path.GetFullPath(item.Path);
+                    isFolder = item.IsRawFolder ||
+                               (isShortcut && !item.IsWebLink && !string.IsNullOrEmpty(item.Target) &&
+                                Directory.Exists(item.Target));
+                }
+                else if (isShortcut || item.IsRawFile)
+                {
+                    string frameFolder = FrameStore.GetFrameFolder(frame);
                     // CASE B / CASE C: move the original exactly as-is.
                     fullTarget = FrameStore.MoveIntoFolder(frameFolder, item.Path, copy: false);
                     isFolder = item.IsRawFolder ||
@@ -1438,6 +1447,7 @@ namespace Desktop_Frames
                 else
                 {
                     // CASE A: wrap the raw executable in a new shortcut (late-bound COM).
+                    string frameFolder = FrameStore.GetFrameFolder(frame);
                     fullTarget = FrameStore.UniqueDestinationPath(frameFolder,
                         Path.GetFileNameWithoutExtension(item.Path) + ".lnk");
                     try
