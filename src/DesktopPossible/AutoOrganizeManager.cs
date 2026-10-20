@@ -20,6 +20,26 @@ namespace Desktop_Frames
         private static FileSystemWatcher _watcher;
         private static readonly string _desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
+        // Desktop paths that must never be auto-sorted until the given time (e.g. items the
+        // desktop migration is moving out of their frame folders: they keep their own frame).
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _ignoreUntil =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Keeps auto-organize off the given desktop paths for <paramref name="duration"/>.</summary>
+        public static void Ignore(System.Collections.Generic.IEnumerable<string> paths, TimeSpan duration)
+        {
+            DateTime until = DateTime.UtcNow + duration;
+            foreach (string p in paths) _ignoreUntil[p] = until;
+        }
+
+        private static bool IsIgnored(string path)
+        {
+            if (!_ignoreUntil.TryGetValue(path, out var until)) return false;
+            if (DateTime.UtcNow < until) return true;
+            _ignoreUntil.TryRemove(path, out _);
+            return false;
+        }
+
         public static void Initialize()
         {
             if (SettingsManager.EnableAutoOrganize) Start();
@@ -105,7 +125,7 @@ namespace Desktop_Frames
         {
             try
             {
-                if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize) return;
+                if (!File.Exists(filePath) || !SettingsManager.EnableAutoOrganize || IsIgnored(filePath)) return;
 
                 // App-like items (.lnk/.url/.exe) plus real files (documents/images/other).
                 if (!AppCategorizer.IsCandidateFile(filePath)) return;
@@ -119,6 +139,7 @@ namespace Desktop_Frames
                     return;
                 }
 
+                if (IsIgnored(filePath)) return; // re-check: the wait above can be long
                 string displayName = Path.GetFileNameWithoutExtension(filePath);
                 var (moved, _) = await AppCategorizer.SortDesktopAsync(new[] { filePath });
 

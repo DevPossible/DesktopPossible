@@ -1,145 +1,110 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
-using System.Windows.Forms; // For Screen.AllScreens
-using System.Windows.Media; // For VisualTreeHelper
 
 namespace Desktop_Frames
 {
+    /// <summary>
+    /// Guide-line snapping for frame move/resize gestures. Every other frame contributes
+    /// infinite vertical guides at its left/right edges and horizontal guides at its top/bottom
+    /// edges; every monitor's work area contributes its four edges. While dragging, whichever
+    /// of the frame's edges is nearest a guide (within <see cref="ThresholdDip"/>) sticks to it;
+    /// while resizing, only the edges being pulled snap. Frames side by side (overlapping on the
+    /// other axis) snap to each other with a <see cref="GapDip"/> gap instead of touching.
+    ///
+    /// Pure geometry in device pixels: rects come from GetWindowRect and the WM_MOVING/WM_SIZING
+    /// proposal, so mixed-DPI monitors need no DIP conversion. The window plumbing lives in
+    /// Framemanager.SnapGestureRect.
+    /// </summary>
     public static class SnapManager
     {
-        private const double SnapThreshold = 20; // Reduced slightly for tighter feel
-        private const double MinGap = 10;        // Gap between snapped frames
+        /// <summary>How close (DIPs) an edge must come to a guide to stick to it.</summary>
+        public const double ThresholdDip = 10;
+
+        /// <summary>Gap (DIPs) kept between neighbouring frames snapped edge to edge.</summary>
+        public const double GapDip = 10;
+
+        /// <summary>A resize snap never shrinks the frame below this many device pixels.</summary>
+        private const int MinSnappedSize = 40;
 
         /// <summary>
-        /// Deprecated. Continuous per-move snapping (on LocationChanged while the mouse was down)
-        /// fought DragMove — the OS pulled the window toward the mouse while this pulled it toward the
-        /// snap line every frame, causing a visible "wobble" — and it wrote frames.json on every move.
-        /// Snapping now happens once when the drag ends via <see cref="SnapNow"/>. Kept as a no-op so
-        /// existing call sites still compile.
+        /// Snaps a raw gesture rect to the guides of <paramref name="others"/> and
+        /// <paramref name="workAreas"/>. <paramref name="edge"/> is FrameGrid.GestureMove for a
+        /// move, otherwise the WM_SIZING edge code; a move keeps the size, a resize moves only
+        /// the pulled edges. Returns the rect unchanged when no guide is within threshold.
         /// </summary>
-        public static void AddSnapping(NonActivatingWindow win, IDictionary<string, object> FrameData) { }
+        public static (int Left, int Top, int Right, int Bottom) SnapToGuides(
+            (int Left, int Top, int Right, int Bottom) rect, int edge,
+            IReadOnlyList<(int Left, int Top, int Right, int Bottom)> others,
+            IReadOnlyList<(int Left, int Top, int Right, int Bottom)> workAreas,
+            int threshold, int gap)
+        {
+            bool move = edge == FrameGrid.GestureMove;
+            bool left = move || edge is FrameGrid.GestureLeft or FrameGrid.GestureTopLeft or FrameGrid.GestureBottomLeft;
+            bool right = move || edge is FrameGrid.GestureRight or FrameGrid.GestureTopRight or FrameGrid.GestureBottomRight;
+            bool top = move || edge is FrameGrid.GestureTop or FrameGrid.GestureTopLeft or FrameGrid.GestureTopRight;
+            bool bottom = move || edge is FrameGrid.GestureBottom or FrameGrid.GestureBottomLeft or FrameGrid.GestureBottomRight;
+
+            var (l, t, r, b) = rect;
+
+            // Horizontal axis: neighbours are frames overlapping vertically.
+            var xs = new List<(int Lo, int Hi, bool Neighbour)>();
+            foreach (var o in others) xs.Add((o.Left, o.Right, t < o.Bottom && o.Top < b));
+            var (dl, dr) = BestAxisSnap(l, r, left, right, xs, workAreas, wa => (wa.Left, wa.Right), threshold, gap);
+
+            // Vertical axis: neighbours are frames overlapping horizontally.
+            var ys = new List<(int Lo, int Hi, bool Neighbour)>();
+            foreach (var o in others) ys.Add((o.Top, o.Bottom, l < o.Right && o.Left < r));
+            var (dt, db) = BestAxisSnap(t, b, top, bottom, ys, workAreas, wa => (wa.Top, wa.Bottom), threshold, gap);
+
+            if (move) return (l + dl, t + dt, r + dl, b + dt);
+
+            int nl = l + dl, nr = r + dr, nt = t + dt, nb = b + db;
+            if (nr - nl < MinSnappedSize) { nl = l; nr = r; }
+            if (nb - nt < MinSnappedSize) { nt = t; nb = b; }
+            return (nl, nt, nr, nb);
+        }
 
         /// <summary>
-        /// Snaps the window to nearby frame edges / screen edges ONCE. Call when a drag finishes
-        /// (after DragMove returns) so there's no fight with the OS move loop. The frame's own
-        /// LocationChanged handler persists the resulting X/Y.
+        /// Finds the smallest snap on one axis. Returns the delta for the low and high edge:
+        /// both equal for a move (the whole rect shifts), or each edge's own delta for a resize.
         /// </summary>
-        public static void SnapNow(NonActivatingWindow win)
+        private static (int DLo, int DHi) BestAxisSnap(int lo, int hi, bool snapLo, bool snapHi,
+            List<(int Lo, int Hi, bool Neighbour)> others,
+            IReadOnlyList<(int Left, int Top, int Right, int Bottom)> workAreas,
+            Func<(int Left, int Top, int Right, int Bottom), (int Lo, int Hi)> axis,
+            int threshold, int gap)
         {
-            if (win == null || !SettingsManager.IsSnapEnabled) return;
-            try
+            int? bestLo = null, bestHi = null;
+
+            void Try(ref int? best, int from, int to)
             {
-                var allFrames = System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>().ToList();
-                var (newLeft, newTop) = CalculateSnapPosition(win, allFrames);
-                if (Math.Abs(win.Left - newLeft) > 0.1 || Math.Abs(win.Top - newTop) > 0.1)
-                {
-                    win.Left = newLeft;
-                    win.Top = newTop;
-                }
-            }
-            catch { }
-        }
-
-        private static (double, double) CalculateSnapPosition(NonActivatingWindow current, List<NonActivatingWindow> allFrames)
-        {
-            if (!SettingsManager.IsSnapEnabled) return (current.Left, current.Top);
-
-            double currentLeft = current.Left;
-            double currentTop = current.Top;
-            double currentRight = currentLeft + current.Width;
-            double currentBottom = currentTop + current.Height;
-
-            // We look for the SMALLEST adjustment needed to snap
-            double minDeltaX = double.MaxValue;
-            double minDeltaY = double.MaxValue;
-
-            // 1. Snap to Other Frames
-            foreach (var other in allFrames)
-            {
-                if (other == current) continue;
-
-                double otherLeft = other.Left;
-                double otherTop = other.Top;
-                double otherRight = otherLeft + other.Width;
-                double otherBottom = otherTop + other.Height;
-
-                // Horizontal Checks
-                // Snap Right Side to Other's Left
-                CheckSnap(currentRight, otherLeft - MinGap, ref minDeltaX);
-                // Snap Left Side to Other's Right
-                CheckSnap(currentLeft, otherRight + MinGap, ref minDeltaX);
-                // Align Lefts
-                CheckSnap(currentLeft, otherLeft, ref minDeltaX);
-                // Align Rights
-                CheckSnap(currentRight, otherRight, ref minDeltaX);
-
-                // Vertical Checks
-                // Snap Bottom to Other's Top
-                CheckSnap(currentBottom, otherTop - MinGap, ref minDeltaY);
-                // Snap Top to Other's Bottom
-                CheckSnap(currentTop, otherBottom + MinGap, ref minDeltaY);
-                // Align Tops
-                CheckSnap(currentTop, otherTop, ref minDeltaY);
-                // Align Bottoms
-                CheckSnap(currentBottom, otherBottom, ref minDeltaY);
+                int d = to - from;
+                if (Math.Abs(d) <= threshold && (best == null || Math.Abs(d) < Math.Abs(best.Value))) best = d;
             }
 
-            // 2. Snap to Screen Edges (DPI Aware)
-            // We need to get the DPI scale factor. Assuming uniform scaling for simplicity, 
-            // but ideally should be per-monitor.
-            double dpiScale = GetDpiScale(current);
-
-            foreach (var screen in Screen.AllScreens)
+            foreach (var o in others)
             {
-                // Convert Pixel bounds to WPF Coordinates
-                double sLeft = screen.Bounds.Left / dpiScale;
-                double sTop = screen.Bounds.Top / dpiScale;
-                double sRight = screen.Bounds.Right / dpiScale;
-                double sBottom = screen.Bounds.Bottom / dpiScale;
-
-                // Horizontal Screen Snaps
-                CheckSnap(currentLeft, sLeft, ref minDeltaX);
-                CheckSnap(currentRight, sRight, ref minDeltaX);
-
-                // Vertical Screen Snaps
-                CheckSnap(currentTop, sTop, ref minDeltaY);
-                CheckSnap(currentBottom, sBottom, ref minDeltaY);
+                // Same-side edges align; opposite edges abut, with a gap when side by side.
+                int abutGap = o.Neighbour ? gap : 0;
+                if (snapLo) { Try(ref bestLo, lo, o.Lo); Try(ref bestLo, lo, o.Hi + abutGap); }
+                if (snapHi) { Try(ref bestHi, hi, o.Hi); Try(ref bestHi, hi, o.Lo - abutGap); }
+            }
+            foreach (var wa in workAreas)
+            {
+                var (waLo, waHi) = axis(wa);
+                if (snapLo) Try(ref bestLo, lo, waLo);
+                if (snapHi) Try(ref bestHi, hi, waHi);
             }
 
-            // 3. Apply the smallest valid delta found
-            double finalX = (Math.Abs(minDeltaX) < double.MaxValue) ? currentLeft + minDeltaX : currentLeft;
-            double finalY = (Math.Abs(minDeltaY) < double.MaxValue) ? currentTop + minDeltaY : currentTop;
-
-            return (finalX, finalY);
-        }
-
-        // Helper to check if a snap point is closer than the current best
-        private static void CheckSnap(double currentPos, double targetPos, ref double minDelta)
-        {
-            double delta = targetPos - currentPos;
-
-            // Check if within threshold AND closer than any previous match
-            if (Math.Abs(delta) <= SnapThreshold && Math.Abs(delta) < Math.Abs(minDelta))
+            if (snapLo && snapHi)
             {
-                minDelta = delta;
+                // A move: shift by whichever edge is closer to its guide.
+                int? d = bestLo == null ? bestHi
+                       : bestHi == null ? bestLo
+                       : Math.Abs(bestLo.Value) <= Math.Abs(bestHi.Value) ? bestLo : bestHi;
+                return (d ?? 0, d ?? 0);
             }
-        }
-
-        // Helper to get DPI scaling
-        private static double GetDpiScale(Visual visual)
-        {
-            try
-            {
-                var source = PresentationSource.FromVisual(visual);
-                if (source != null && source.CompositionTarget != null)
-                {
-                    return source.CompositionTarget.TransformToDevice.M11;
-                }
-            }
-            catch { }
-            return 1.0; // Default if fails
+            return (bestLo ?? 0, bestHi ?? 0);
         }
     }
 }

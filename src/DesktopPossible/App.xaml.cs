@@ -24,6 +24,15 @@ namespace Desktop_Frames
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
+            // Icon guard mode (see DesktopIconParker): no UI, no profile, no single-instance
+            // check — just wait for the app to exit and put back any icons it left parked.
+            if (e.Args.Length == 2 && e.Args[0] == DesktopIconParker.GuardArgument && int.TryParse(e.Args[1], out int guardedPid))
+            {
+                DesktopIconParker.RunGuard(guardedPid);
+                Shutdown();
+                return;
+            }
+
             // Crash logging: record any unhandled exception (with stack) so crashes aren't silent.
             this.DispatcherUnhandledException += (s2, ex2) =>
                 LogManager.Diag($"DISPATCHER UNHANDLED: {ex2.Exception.GetType().Name}: {ex2.Exception.Message}\n{ex2.Exception.StackTrace}");
@@ -134,6 +143,16 @@ namespace Desktop_Frames
                     // Keep frame items in sync with outside deletes/renames of their backing
                     // files (e.g. Windows' own Delete on the icon's shell context menu).
                     FrameStoreWatcher.Start();
+
+                    // Framed items that live on the Desktop: hide their desktop icons while we
+                    // run, put them back on exit (and via the guard process after a crash).
+                    DesktopIconParker.Start();
+                    SessionEnding += (s2, ev2) => DesktopIconParker.Stop(); // before Explorer saves the layout
+
+                    // Move items still stored in frame folders out to the Desktop, in the
+                    // background once startup has settled (Explorer's desktop must be ready).
+                    Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
+                        Dispatcher.BeginInvoke(new Action(DesktopMigration.StartIfNeeded)));
 
                     // Watch for docking, monitor changes, resolution/scaling changes and RDP
                     // sessions. LoadAndCreateFrames has already laid the frames out for the
@@ -276,6 +295,9 @@ namespace Desktop_Frames
             try { Framemanager.FlushPendingFrameSave(); } catch { }
 
             _triggerPollTimer?.Stop();
+
+            // Put parked desktop icons back where they were (the guard covers crashes).
+            try { DesktopIconParker.Stop(); } catch { }
 
             // Unhook the SystemEvents handlers (they are static and would otherwise root this
             // class) and write the final layout for the display configuration in use.

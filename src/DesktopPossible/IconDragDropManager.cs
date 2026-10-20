@@ -278,6 +278,11 @@ namespace Desktop_Frames
                         if (windowPoint.X < 0 || windowPoint.Y < 0 ||
                             windowPoint.X > sourceWindow.ActualWidth || windowPoint.Y > sourceWindow.ActualHeight)
                         {
+                            // A framed desktop item is icon management, not a file operation:
+                            // keep our own drag (the preview follows the cursor) and resolve the
+                            // drop on release (CompleteDesktopItemDragOut) instead of handing the
+                            // file to Explorer.
+                            if (IsDraggingDesktopItem()) return;
                             EscalateToOleDrag(sourceWindow);
                             return;
                         }
@@ -302,6 +307,13 @@ namespace Desktop_Frames
 
             try
             {
+                // Framed desktop item released outside its frame: another frame or the desktop.
+                if (IsDraggingDesktopItem() && GetCursorPos(out POINT cursor) && IsOutsideSourceFrame(cursor))
+                {
+                    CompleteDesktopItemDragOut(cursor);
+                    return;
+                }
+
                 // FREE ARRANGE: commit the previewed layout (dragged item at the hover cell,
                 // occupants chain-pushed row-major) instead of reordering the flow list.
                 if (_sourceWrapPanel is FreeGridPanel freePanel && freePanel.FreeArrange)
@@ -447,6 +459,129 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI,
                     $"Error removing item after OLE move: {ex.Message}");
             }
+        }
+
+        #endregion
+
+        #region Desktop items (icon management: frame <-> desktop, frame <-> frame)
+
+        /// <summary>
+        /// True when the dragged item is a file on the Desktop framed in place ("Keep framed
+        /// items on the Desktop"). Store-backed items keep the OLE file drag.
+        /// </summary>
+        private static bool IsDraggingDesktopItem()
+        {
+            string key = DraggedKey();
+            return !string.IsNullOrEmpty(key) && !key.StartsWith("INTERNAL_BLANK_") && DesktopIconParker.IsDesktopItem(key);
+        }
+
+        private static bool IsOutsideSourceFrame(POINT screen)
+        {
+            var sourceWindow = _sourceWrapPanel == null ? null : FindVisualParent<NonActivatingWindow>(_sourceWrapPanel);
+            if (sourceWindow == null) return false;
+            var p = sourceWindow.PointFromScreen(new System.Windows.Point(screen.X, screen.Y));
+            return p.X < 0 || p.Y < 0 || p.X > sourceWindow.ActualWidth || p.Y > sourceWindow.ActualHeight;
+        }
+
+        /// <summary>
+        /// Resolves the release of a framed desktop item outside its frame — no file is moved or
+        /// copied. Over another Data frame: the item moves to that frame. Over the bare desktop:
+        /// the item leaves its frame and its icon appears where it was dropped. Anywhere else:
+        /// nothing changes.
+        /// </summary>
+        private static void CompleteDesktopItemDragOut(POINT screen)
+        {
+            string frameId = null;
+            try { frameId = _sourceFrame?.Id?.ToString(); } catch { }
+            string itemKey = DraggedKey();
+            CancelDrag(); // closes the preview and reverts any free-arrange displacement preview
+            if (string.IsNullOrEmpty(frameId) || string.IsNullOrEmpty(itemKey)) return;
+
+            try
+            {
+                IntPtr root = DesktopIconParker.RootWindowAt(screen.X, screen.Y);
+                var targetWin = Application.Current?.Windows.OfType<NonActivatingWindow>()
+                    .FirstOrDefault(w => new System.Windows.Interop.WindowInteropHelper(w).Handle == root);
+
+                if (targetWin != null)
+                {
+                    string targetId = targetWin.Tag?.ToString();
+                    dynamic target = Framemanager.GetFrameData().FirstOrDefault(f => f.Id?.ToString() == targetId);
+                    if (target == null || targetId == frameId || target.ItemsType?.ToString() != "Data") return;
+                    if (Framemanager.IsContentLocked(target))
+                    {
+                        MessageBoxesManager.ShowOKOnlyMessageBoxForm(
+                            "This frame is locked.\nRight-click it and uncheck \"Lock (prevent changes)\" to add items.",
+                            "Frame locked");
+                        return;
+                    }
+                    MoveItemToFrame(frameId, targetId, itemKey);
+                }
+                else if (DesktopIconParker.IsOverDesktop(screen.X, screen.Y))
+                {
+                    // Show the icon at the drop point first, then unframe it: the parker sees an
+                    // unframed icon that is already visible and leaves it there.
+                    DesktopIconParker.PlaceAt(System.IO.Path.GetFullPath(itemKey), screen.X, screen.Y);
+                    RemoveItemFromSourceFrame(frameId, itemKey);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.UI, $"Desktop item drag-out of '{itemKey}': {ex.Message}");
+            }
+        }
+
+        /// <summary>The frame's active item list: the current tab's when tabs are on, else Items.</summary>
+        private static JArray ActiveItemList(dynamic frame, out bool isTab0)
+        {
+            isTab0 = false;
+            JArray list = frame.Items as JArray;
+            if (frame.TabsEnabled?.ToString().ToLower() == "true")
+            {
+                JArray tabs = frame.Tabs as JArray;
+                int tabIdx = Convert.ToInt32(frame.CurrentTab?.ToString() ?? "0");
+                if (tabs != null && tabIdx >= 0 && tabIdx < tabs.Count)
+                {
+                    list = tabs[tabIdx]["Items"] as JArray;
+                    isTab0 = tabIdx == 0;
+                }
+            }
+            return list;
+        }
+
+        /// <summary>Moves an item entry between two Data frames (data only), persists, refreshes both.</summary>
+        private static void MoveItemToFrame(string sourceId, string targetId, string itemKey)
+        {
+            dynamic source = Framemanager.GetFrameData().FirstOrDefault(f => f.Id?.ToString() == sourceId);
+            dynamic target = Framemanager.GetFrameData().FirstOrDefault(f => f.Id?.ToString() == targetId);
+            if (source == null || target == null) return;
+
+            JArray sourceList = ActiveItemList(source, out bool sourceTab0);
+            JArray targetList = ActiveItemList(target, out bool targetTab0);
+            if (sourceList == null) return;
+            if (targetList == null) { targetList = new JArray(); target.Items = targetList; }
+
+            var item = sourceList.OfType<JObject>().FirstOrDefault(i => i["Filename"]?.ToString() == itemKey);
+            if (item == null) return;
+            item.Remove();
+
+            var moved = (JObject)item.DeepClone();
+            moved.Remove("GridCol"); // take a free cell in the target, not the source's
+            moved.Remove("GridRow");
+            moved["DisplayOrder"] = targetList.Count;
+            targetList.Add(moved);
+            Framemanager.PlaceItemInFreeGrid(target, targetList, moved);
+
+            if (sourceTab0) Framemanager.SynchronizeTab0Content(sourceId, "tab0", "remove");
+            if (targetTab0) Framemanager.SynchronizeTab0Content(targetId, "tab0", "add");
+            FrameDataManager.SaveFrameData();
+
+            foreach (var (id, frame) in new[] { (sourceId, source), (targetId, target) })
+            {
+                var win = Application.Current?.Windows.OfType<NonActivatingWindow>().FirstOrDefault(w => w.Tag?.ToString() == id);
+                if (win != null) Framemanager.RefreshFrameUsingFormApproach(win, frame);
+            }
+            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.UI, $"Moved desktop item '{itemKey}' from frame {sourceId} to {targetId}");
         }
 
         #endregion

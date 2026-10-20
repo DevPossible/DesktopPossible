@@ -680,8 +680,14 @@ namespace Desktop_Frames
         /// inside frames, all profiles) under "Store/". Refuses (with an acknowledged
         /// error) when the archive exceeds SettingsManager.MaxBackupSizeMB.
         /// </summary>
-        public static void CreateBackup(string backupName, bool silent = false)
+        /// <param name="includeStore">
+        /// Whether to include the frame store's files. Defaults to only when items still live in
+        /// frame folders: with "Keep framed items on the Desktop" the items are the user's own
+        /// desktop files, so a backup only needs the settings and frame/position data.
+        /// </param>
+        public static void CreateBackup(string backupName, bool silent = false, bool? includeStore = null)
         {
+            bool withStore = includeStore ?? !SettingsManager.KeepFramedItemsOnDesktop;
             // KISS: Instantly trigger the Windows "Wait/Processing" cursor
             Application.Current?.Dispatcher.Invoke(() => Mouse.OverrideCursor = Cursors.Wait);
             string zipPath = null;
@@ -694,7 +700,7 @@ namespace Desktop_Frames
                 using (var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
                 {
                     AddTreeToZip(zip, AppPaths.DataRoot, "Data");
-                    if (Directory.Exists(FrameStore.RootDir))
+                    if (withStore && Directory.Exists(FrameStore.RootDir))
                     {
                         AddTreeToZip(zip, FrameStore.RootDir, "Store");
                     }
