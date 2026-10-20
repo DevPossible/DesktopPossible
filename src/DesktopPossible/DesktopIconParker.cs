@@ -40,8 +40,17 @@ namespace Desktop_Frames
         private static IntPtr _listView, _hook;
         private static WinEventProc? _hookProc; // rooted: the hook calls it from native code
         private static bool _running;
-        private static bool _autoArrangeWarned;
         private static bool _guardStarted;
+        private static bool _stuckLogged;
+        private static int _pollTicks;
+
+        // "Auto arrange icons" / "Align icons to grid" make Explorer ignore or snap explicit
+        // positions: a parked icon lands in the nearest visible grid cell. They are switched
+        // off while icons are parked; the bits that were on are kept here (and in
+        // desktop-view-flags.json, for the guard) and switched back on at exit.
+        private const uint BlockingFlags = DesktopFolderView.FWF_AUTOARRANGE | DesktopFolderView.FWF_SNAPTOGRID;
+        private static uint? _restoreFlags;
+        private static string FlagsPath => Path.Combine(AppPaths.DataRoot, "desktop-view-flags.json");
 
         #region Lifecycle
 
@@ -51,12 +60,18 @@ namespace Desktop_Frames
             if (_running) return;
             _running = true;
             _saved = LoadState(); // left over by a crash: Reconcile keeps or restores each entry
+            _restoreFlags = LoadFlags();
 
             _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _debounce.Tick += (s, e) => { _debounce.Stop(); Reconcile(); };
 
             _listViewPoll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _listViewPoll.Tick += (s, e) => { if (DesktopIconManager.GetDesktopListView() != _listView) { HookListView(); RequestReconcile(); } };
+            _listViewPoll.Tick += (s, e) =>
+            {
+                if (DesktopIconManager.GetDesktopListView() != _listView) { HookListView(); RequestReconcile(); }
+                // Safety net: some re-layouts (e.g. a View setting toggled) raise no event at all.
+                else if (_saved.Count > 0 && ++_pollTicks % 8 == 0) RequestReconcile();
+            };
             _listViewPoll.Start();
 
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -94,7 +109,8 @@ namespace Desktop_Frames
             }
 
             _saved = LoadState();
-            if (_saved.Count == 0) return;
+            _restoreFlags = LoadFlags();
+            if (_saved.Count == 0 && _restoreFlags == null) return;
             LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
                 $"Icon guard: app {pid} exited without restoring {_saved.Count} desktop icon(s); restoring them.");
             RestoreAllAndClear();
@@ -166,8 +182,9 @@ namespace Desktop_Frames
 
                 if (plan.Park.Count > 0)
                 {
+                    PrepareDesktopView();
                     DesktopFolderView.SetPositions(plan.Park.Select(p => (p, IconParking.ParkX, IconParking.ParkY)).ToList());
-                    WarnIfAutoArrange();
+                    LogIfStuck(plan.Park);
                 }
                 if (plan.Restore.Count > 0) DesktopFolderView.SetPositions(plan.Restore);
             }
@@ -189,6 +206,14 @@ namespace Desktop_Frames
                 }
                 _saved.Clear();
                 try { File.Delete(StatePath); } catch { }
+
+                // Positions first, then the user's View settings: grid snapping then lines the
+                // restored icons up exactly as before.
+                if (_restoreFlags is uint flags && DesktopFolderView.SetFolderFlags(BlockingFlags, flags))
+                {
+                    _restoreFlags = null;
+                    try { File.Delete(FlagsPath); } catch { }
+                }
             }
             catch (Exception ex)
             {
@@ -244,13 +269,36 @@ namespace Desktop_Frames
             return paths;
         }
 
-        private static void WarnIfAutoArrange()
+        /// <summary>
+        /// Switches off "Auto arrange icons" and "Align icons to grid" so Explorer accepts
+        /// off-screen positions, remembering (on disk, before changing anything) which were on.
+        /// Returns false when the desktop view is unavailable.
+        /// </summary>
+        public static bool PrepareDesktopView()
         {
-            if (_autoArrangeWarned || DesktopFolderView.IsAutoArrange() != true) return;
-            _autoArrangeWarned = true;
-            LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General, "Desktop 'Auto arrange icons' is on: framed icons cannot be hidden.");
-            SmartToast.Show("Desktop icons can't be hidden",
-                "Framed items still show on the desktop because \"Auto arrange icons\" is on. Right-click the desktop → View and turn it off.");
+            uint? flags = DesktopFolderView.GetFolderFlags();
+            if (flags == null) return false;
+            uint on = flags.Value & BlockingFlags;
+            if (on == 0) return true;
+
+            _restoreFlags = (_restoreFlags ?? 0) | on;
+            SaveFlags();
+            LogManager.Log(LogManager.LogLevel.Info, LogManager.LogCategory.General,
+                $"Desktop view: switching off auto-arrange/align-to-grid (0x{on:X}) while framed icons are hidden; restored at exit.");
+            return DesktopFolderView.SetFolderFlags(BlockingFlags, 0);
+        }
+
+        /// <summary>Logs (once per run) icons Explorer would not take off-screen, with the view flags.</summary>
+        private static void LogIfStuck(List<string> parked)
+        {
+            if (_stuckLogged) return;
+            var after = DesktopFolderView.GetPositions();
+            if (after == null) return;
+            var stuck = parked.Where(p => after.TryGetValue(p, out var pos) && !IconParking.IsParked(pos)).ToList();
+            if (stuck.Count == 0) return;
+            _stuckLogged = true;
+            LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
+                $"{stuck.Count} desktop icon(s) could not be hidden (view flags 0x{DesktopFolderView.GetFolderFlags() ?? 0:X}), e.g. '{stuck[0]}' at {after[stuck[0]]}.");
         }
 
         #endregion
@@ -345,6 +393,29 @@ namespace Desktop_Frames
             catch (Exception ex)
             {
                 LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Could not write parked-icons.json: {ex.Message}");
+            }
+        }
+
+        private static uint? LoadFlags()
+        {
+            try
+            {
+                if (!File.Exists(FlagsPath)) return null;
+                return (uint?)JObject.Parse(File.ReadAllText(FlagsPath))["Restore"];
+            }
+            catch { return null; }
+        }
+
+        private static void SaveFlags()
+        {
+            try
+            {
+                if (_restoreFlags == null) { File.Delete(FlagsPath); return; }
+                AtomicFile.WriteAllText(FlagsPath, new JObject { ["Restore"] = _restoreFlags.Value }.ToString(Formatting.Indented));
+            }
+            catch (Exception ex)
+            {
+                LogManager.Log(LogManager.LogLevel.Error, LogManager.LogCategory.General, $"Could not write desktop-view-flags.json: {ex.Message}");
             }
         }
 

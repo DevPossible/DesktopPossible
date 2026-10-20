@@ -19,8 +19,8 @@ namespace Desktop_Frames
     /// Runs when the option is on: after startup, after the option is switched on, and after
     /// a profile switch. The order is what makes it safe:
     ///  1. Plan (UI thread) — nothing changes yet.
-    ///  2. Preconditions — the desktop view must be able to hide icons (Explorer running,
-    ///     "Auto arrange icons" off), or the migrated files would pile up visibly: postpone.
+    ///  2. Preconditions — the desktop view must be able to hide icons: Explorer running, and
+    ///     "Auto arrange" / "Align to grid" switched off (restored at exit); otherwise postpone.
     ///  3. Backup — settings and frame data (every profile's frames.json) before the first
     ///     change. The files themselves are never at risk: they are moved by rename on the same
     ///     drive, or copied and verified before the source is deleted.
@@ -39,7 +39,6 @@ namespace Desktop_Frames
     {
         private static string JournalPath => Path.Combine(AppPaths.DataRoot, "desktop-migration.json");
         private static bool _running;
-        private static bool _postponeNotified;
 
         /// <summary>Starts a background migration pass when the option is on. Call on the UI thread.</summary>
         public static void StartIfNeeded()
@@ -73,16 +72,12 @@ namespace Desktop_Frames
                 if (plan.Count == 0) { if (journal.Count > 0) SaveJournal(plan); return; }
 
                 // ---- 2. Preconditions ----
-                if (DesktopFolderView.IsAutoArrange() != false)
+                // Explorer must be up, with "Auto arrange" / "Align to grid" switched off so the
+                // migrated icons can be hidden (the parker restores both at exit).
+                if (!DesktopIconParker.PrepareDesktopView())
                 {
                     LogManager.Log(LogManager.LogLevel.Warn, LogManager.LogCategory.General,
-                        $"Desktop migration postponed ({plan.Count} item(s)): desktop view unavailable or 'Auto arrange icons' on.");
-                    if (!_postponeNotified)
-                    {
-                        _postponeNotified = true;
-                        SmartToast.Show("Frame items not moved yet",
-                            "Turn off \"Auto arrange icons\" (right-click the desktop → View) so framed items can live on the Desktop.");
-                    }
+                        $"Desktop migration postponed ({plan.Count} item(s)): desktop view unavailable.");
                     return;
                 }
 
