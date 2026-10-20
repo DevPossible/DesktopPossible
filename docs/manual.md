@@ -210,7 +210,7 @@ Access settings through the system tray icon → "Options":
 
 **Startup:** Start with Windows.
 
-**Selections:** Single Click to Launch (restart required) · Enable Snap Near Frames · Enable Dimension Snap · Snap frames to grid · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars.
+**Selections:** Single Click to Launch (restart required) · Snap frames to other frames and screen edges · Enable Tray Icon · Use Recycle Bin on Portal Frames 'Delete item' · Show 'New Frame' in Desktop Context Menu · Enable Portal Frames Watermark · Disable Frame Scrollbars.
 
 **Virtual Desktops:** Automatically Switch Profiles with Virtual Desktop.
 

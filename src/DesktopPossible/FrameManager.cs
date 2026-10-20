@@ -4636,19 +4636,11 @@ namespace Desktop_Frames
             var frameDict = frame as System.Collections.Generic.IDictionary<string, object>;
             if (frameDict != null)
             {
-                // Drawn frames start on whole icon rows/columns (and on the grid) when enabled.
-                double w = r.Width, h = r.Height, x = r.X, y = r.Y;
-                if (SettingsManager.SnapFramesToGrid)
-                {
-                    (w, h) = FrameGrid.SnapSize(w, h);
-                    var wa = SystemParameters.WorkArea;
-                    (x, y) = FrameGrid.SnapPosition(x, y, wa.Left, wa.Top);
-                }
-                frameDict["X"] = x;
-                frameDict["Y"] = y;
-                frameDict["Width"] = w;
-                frameDict["Height"] = h;
-                frameDict["UnrolledHeight"] = h;
+                frameDict["X"] = r.X;
+                frameDict["Y"] = r.Y;
+                frameDict["Width"] = r.Width;
+                frameDict["Height"] = r.Height;
+                frameDict["UnrolledHeight"] = r.Height;
 
                 // FIX: Force set the title to what the user actually typed
                 frameDict["Title"] = name;
@@ -7043,16 +7035,8 @@ namespace Desktop_Frames
                         }
                         else if (!isLocked)
                         {
+                            // Guide snapping happens live inside the move loop (SnapGestureRect).
                             win.DragMove();
-                            // Grid first, then edge snap: SnapManager only moves the window when a
-                            // neighbour/screen edge is within its threshold, so edge alignment (the
-                            // stronger intent) overrides the grid point when both apply.
-                            // Shift held at drop = place the frame exactly where it was released.
-                            if (!IsSnapBypassed)
-                            {
-                                SnapWindowToGrid(win);
-                                SnapManager.SnapNow(win); // snap once when the drag ends (no mid-drag wobble)
-                            }
                             FlushPendingFrameSave();
                             LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.FrameCreation, $"Dragging frame '{currentFrame.Title}'");
                         }
@@ -8028,8 +8012,6 @@ namespace Desktop_Frames
 
 
 
-            IDictionary<string, object> frameDict = frame is IDictionary<string, object> dict ? dict : ((JObject)frame).ToObject<IDictionary<string, object>>();
-            SnapManager.AddSnapping(win, frameDict);
             // Apply custom color if present, otherwise use global
             string customColor = frame.CustomColor?.ToString();
             Utility.ApplyTintAndColorToFrame(win, string.IsNullOrEmpty(customColor) ? SettingsManager.SelectedColor : customColor);
@@ -11301,17 +11283,12 @@ namespace Desktop_Frames
 
 
 
-        // Size when the current move/resize gesture began (WM_ENTERSIZEMOVE), so the grid
-        // size-snap only runs after an actual resize — a plain drag never re-sizes the frame.
-        private static readonly Dictionary<NonActivatingWindow, (double W, double H)> _sizeAtGestureStart = new();
-
         // Window rect + cursor (device pixels) when the gesture began; SnapGestureRect rebuilds
-        // the raw proposed rect from these so grid snapping doesn't eat slow mouse movement.
+        // the raw proposed rect from these so guide snapping doesn't eat slow mouse movement.
         private static readonly Dictionary<NonActivatingWindow, (WinRect Rect, POINT Cursor)> _gestureAnchor = new();
 
         public static void OnResizingStarted(NonActivatingWindow frame)
         {
-            try { _sizeAtGestureStart[frame] = (frame.Width, frame.Height); } catch { }
             try
             {
                 var hwnd = new WindowInteropHelper(frame).Handle;
@@ -11323,11 +11300,6 @@ namespace Desktop_Frames
             catch { _gestureAnchor.Remove(frame); }
         }
 
-        /// <summary>
-        /// Moves the window's top-left to the nearest FrameGrid point (multiples of the icon
-        /// cell size from the work-area origin of the monitor the window is on). No-op when
-        /// "Snap frames to grid" is off. The window's LocationChanged handler persists X/Y.
-        /// </summary>
         /// <summary>
         /// Title-bar background for a frame's TitleBarColor: "Default"/empty = the classic faint
         /// dark overlay, "Transparent" = none, otherwise a palette colour.
@@ -11362,112 +11334,21 @@ namespace Desktop_Frames
             }
         }
 
-        public static void SnapWindowToGrid(NonActivatingWindow win)
-        {
-            if (win == null || !SettingsManager.SnapFramesToGrid) return;
-            try
-            {
-                var (ox, oy) = WorkAreaOriginFor(win);
-                var (x, y) = FrameGrid.SnapPosition(win.Left, win.Top, ox, oy);
-                if (Math.Abs(win.Left - x) > 0.1 || Math.Abs(win.Top - y) > 0.1)
-                {
-                    win.Left = x;
-                    win.Top = y;
-                }
-            }
-            catch { }
-        }
-
-        /// <summary>Work-area origin (DIPs) of the monitor containing the window; primary work area as fallback.</summary>
-        private static (double X, double Y) WorkAreaOriginFor(NonActivatingWindow win)
-        {
-            try
-            {
-                var hwnd = new WindowInteropHelper(win).Handle;
-                if (hwnd != IntPtr.Zero)
-                {
-                    var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
-                    double scale = 1.0;
-                    var source = PresentationSource.FromVisual(win);
-                    if (source?.CompositionTarget != null) scale = source.CompositionTarget.TransformToDevice.M11;
-                    if (scale <= 0) scale = 1.0;
-                    return (screen.WorkingArea.Left / scale, screen.WorkingArea.Top / scale);
-                }
-            }
-            catch { }
-            var wa = SystemParameters.WorkArea;
-            return (wa.Left, wa.Top);
-        }
-
         public static void OnResizingEnded(NonActivatingWindow frame)
         {
-            bool sizeChanged = false;
-            try
-            {
-                if (_sizeAtGestureStart.TryGetValue(frame, out var start))
-                {
-                    sizeChanged = Math.Abs(start.W - frame.Width) > 0.5 || Math.Abs(start.H - frame.Height) > 0.5;
-                    _sizeAtGestureStart.Remove(frame);
-                }
-                _gestureAnchor.Remove(frame);
-            }
-            catch { }
-
-            // Shift held at release = keep the exact size/position the user chose; the
-            // SizeChanged/LocationChanged handlers persist it via the flush below.
-            if (IsSnapBypassed)
-            {
-                FlushPendingFrameSave();
-                return;
-            }
-
-            // A move-only gesture must never touch size: grid heights (chrome 32 + m*100)
-            // aren't multiples of 10, so re-rounding them here shrank the frame 2px on
-            // every plain drag-drop (and the saved off-by-2 heights then let SnapNow's
-            // align-bottom check nudge frames off the grid by the same 2px).
-            if (SettingsManager.EnableDimensionSnap && sizeChanged)
-            {
-                double snappedWidth = Math.Round(frame.Width / 10.0) * 10;
-                double snappedHeight = Math.Round(frame.Height / 10.0) * 10;
-
-                // Grid snap wins over the coarse 10px snap: whole icon rows/columns.
-                if (SettingsManager.SnapFramesToGrid)
-                    (snappedWidth, snappedHeight) = SnapSizeToGrid(frame, snappedWidth, snappedHeight);
-
-                frame.Width = snappedWidth;
-                frame.Height = snappedHeight;
-
-                // Match by Id (win.Tag), not Title — duplicate titles corrupted each other's geometry.
-                string frameId = frame.Tag?.ToString();
-                dynamic FrameData = string.IsNullOrEmpty(frameId)
-                    ? null
-                    : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == frameId);
-                if (FrameData != null)
-                {
-                    FrameData.Width = snappedWidth;
-                    FrameData.Height = snappedHeight;
-                    FrameDataManager.SaveFrameData();
-                }
-            }
-            else if (SettingsManager.SnapFramesToGrid && sizeChanged)
-            {
-                // Grid size-snap: chrome + whole icon rows/columns. The window's SizeChanged
-                // handler writes Width/Height/UnrolledHeight into FrameData (debounced save).
-                var (w, h) = SnapSizeToGrid(frame, frame.Width, frame.Height);
-                if (Math.Abs(frame.Width - w) > 0.1) frame.Width = w;
-                if (Math.Abs(frame.Height - h) > 0.1) frame.Height = h;
-            }
+            _gestureAnchor.Remove(frame);
 
             // WM_EXITSIZEMOVE fires when a drag OR resize gesture ends: flush the debounced
             // geometry save immediately so the final position/size is on disk right away.
+            // Snapping already happened live (SnapGestureRect), so there is nothing to adjust.
             FlushPendingFrameSave();
         }
 
-        // ---- Live grid snap during move/resize (WM_MOVING / WM_SIZING) ----
+        // ---- Live guide snap during move/resize (WM_MOVING / WM_SIZING) ----
         // The modal move/size loop proposes a rectangle per mouse tick; rewriting it in
-        // place makes the frame stick to the grid WHILE dragging/sizing instead of
-        // jumping after the gesture. Programmatic moves (SetWindowPos, animations,
-        // auto-arrange) never send these messages, so they are unaffected.
+        // place makes the frame stick to other frames' edges and the work-area edges WHILE
+        // dragging/sizing. Programmatic moves (SetWindowPos, animations, auto-arrange)
+        // never send these messages, so they are unaffected.
 
         [StructLayout(LayoutKind.Sequential)]
         private struct WinRect { public int Left, Top, Right, Bottom; }
@@ -11478,89 +11359,58 @@ namespace Desktop_Frames
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out POINT lpPoint);
 
-        // WM_SIZING edge codes (wParam): which edge the user is pulling — its opposite is the anchor.
-        private const int WMSZ_LEFT = 1, WMSZ_TOP = 3, WMSZ_TOPLEFT = 4, WMSZ_TOPRIGHT = 5, WMSZ_BOTTOMLEFT = 7;
-
         /// <summary>
-        /// Snaps the in-progress move/size rectangle (device pixels) to the desktop grid.
-        /// Returns true when the rect was rewritten. No-op unless "Snap frames to grid" is on.
+        /// Rewrites the in-progress move/size rectangle (device pixels) so its edges stick to
+        /// the guide lines of other frames and the monitors' work areas (SnapManager).
+        /// Returns true when the rect was rewritten. With "Snap frames to other frames" off or
+        /// Shift held, the frame tracks the mouse exactly.
         /// </summary>
         public static bool SnapGestureRect(NonActivatingWindow win, bool sizing, long edge, IntPtr rectPtr)
         {
             try
             {
-                if (!SettingsManager.SnapFramesToGrid || rectPtr == IntPtr.Zero) return false;
-                if (IsSnapBypassed) return false; // Shift held: track the mouse exactly
+                if (rectPtr == IntPtr.Zero) return false;
+                if (!_gestureAnchor.TryGetValue(win, out var anchor) || !GetCursorPos(out var cursor)) return false;
+
+                // Windows derives each proposal from the previous (possibly snapped) rect plus the
+                // mouse delta since the last tick, so a snap would stick for good and leave the frame
+                // offset from the mouse. Rebuild the raw rect from the gesture anchor (start rect +
+                // total cursor travel) so the frame always follows the mouse and lets go of a guide
+                // once the cursor moves past the threshold.
+                var raw = FrameGrid.ApplyGestureDelta(
+                    (anchor.Rect.Left, anchor.Rect.Top, anchor.Rect.Right, anchor.Rect.Bottom),
+                    cursor.x - anchor.Cursor.x, cursor.y - anchor.Cursor.y,
+                    sizing ? (int)edge : FrameGrid.GestureMove);
+
+                var snapped = raw;
+                if (SettingsManager.IsSnapEnabled && !IsSnapBypassed)
+                {
+                    double scale = 1.0;
+                    var source = PresentationSource.FromVisual(win);
+                    if (source?.CompositionTarget != null) scale = source.CompositionTarget.TransformToDevice.M11;
+                    if (scale <= 0) scale = 1.0;
+
+                    var others = new List<(int Left, int Top, int Right, int Bottom)>();
+                    foreach (var other in System.Windows.Application.Current.Windows.OfType<NonActivatingWindow>())
+                    {
+                        if (other == win || !other.IsVisible) continue;
+                        var h = new WindowInteropHelper(other).Handle;
+                        if (h != IntPtr.Zero && GetWindowRect(h, out var r)) others.Add((r.Left, r.Top, r.Right, r.Bottom));
+                    }
+                    var workAreas = System.Windows.Forms.Screen.AllScreens
+                        .Select(s => (s.WorkingArea.Left, s.WorkingArea.Top, s.WorkingArea.Right, s.WorkingArea.Bottom))
+                        .ToList();
+
+                    snapped = SnapManager.SnapToGuides(raw, sizing ? (int)edge : FrameGrid.GestureMove, others, workAreas,
+                        (int)Math.Round(SnapManager.ThresholdDip * scale), (int)Math.Round(SnapManager.GapDip * scale));
+                }
 
                 var proposed = Marshal.PtrToStructure<WinRect>(rectPtr);
-                var rect = proposed;
-
-                // Windows derives each proposal from the previous (snapped) rect plus the
-                // mouse delta since the last tick, so small movements would round straight
-                // back to the same grid point. Rebuild the raw rect from the gesture anchor
-                // (start rect + total cursor travel) so slow drags accumulate movement.
-                if (_gestureAnchor.TryGetValue(win, out var anchor) && GetCursorPos(out var cursor))
-                {
-                    var (l, t, r, b) = FrameGrid.ApplyGestureDelta(
-                        (anchor.Rect.Left, anchor.Rect.Top, anchor.Rect.Right, anchor.Rect.Bottom),
-                        cursor.x - anchor.Cursor.x, cursor.y - anchor.Cursor.y,
-                        sizing ? (int)edge : FrameGrid.GestureMove);
-                    rect.Left = l; rect.Top = t; rect.Right = r; rect.Bottom = b;
-                }
-
-                double scale = 1.0;
-                var source = PresentationSource.FromVisual(win);
-                if (source?.CompositionTarget != null) scale = source.CompositionTarget.TransformToDevice.M11;
-                if (scale <= 0) scale = 1.0;
-
-                double unitW = FrameGrid.UnitWidth * scale;
-                double unitH = FrameGrid.UnitHeight * scale;
-
-                var screen = System.Windows.Forms.Screen.FromRectangle(new System.Drawing.Rectangle(
-                    rect.Left, rect.Top, Math.Max(1, rect.Right - rect.Left), Math.Max(1, rect.Bottom - rect.Top)));
-                double ox = screen.WorkingArea.Left, oy = screen.WorkingArea.Top;
-
-                if (!sizing)
-                {
-                    int w = rect.Right - rect.Left, h = rect.Bottom - rect.Top;
-                    int sx = (int)Math.Round(ox + Math.Round((rect.Left - ox) / unitW) * unitW);
-                    int sy = (int)Math.Round(oy + Math.Round((rect.Top - oy) / unitH) * unitH);
-                    rect.Left = sx; rect.Top = sy; rect.Right = sx + w; rect.Bottom = sy + h;
-                }
-                else
-                {
-                    // A rolled-up frame keeps its rolled height (see SnapSizeToGrid): width only.
-                    bool rolled = false;
-                    try
-                    {
-                        string id = win.Tag?.ToString();
-                        dynamic data = string.IsNullOrEmpty(id) ? null : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == id);
-                        rolled = data?.IsRolled?.ToString().ToLower() == "true";
-                    }
-                    catch { }
-
-                    double chromeW = FrameGrid.ChromeWidth * scale;
-                    double chromeH = FrameGrid.ChromeHeight * scale;
-                    int n = Math.Max(1, (int)Math.Round((rect.Right - rect.Left - chromeW) / unitW));
-                    int m = Math.Max(1, (int)Math.Round((rect.Bottom - rect.Top - chromeH) / unitH));
-                    int newW = (int)Math.Round(chromeW + n * unitW);
-                    int newH = (int)Math.Round(chromeH + m * unitH);
-
-                    int e = (int)edge;
-                    // Keep the anchor edge (the one NOT being pulled) fixed.
-                    if (e == WMSZ_LEFT || e == WMSZ_TOPLEFT || e == WMSZ_BOTTOMLEFT) rect.Left = rect.Right - newW;
-                    else rect.Right = rect.Left + newW;
-                    if (!rolled)
-                    {
-                        if (e == WMSZ_TOP || e == WMSZ_TOPLEFT || e == WMSZ_TOPRIGHT) rect.Top = rect.Bottom - newH;
-                        else rect.Bottom = rect.Top + newH;
-                    }
-                }
-
-                if (rect.Left == proposed.Left && rect.Top == proposed.Top &&
-                    rect.Right == proposed.Right && rect.Bottom == proposed.Bottom)
+                if (snapped.Left == proposed.Left && snapped.Top == proposed.Top &&
+                    snapped.Right == proposed.Right && snapped.Bottom == proposed.Bottom)
                     return false; // already where Windows proposed: nothing to rewrite
 
+                var rect = new WinRect { Left = snapped.Left, Top = snapped.Top, Right = snapped.Right, Bottom = snapped.Bottom };
                 Marshal.StructureToPtr(rect, rectPtr, false);
                 return true;
             }
@@ -11569,23 +11419,6 @@ namespace Desktop_Frames
                 LogManager.Log(LogManager.LogLevel.Debug, LogManager.LogCategory.UI, $"SnapGestureRect: {ex.Message}");
                 return false;
             }
-        }
-
-        /// <summary>
-        /// FrameGrid.SnapSize for a live window; a rolled-up frame keeps its rolled height
-        /// (only the width snaps) so snapping never silently unrolls it.
-        /// </summary>
-        private static (double W, double H) SnapSizeToGrid(NonActivatingWindow frame, double width, double height)
-        {
-            var (w, h) = FrameGrid.SnapSize(width, height);
-            try
-            {
-                string frameId = frame.Tag?.ToString();
-                dynamic data = string.IsNullOrEmpty(frameId) ? null : GetFrameData().FirstOrDefault(f => f.Id?.ToString() == frameId);
-                if (data != null && data.IsRolled?.ToString().ToLower() == "true") h = height;
-            }
-            catch { }
-            return (w, h);
         }
 
 

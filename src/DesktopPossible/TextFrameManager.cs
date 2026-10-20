@@ -115,8 +115,7 @@ namespace Desktop_Frames
                 bool locked = false;
                 try { locked = live?.IsLocked?.ToString().ToLower() == "true"; } catch { }
                 if (locked) return;
-                win.DragMove();
-                Framemanager.SnapWindowToGrid(win);
+                win.DragMove(); // guide snapping happens live in the move loop
                 e.Handled = true;
             };
             if (frameId.Length > 0) _hosts[frameId] = host;

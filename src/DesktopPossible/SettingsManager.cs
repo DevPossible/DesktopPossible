@@ -81,9 +81,6 @@ namespace Desktop_Frames
         // --- One-time starter: the System Info text frame seeded on the Default profile ---
         public static bool SystemInfoFrameCreated { get; set; } = false;
 
-        // --- Snap frame position/size to the icon grid (FrameGrid) when moving/resizing ---
-        public static bool SnapFramesToGrid { get; set; } = true;
-
         // --- App-level, once-ever flag: the instructional "Startup Tips" frame has been seeded ---
         public static bool InstructionalFrameCreated { get; set; } = false;
 
@@ -132,7 +129,6 @@ namespace Desktop_Frames
         public static bool EnableToggleFramesHotkey { get; set; } = true;
         public static int ToggleFramesKey { get; set; } = 0x48; // H
         public static string ToggleFramesModifier { get; set; } = "ctrl+alt";
-        public static bool EnableDimensionSnap { get; set; } = true;
         public static bool SingleClickToLaunch { get; set; } = true;
 
   
@@ -268,7 +264,6 @@ namespace Desktop_Frames
                 SelectedColor,
                 IsLogEnabled,
                 SingleClickToLaunch,
-                EnableDimensionSnap,
                 PortalBackgroundOpacity,
                 MaxDisplayNameLength,
                 EnableIconGlowEffect,
@@ -294,7 +289,6 @@ namespace Desktop_Frames
                 AllowAutoReposition,
                 EnableDisplayLayoutMemory,
                 FrameEditMode,
-                SnapFramesToGrid,
                 InstructionalFrameCreated,
                 SystemInfoFrameCreated,
                 FramesWithNoRoundCorners,
@@ -365,7 +359,6 @@ namespace Desktop_Frames
             try { SelectedColor = data.SelectedColor ?? "Gray"; } catch { SelectedColor = "Gray"; }
             try { IsLogEnabled = data.IsLogEnabled ?? false; } catch { IsLogEnabled = false; }
             try { SingleClickToLaunch = data.SingleClickToLaunch ?? true; } catch { SingleClickToLaunch = true; }
-            try { EnableDimensionSnap = data.EnableDimensionSnap ?? true; } catch { EnableDimensionSnap = true; }
             try { PortalBackgroundOpacity = data.PortalBackgroundOpacity ?? 30; } catch { PortalBackgroundOpacity = 30; }
             try { EnableIconGlowEffect = data.EnableIconGlowEffect ?? true; } catch { EnableIconGlowEffect = true; }
             try { DisableFrameScrollbars = data.DisableFrameScrollbars ?? true; } catch { DisableFrameScrollbars = true; }
@@ -378,7 +371,6 @@ namespace Desktop_Frames
             try { AllowAutoReposition = data.AllowAutoReposition ?? true; } catch { AllowAutoReposition = true; }
             try { EnableDisplayLayoutMemory = data.EnableDisplayLayoutMemory ?? true; } catch { EnableDisplayLayoutMemory = true; }
             try { FrameEditMode = data.FrameEditMode ?? false; } catch { FrameEditMode = false; }
-            try { SnapFramesToGrid = data.SnapFramesToGrid ?? true; } catch { SnapFramesToGrid = true; }
             try { InstructionalFrameCreated = data.InstructionalFrameCreated ?? false; } catch { InstructionalFrameCreated = false; }
             try { SystemInfoFrameCreated = data.SystemInfoFrameCreated ?? false; } catch { SystemInfoFrameCreated = false; }
             try { FramesWithNoRoundCorners = data.FramesWithNoRoundCorners ?? false; } catch { FramesWithNoRoundCorners = false; }
